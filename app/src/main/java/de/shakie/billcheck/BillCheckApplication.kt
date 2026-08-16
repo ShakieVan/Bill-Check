@@ -9,6 +9,7 @@ import de.shakie.billcheck.data.GeminiAiExtractionProvider
 import de.shakie.billcheck.data.LocalTextRecognizer
 import de.shakie.billcheck.data.GeminiModelCatalog
 import de.shakie.billcheck.data.DataTransferManager
+import de.shakie.billcheck.update.AppUpdateManager
 
 class BillCheckApplication : Application() {
     val database by lazy { BillCheckDatabase.create(this) }
@@ -19,4 +20,5 @@ class BillCheckApplication : Application() {
     val localTextRecognizer by lazy { LocalTextRecognizer(this) }
     val geminiModelCatalog by lazy { GeminiModelCatalog() }
     val dataTransferManager by lazy { DataTransferManager(this, database) }
+    val appUpdateManager by lazy { AppUpdateManager(this) }
 }

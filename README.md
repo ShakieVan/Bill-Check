@@ -9,7 +9,7 @@ gespeicherte Belege und Übersichten vollständig nutzbar.
 
 ![Früher nativer Dashboard-Stand mit centgenauer und aufgerundeter Übersicht](docs/screenshots/dashboard-rounding.png)
 
-## Geplanter Funktionsumfang
+## Funktionsumfang
 
 - mehrere frei sortierbare Reisen
 - Belegfotos aus Kamera oder Galerie
@@ -37,6 +37,9 @@ Bilddaten stehen eine bestätigungspflichtige Gemini-Auswertung und eine
 vollständig lokale OCR-Bausteinhilfe bereit. Selektive `.billcheck`-
 Vollsicherungen sowie CSV-/PDF-Berichte können direkt über den Android-
 Dateidialog exportiert werden; Vollarchiv und CSV sind wieder importierbar.
+Das Homescreen-Widget bietet Übersicht und Schnellerfassung. Die integrierte
+GitHub-Updateverwaltung zeigt Release Notes, prüft den SHA-256-Digest und
+übergibt eine bestätigte APK an den Android-Systeminstaller.
 
 ## Build
 
@@ -47,6 +50,16 @@ Dateidialog exportiert werden; Vollarchiv und CSV sind wieder importierbar.
 Die öffentliche Projektdokumentation beginnt unter [`docs/README.md`](docs/README.md).
 Reale Testbelege sind aus Datenschutzgründen nicht Bestandteil dieses
 Repositories.
+
+Ein signierter Produktionsbuild benötigt die private `key.properties`:
+
+```powershell
+.\gradlew.bat testDebugUnitTest lintDebug assembleRelease --console=plain
+```
+
+Der tag-gesteuerte GitHub-Ablauf ist in
+[`docs/technical-notes/github-release-process.md`](docs/technical-notes/github-release-process.md)
+dokumentiert.
 
 ## Historischer Prototyp
 

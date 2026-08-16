@@ -25,6 +25,8 @@ import de.shakie.billcheck.data.GeminiModelInfo
 import de.shakie.billcheck.data.ExportFormat
 import de.shakie.billcheck.data.ImportPreview
 import de.shakie.billcheck.BillCheckWidget
+import de.shakie.billcheck.update.UpdateCheckStatus
+import de.shakie.billcheck.update.UpdateRelease
 import java.math.BigDecimal
 import java.math.RoundingMode
 import java.util.Locale
@@ -38,6 +40,28 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.Job
+
+enum class AppUpdateStatus {
+    IDLE,
+    CHECKING,
+    NO_RELEASE,
+    UP_TO_DATE,
+    AVAILABLE,
+    NO_COMPATIBLE_ASSET,
+    DOWNLOADING,
+    READY_TO_INSTALL,
+    ERROR,
+}
+
+data class AppUpdateState(
+    val status: AppUpdateStatus = AppUpdateStatus.IDLE,
+    val release: UpdateRelease? = null,
+    val message: String? = null,
+    val downloadedBytes: Long = 0,
+    val totalBytes: Long = 0,
+    val downloadedFilePath: String? = null,
+)
 
 data class MainUiState(
     val trips: List<TripEntity> = emptyList(),
@@ -71,6 +95,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val localTextRecognizer = billCheckApplication.localTextRecognizer
     private val geminiModelCatalog = billCheckApplication.geminiModelCatalog
     private val dataTransferManager = billCheckApplication.dataTransferManager
+    private val appUpdateManager = billCheckApplication.appUpdateManager
     private val widgetPreferences = application.getSharedPreferences(
         BillCheckWidget.SELECTED_TRIP_PREFERENCES,
         Context.MODE_PRIVATE,
@@ -92,6 +117,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val geminiModels = _geminiModels.asStateFlow()
     private val _transfer = MutableStateFlow<TransferState>(TransferState.Idle)
     val transfer = _transfer.asStateFlow()
+    private val _appUpdate = MutableStateFlow(AppUpdateState())
+    val appUpdate = _appUpdate.asStateFlow()
+    private var updateDownloadJob: Job? = null
 
     private val trips = repository.trips.stateIn(
         viewModelScope,
@@ -465,6 +493,91 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun clearTransferState() {
         if (_transfer.value is TransferState.ImportReady) dataTransferManager.clearPendingImport()
         _transfer.value = TransferState.Idle
+    }
+
+    fun checkForAppUpdate(force: Boolean) {
+        if (_appUpdate.value.status == AppUpdateStatus.CHECKING) return
+        viewModelScope.launch {
+            _appUpdate.value = AppUpdateState(status = AppUpdateStatus.CHECKING)
+            val result = appUpdateManager.check(force)
+            val release = result.release
+            val downloaded = release?.let(appUpdateManager::downloadedApkFor)
+            _appUpdate.value = when (result.status) {
+                UpdateCheckStatus.UPDATE_AVAILABLE -> AppUpdateState(
+                    status = if (downloaded != null) {
+                        AppUpdateStatus.READY_TO_INSTALL
+                    } else {
+                        AppUpdateStatus.AVAILABLE
+                    },
+                    release = release,
+                    downloadedFilePath = downloaded?.absolutePath,
+                )
+                UpdateCheckStatus.UP_TO_DATE -> AppUpdateState(
+                    status = if (release == null && !force) {
+                        AppUpdateStatus.IDLE
+                    } else {
+                        AppUpdateStatus.UP_TO_DATE
+                    },
+                    release = release,
+                )
+                UpdateCheckStatus.NO_RELEASE -> AppUpdateState(status = AppUpdateStatus.NO_RELEASE)
+                UpdateCheckStatus.NO_COMPATIBLE_ASSET -> AppUpdateState(
+                    status = AppUpdateStatus.NO_COMPATIBLE_ASSET,
+                    release = release,
+                )
+                UpdateCheckStatus.CHECK_FAILED -> AppUpdateState(
+                    status = AppUpdateStatus.ERROR,
+                    message = result.message,
+                )
+            }
+        }
+    }
+
+    fun downloadAppUpdate() {
+        val release = _appUpdate.value.release ?: return
+        val asset = release.compatibleAsset ?: return
+        if (updateDownloadJob?.isActive == true) return
+        updateDownloadJob = viewModelScope.launch {
+            _appUpdate.value = AppUpdateState(
+                status = AppUpdateStatus.DOWNLOADING,
+                release = release,
+                totalBytes = asset.sizeBytes,
+            )
+            runCatching {
+                appUpdateManager.download(release, asset) { downloaded, total ->
+                    _appUpdate.value = _appUpdate.value.copy(
+                        downloadedBytes = downloaded,
+                        totalBytes = total,
+                    )
+                }
+            }.onSuccess { file ->
+                _appUpdate.value = AppUpdateState(
+                    status = AppUpdateStatus.READY_TO_INSTALL,
+                    release = release,
+                    downloadedFilePath = file.absolutePath,
+                )
+            }.onFailure { throwable ->
+                if (throwable is kotlinx.coroutines.CancellationException) {
+                    _appUpdate.value = AppUpdateState(AppUpdateStatus.AVAILABLE, release)
+                } else {
+                    _appUpdate.value = AppUpdateState(
+                        status = AppUpdateStatus.ERROR,
+                        release = release,
+                        message = throwable.message ?: throwable.javaClass.simpleName,
+                    )
+                }
+            }
+        }
+    }
+
+    fun cancelAppUpdateDownload() {
+        updateDownloadJob?.cancel()
+    }
+
+    fun deleteDownloadedAppUpdate() {
+        val release = _appUpdate.value.release ?: return
+        appUpdateManager.deleteDownloadedApk(release)
+        _appUpdate.value = AppUpdateState(AppUpdateStatus.AVAILABLE, release)
     }
 
     private fun setSelectedTrip(id: String) {

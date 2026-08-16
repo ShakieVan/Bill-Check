@@ -1,0 +1,65 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out tagged source
+        uses: actions/checkout@v7
+      - name: Set up Java 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+      - name: Restore release signing
+        env:
+          KEYSTORE_BASE64: ${{ secrets.BILL_CHECK_KEYSTORE_BASE64 }}
+          STORE_PASSWORD: ${{ secrets.BILL_CHECK_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.BILL_CHECK_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.BILL_CHECK_KEY_PASSWORD }}
+        run: |
+          test -n "$KEYSTORE_BASE64"
+          printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/bill-check-release.jks"
+          {
+            printf 'storeFile=%s\n' "$RUNNER_TEMP/bill-check-release.jks"
+            printf 'storePassword=%s\n' "$STORE_PASSWORD"
+            printf 'keyAlias=%s\n' "$KEY_ALIAS"
+            printf 'keyPassword=%s\n' "$KEY_PASSWORD"
+          } > key.properties
+      - name: Verify tag and release notes
+        shell: pwsh
+        run: |
+          $version = (Select-String -Path app/build.gradle.kts -Pattern 'versionName = "([^"]+)"').Matches.Groups[1].Value
+          if ("v$version" -ne "${{ github.ref_name }}") { throw "Tag and versionName differ." }
+          if (-not (Test-Path "docs/releases/v$version.md")) { throw "Release notes are missing." }
+          "VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Append
+      - name: Test, lint and build signed universal APK
+        run: ./gradlew testDebugUnitTest lintDebug assembleRelease --console=plain
+      - name: Prepare release assets
+        run: |
+          mkdir release-assets
+          cp app/build/outputs/apk/release/app-release.apk "release-assets/Bill-Check-v$VERSION-universal.apk"
+          cd release-assets
+          sha256sum "Bill-Check-v$VERSION-universal.apk" > "SHA256SUMS-v$VERSION.txt"
+      - name: Verify APK signature
+        run: |
+          BUILD_TOOLS_VERSION=$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -1)
+          "$ANDROID_HOME/build-tools/$BUILD_TOOLS_VERSION/apksigner" verify --print-certs "release-assets/Bill-Check-v$VERSION-universal.apk"
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "v$VERSION" release-assets/* \
+            --verify-tag \
+            --title "Bill Check v$VERSION" \
+            --notes-file "docs/releases/v$VERSION.md"

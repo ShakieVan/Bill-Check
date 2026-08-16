@@ -76,6 +76,7 @@ import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Surface
@@ -128,6 +129,8 @@ import de.shakie.billcheck.ui.AiExtractionState
 import de.shakie.billcheck.ui.LocalOcrState
 import de.shakie.billcheck.ui.GeminiModelsState
 import de.shakie.billcheck.ui.TransferState
+import de.shakie.billcheck.ui.AppUpdateStatus
+import de.shakie.billcheck.ui.UpdateManagerDialog
 import de.shakie.billcheck.ui.ReconciliationManagerDialog
 import de.shakie.billcheck.data.ExportFormat
 import de.shakie.billcheck.data.ImportPreview
@@ -211,6 +214,7 @@ private fun BillCheckApp(
     val localOcr by viewModel.localOcr.collectAsStateWithLifecycle()
     val geminiModels by viewModel.geminiModels.collectAsStateWithLifecycle()
     val transferState by viewModel.transfer.collectAsStateWithLifecycle()
+    val appUpdate by viewModel.appUpdate.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val imageStorage = remember { ReceiptImageStorage(context) }
     var showCreateTrip by remember { mutableStateOf(false) }
@@ -219,6 +223,7 @@ private fun BillCheckApp(
     var editingReceipt by remember { mutableStateOf<ReceiptWithItems?>(null) }
     var showAppMenu by remember { mutableStateOf(false) }
     var showSettings by remember { mutableStateOf(false) }
+    var showUpdates by remember { mutableStateOf(false) }
     var showExport by remember { mutableStateOf(false) }
     var showReconciliations by remember { mutableStateOf(false) }
     var pendingCameraUriString by rememberSaveable { mutableStateOf<String?>(null) }
@@ -235,6 +240,20 @@ private fun BillCheckApp(
     val scope = rememberCoroutineScope()
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val cameraError = stringResource(R.string.camera_start_failed)
+    val updateAvailableMessage = stringResource(R.string.update_available)
+    val updatesLabel = stringResource(R.string.updates)
+
+    LaunchedEffect(Unit) {
+        viewModel.checkForAppUpdate(force = false)
+    }
+
+    LaunchedEffect(appUpdate.status, appUpdate.release?.tagName) {
+        if (appUpdate.status == AppUpdateStatus.AVAILABLE) {
+            if (snackbar.showSnackbar(updateAvailableMessage, updatesLabel) == SnackbarResult.ActionPerformed) {
+                showUpdates = true
+            }
+        }
+    }
 
     val cameraLauncher = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { saved ->
         pendingCameraUri?.let { uri ->
@@ -430,6 +449,14 @@ private fun BillCheckApp(
                                         showSettings = true
                                     },
                                 )
+                                DropdownMenuItem(
+                                    text = { Text(stringResource(R.string.updates)) },
+                                    onClick = {
+                                        showAppMenu = false
+                                        showUpdates = true
+                                        viewModel.checkForAppUpdate(force = true)
+                                    },
+                                )
                             }
                         }
                     },
@@ -604,6 +631,17 @@ private fun BillCheckApp(
             onSaveAiSettings = viewModel::saveAiSettings,
             onClearAiApiKey = viewModel::clearAiApiKey,
             onDismiss = { showSettings = false },
+        )
+    }
+
+    if (showUpdates) {
+        UpdateManagerDialog(
+            state = appUpdate,
+            onCheck = { viewModel.checkForAppUpdate(force = true) },
+            onDownload = viewModel::downloadAppUpdate,
+            onCancelDownload = viewModel::cancelAppUpdateDownload,
+            onDeleteDownload = viewModel::deleteDownloadedAppUpdate,
+            onDismiss = { showUpdates = false },
         )
     }
 

@@ -223,3 +223,25 @@
   geprüft; alle vier Einstiege öffnen Kamera, Photo Picker, Belegeditor oder
   Abgleichsverwaltung wie vorgesehen.
 - Unit-Tests und Android-Lint nach der Integration ohne Befund ausgeführt.
+
+## 16.08.2026 – Signierte GitHub-Updates
+
+- Updateverwaltung nach dem bewährten Tube-NEXT-Ablauf ergänzt: automatische
+  24-Stunden-Prüfung beim Öffnen, manueller Reload, Release Notes, privater
+  Download und bewusste Übergabe an den Android-Systeminstaller.
+- Auswahl auf eine eindeutig benannte Universal-APK begrenzt und aktuelle
+  GitHub-Asset-Digests eingelesen.
+- Download über `.part`-Datei gehärtet; Dateigröße und SHA-256 werden vor der
+  Installationsfreigabe zwingend geprüft. Manipulationsfall per JVM-Test
+  abgesichert.
+- Updateverwaltungsdialog mit festem Kopf/Abschluss, scrollbarem Inhalt und
+  allen Zuständen für kein Release, aktuell, verfügbar, Download, Fehler und
+  Installation umgesetzt.
+- Eigenen Bill-Check-Produktionsschlüssel außerhalb des Repositories erzeugt,
+  Recovery-Pfad dokumentiert und vier verschlüsselte GitHub-Secrets gesetzt.
+- Tag-gesteuerten Release-Workflow für Unit-Tests, Lint, signierten
+  Universal-Build, Prüfsummen, Signaturprüfung und GitHub-Release ergänzt.
+- Reale GitHub-Abfrage im Emulator geprüft; der derzeit korrekte Zustand
+  „noch kein öffentliches Release“ erscheint. Minifizierte, signierte
+  Release-APK gebaut, Signatur/Metadaten geprüft und erfolgreich im
+  Android-16-Emulator gestartet.

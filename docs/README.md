@@ -21,12 +21,16 @@ Fehlschläge dauerhaft außerhalb einzelner Chats fest.
   selektive Vollsicherung, CSV-/PDF-Berichte und Importverhalten
 - [`decisions/home-screen-widget.md`](decisions/home-screen-widget.md):
   Reiseübersicht und direkte Erfassungsaktionen auf dem Homescreen
+- [`decisions/self-update-flow.md`](decisions/self-update-flow.md):
+  nutzergesteuerte GitHub-Updates mit Digestprüfung und Systeminstaller
 - [`technical-notes/editor-dialog-layout.md`](technical-notes/editor-dialog-layout.md):
   tastaturfester, wiederverwendbarer Aufbau für Eingabedialoge
 - [`technical-notes/emulator-test-images.md`](technical-notes/emulator-test-images.md):
   privates Bildmaterial sicher in den lokalen Emulator einspielen
 - [`technical-notes/offline-ocr-helper.md`](technical-notes/offline-ocr-helper.md):
   lokale Texterkennung und manuell gesteuerte Textbausteine
+- [`technical-notes/github-release-process.md`](technical-notes/github-release-process.md):
+  Signierschlüssel, GitHub-Secrets, Release-Vertrag und Pflichtprüfungen
 
 ## Ablage
 

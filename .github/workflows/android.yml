@@ -21,5 +21,10 @@ jobs:
           java-version: "17"
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v6
-      - name: Run unit tests and build debug APK
-        run: ./gradlew testDebugUnitTest assembleDebug --console=plain
+      - name: Run unit tests, lint and build debug APK
+        run: ./gradlew testDebugUnitTest lintDebug assembleDebug --console=plain
+      - name: Upload debug APK
+        uses: actions/upload-artifact@v6
+        with:
+          name: Bill-Check-debug
+          path: app/build/outputs/apk/debug/app-debug.apk
