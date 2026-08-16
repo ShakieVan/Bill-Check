@@ -15,6 +15,8 @@ Fehlschläge dauerhaft außerhalb einzelner Chats fest.
   Kamera, Photo Picker und getrennte Lebenszyklen von Galerie und App-Datensatz
 - [`technical-notes/editor-dialog-layout.md`](technical-notes/editor-dialog-layout.md):
   tastaturfester, wiederverwendbarer Aufbau für Eingabedialoge
+- [`technical-notes/emulator-test-images.md`](technical-notes/emulator-test-images.md):
+  privates Bildmaterial sicher in den lokalen Emulator einspielen
 
 ## Ablage
 

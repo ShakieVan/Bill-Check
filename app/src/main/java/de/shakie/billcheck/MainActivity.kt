@@ -34,6 +34,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ReceiptLong
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Edit
@@ -164,9 +165,12 @@ private fun BillCheckApp(
     var editingReceipt by remember { mutableStateOf<ReceiptWithItems?>(null) }
     var showAppMenu by remember { mutableStateOf(false) }
     var showSettings by remember { mutableStateOf(false) }
+    var showAnalysisInfo by remember { mutableStateOf(false) }
     var pendingCameraUriString by rememberSaveable { mutableStateOf<String?>(null) }
     var pendingImageUriString by rememberSaveable { mutableStateOf<String?>(null) }
+    var draftReceiptImageUriString by rememberSaveable { mutableStateOf<String?>(null) }
     var imageTargetReceiptId by rememberSaveable { mutableStateOf<String?>(null) }
+    var imageTargetHadLinkedImage by rememberSaveable { mutableStateOf(false) }
     val pendingCameraUri = pendingCameraUriString?.let(Uri::parse)
     val pendingImageUri = pendingImageUriString?.let(Uri::parse)
     val snackbar = remember { SnackbarHostState() }
@@ -318,20 +322,35 @@ private fun BillCheckApp(
                 onUseImage = {
                     imageTargetReceiptId?.let { receiptId ->
                         viewModel.updateReceiptImage(receiptId, requireNotNull(pendingImageUriString))
-                        pendingImageUriString = null
-                        imageTargetReceiptId = null
-                    } ?: run { showManualReceipt = true }
+                    } ?: run {
+                        draftReceiptImageUriString = pendingImageUriString
+                        showManualReceipt = true
+                    }
+                    pendingImageUriString = null
+                    imageTargetReceiptId = null
+                    imageTargetHadLinkedImage = false
                 },
                 onClose = {
                     pendingImageUriString = null
                     imageTargetReceiptId = null
+                    imageTargetHadLinkedImage = false
                 },
-                onUnlink = imageTargetReceiptId?.let { receiptId ->
-                    {
-                        viewModel.updateReceiptImage(receiptId, null)
-                        pendingImageUriString = null
-                        imageTargetReceiptId = null
+                onUnlink = when {
+                    imageTargetReceiptId != null && imageTargetHadLinkedImage -> {
+                        {
+                            viewModel.updateReceiptImage(requireNotNull(imageTargetReceiptId), null)
+                            pendingImageUriString = null
+                            imageTargetReceiptId = null
+                            imageTargetHadLinkedImage = false
+                        }
                     }
+                    pendingImageUriString == draftReceiptImageUriString -> {
+                        {
+                            draftReceiptImageUriString = null
+                            pendingImageUriString = null
+                        }
+                    }
+                    else -> null
                 },
                 )
             } else if (state.trips.isEmpty()) {
@@ -346,14 +365,17 @@ private fun BillCheckApp(
                 onManualReceipt = { showManualReceipt = true },
                 onCamera = {
                     imageTargetReceiptId = null
+                    imageTargetHadLinkedImage = false
                     takePhoto()
                 },
                 onGallery = {
                     imageTargetReceiptId = null
+                    imageTargetHadLinkedImage = false
                     chooseImage()
                 },
                 onOpenReceiptImage = { receipt ->
                     imageTargetReceiptId = receipt.id
+                    imageTargetHadLinkedImage = true
                     pendingImageUriString = receipt.imageUri
                 },
                 onEditReceipt = { editingReceipt = it },
@@ -422,7 +444,28 @@ private fun BillCheckApp(
         if (showManualReceipt) {
             ReceiptEditorDialog(
                 trip = trip,
-                onDismiss = { showManualReceipt = false },
+                visible = pendingImageUri == null,
+                imageUri = draftReceiptImageUriString,
+                onTakePhoto = {
+                    imageTargetReceiptId = null
+                    imageTargetHadLinkedImage = false
+                    takePhoto()
+                },
+                onChooseImage = {
+                    imageTargetReceiptId = null
+                    imageTargetHadLinkedImage = false
+                    chooseImage()
+                },
+                onOpenImage = {
+                    imageTargetReceiptId = null
+                    imageTargetHadLinkedImage = false
+                    pendingImageUriString = draftReceiptImageUriString
+                },
+                onAnalyzeImage = { showAnalysisInfo = true },
+                onDismiss = {
+                    showManualReceipt = false
+                    draftReceiptImageUriString = null
+                },
                 onSave = { location, check, amount, tip, itemDrafts ->
                     viewModel.addReceipt(
                         location,
@@ -430,21 +473,43 @@ private fun BillCheckApp(
                         amount,
                         tip,
                         itemDrafts,
-                        pendingImageUri?.toString(),
+                        draftReceiptImageUriString,
                     ).also { saved ->
                         if (saved) {
                             showManualReceipt = false
                             pendingImageUriString = null
+                            draftReceiptImageUriString = null
                             imageTargetReceiptId = null
                         }
                     }
                 },
             )
         }
-        editingReceipt?.let { existing ->
+        editingReceipt?.let { selectedReceipt ->
+            val existing = state.receipts.firstOrNull {
+                it.receipt.id == selectedReceipt.receipt.id
+            } ?: selectedReceipt
             ReceiptEditorDialog(
                 trip = trip,
                 existing = existing,
+                visible = pendingImageUri == null,
+                imageUri = existing.receipt.imageUri,
+                onTakePhoto = {
+                    imageTargetReceiptId = existing.receipt.id
+                    imageTargetHadLinkedImage = existing.receipt.imageUri != null
+                    takePhoto()
+                },
+                onChooseImage = {
+                    imageTargetReceiptId = existing.receipt.id
+                    imageTargetHadLinkedImage = existing.receipt.imageUri != null
+                    chooseImage()
+                },
+                onOpenImage = {
+                    imageTargetReceiptId = existing.receipt.id
+                    imageTargetHadLinkedImage = true
+                    pendingImageUriString = existing.receipt.imageUri
+                },
+                onAnalyzeImage = { showAnalysisInfo = true },
                 onDismiss = { editingReceipt = null },
                 onSave = { location, check, amount, tip, itemDrafts ->
                     viewModel.updateReceipt(
@@ -460,6 +525,19 @@ private fun BillCheckApp(
                 },
             )
         }
+    }
+
+    if (showAnalysisInfo) {
+        AlertDialog(
+            onDismissRequest = { showAnalysisInfo = false },
+            title = { Text(stringResource(R.string.image_analysis)) },
+            text = { Text(stringResource(R.string.image_analysis_coming_soon)) },
+            confirmButton = {
+                TextButton(onClick = { showAnalysisInfo = false }) {
+                    Text(stringResource(R.string.close))
+                }
+            },
+        )
     }
 }
 
@@ -972,6 +1050,12 @@ private fun TripEditorDialog(
 private fun ReceiptEditorDialog(
     trip: TripEntity,
     existing: ReceiptWithItems? = null,
+    visible: Boolean = true,
+    imageUri: String? = null,
+    onTakePhoto: () -> Unit,
+    onChooseImage: () -> Unit,
+    onOpenImage: () -> Unit,
+    onAnalyzeImage: () -> Unit,
     onDismiss: () -> Unit,
     onSave: (String, String, String, Boolean, List<ReceiptItemDraft>) -> Boolean,
 ) {
@@ -1001,6 +1085,8 @@ private fun ReceiptEditorDialog(
     val itemSumMinor = items.mapNotNull { MainViewModel.parseMinor(it.amountText) }.sum()
     val receiptMinor = MainViewModel.parseMinor(amount)
 
+    if (!visible) return
+
     ScrollableEditorDialog(
         title = stringResource(if (existing == null) R.string.add_receipt else R.string.edit_receipt),
         onDismiss = onDismiss,
@@ -1014,6 +1100,13 @@ private fun ReceiptEditorDialog(
             )
         },
     ) {
+                ReceiptEditorImageSection(
+                    imageUri = imageUri,
+                    onTakePhoto = onTakePhoto,
+                    onChooseImage = onChooseImage,
+                    onOpenImage = onOpenImage,
+                    onAnalyzeImage = onAnalyzeImage,
+                )
                 OutlinedTextField(location, { location = it }, label = { Text(stringResource(R.string.location)) })
                 OutlinedTextField(check, { check = it }, label = { Text(stringResource(R.string.check_number)) })
                 OutlinedTextField(
@@ -1146,6 +1239,80 @@ private fun ReceiptEditorDialog(
                 }
                 Spacer(Modifier.height(24.dp))
     }
+}
+
+@Composable
+private fun ReceiptEditorImageSection(
+    imageUri: String?,
+    onTakePhoto: () -> Unit,
+    onChooseImage: () -> Unit,
+    onOpenImage: () -> Unit,
+    onAnalyzeImage: () -> Unit,
+) {
+    Text(
+        stringResource(R.string.receipt_image),
+        style = MaterialTheme.typography.titleSmall,
+        fontWeight = FontWeight.SemiBold,
+    )
+    if (imageUri != null) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(18.dp))
+                .clickable(onClick = onOpenImage)
+                .background(MaterialTheme.colorScheme.surfaceVariant)
+                .padding(10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            ReceiptThumbnail(
+                imageUri = imageUri,
+                modifier = Modifier.size(84.dp),
+            )
+            Column(Modifier.padding(start = 12.dp).weight(1f)) {
+                Text(
+                    stringResource(R.string.image_linked),
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Text(
+                    stringResource(R.string.tap_to_review_image),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+    } else {
+        Text(
+            stringResource(R.string.no_image_linked),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        OutlinedButton(onClick = onTakePhoto, modifier = Modifier.weight(1f)) {
+            Icon(Icons.Default.CameraAlt, contentDescription = null)
+            Spacer(Modifier.width(6.dp))
+            Text(stringResource(R.string.take_photo))
+        }
+        OutlinedButton(onClick = onChooseImage, modifier = Modifier.weight(1f)) {
+            Icon(Icons.Default.Image, contentDescription = null)
+            Spacer(Modifier.width(6.dp))
+            Text(stringResource(R.string.choose_image))
+        }
+    }
+    if (imageUri != null) {
+        FilledTonalButton(
+            onClick = onAnalyzeImage,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Icon(Icons.Default.AutoAwesome, contentDescription = null)
+            Spacer(Modifier.width(8.dp))
+            Text(stringResource(R.string.analyze_image_again))
+        }
+    }
+    HorizontalDivider(Modifier.padding(vertical = 4.dp))
 }
 
 @Composable

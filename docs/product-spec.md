@@ -59,6 +59,11 @@ Stand: 16.08.2026
   und ausdrücklich bestätigt.
 - Verknüpfte Bilder werden in der Belegliste als Miniatur angezeigt und können
   dort ersetzt oder vom Eintrag gelöst werden.
+- Kamera und Photo Picker sind auch direkt im Editor neuer und bestehender
+  Belege erreichbar. Noch nicht gespeicherte Felder und Posten bleiben beim
+  Wechsel zur Bildprüfung erhalten.
+- Ein verknüpftes Bild bietet im Editor den festen Einstieg „Bild erneut
+  auswerten“. Die dahinterliegende KI-/OCR-Auswertung folgt separat.
 
 ## Belegposten
 

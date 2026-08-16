@@ -113,3 +113,17 @@
   vereinheitlicht.
 - Reiseänderung, unveränderte Bestandsbelege, Scrollen bei sichtbarer
   Bildschirmtastatur sowie beide Darstellungsmodi im Emulator geprüft.
+
+## 16.08.2026 – Bildverwaltung im Belegeditor
+
+- Bildbereich in den Editor neuer und bestehender Belege integriert.
+- Fehlende Bilder lassen sich dort per Systemkamera oder Photo Picker
+  hinzufügen; vorhandene Bilder können geprüft, ersetzt oder entknüpft werden.
+- Bildprüfungszustand und noch ungespeichertes Belegbild getrennt, damit die
+  Prüfansicht eindeutig bestätigt oder abgebrochen werden kann.
+- Editorzustand während Kamera, Photo Picker und Prüfansicht lebendig gehalten;
+  noch nicht gespeicherte Feld- und Postenänderungen gehen nicht verloren.
+- Einstieg „Bild erneut auswerten“ für die spätere KI-/OCR-Pipeline ergänzt und
+  den noch ausstehenden Erkennungsbaustein transparent erläutert.
+- Hinzufügen, Rückkehr mit erhaltenem Textentwurf, erneute Prüfansicht,
+  Entknüpfen und Wiederherstellung der Testdaten im Emulator durchgespielt.

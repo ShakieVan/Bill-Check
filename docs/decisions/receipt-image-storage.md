@@ -20,6 +20,12 @@ keine Kopie.
   Prüfansicht. Erst „Bild verwenden“ verknüpft das Bild mit einem neuen Eintrag.
 - Ein verknüpftes Bild lässt sich über seine Miniatur erneut öffnen, ersetzen
   oder vom Eintrag lösen.
+- Der Belegeditor bietet unabhängig vom aktuellen Bildstatus Kamera und Photo
+  Picker an. Sein Formularzustand bleibt während der externen Auswahl und der
+  anschließenden Prüfansicht im Speicher.
+- Die erneute KI-/OCR-Auswertung wird vom Bildbereich des Editors aus
+  angestoßen. Bildverwaltung und Erkennungsanbieter bleiben dabei getrennte
+  Verantwortlichkeiten.
 - Das Lösen der Verknüpfung und das Löschen eines Belegs löschen niemals das
   Galerieoriginal.
 - Eine abgebrochene Kameraaufnahme entfernt nur den zuvor angelegten leeren

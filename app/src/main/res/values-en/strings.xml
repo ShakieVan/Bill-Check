@@ -43,6 +43,12 @@
     <string name="close">Close</string>
     <string name="close_image_review">Cancel</string>
     <string name="receipt_image">Receipt image</string>
+    <string name="image_linked">Image linked</string>
+    <string name="tap_to_review_image">Tap to review, replace, or remove</string>
+    <string name="no_image_linked">No image is linked to this receipt yet.</string>
+    <string name="analyze_image_again">Analyze image again</string>
+    <string name="image_analysis">Image analysis</string>
+    <string name="image_analysis_coming_soon">This entry point is prepared for running AI or OCR analysis again. Recognition itself follows in a later development step.</string>
     <string name="image_unavailable">Image unavailable</string>
     <string name="camera_start_failed">The image could not be prepared for the camera.</string>
     <string name="manual_entry">Enter manually</string>
