@@ -304,3 +304,13 @@
   absichtlich mitten im langen Text platziert, OCR-Baustein ergänzt und
   anschließend Cursor sowie sichtbaren Ausschnitt am neuen Textende geprüft.
   Der veränderte Testbeleg wurde verworfen.
+- Beim anschließenden manuellen Ziehen des Cursor-Griffs zeigte sich eine
+  weitere Compose-Grenze: Am horizontalen Feldrand scrollte der Text weder
+  links noch rechts weiter. Verlaufstextfelder brechen lange Inhalte deshalb
+  nun vollständig auf sichtbare Zeilen um und behalten auf der Tastatur die
+  Aktion „Fertig“. Der gemeinsame Editor kann die gewachsene Feldhöhe vertikal
+  scrollen.
+- Die parallel installierbare Testvariante heißt im Launcher künftig eindeutig
+  „Bill Check Debug“. Ihre getrennte App-ID schützt die Daten der regulären
+  Installation; auf persönlichen Testgeräten wird nach Abschluss wieder nur
+  die signierte Release-App belassen.

@@ -31,6 +31,21 @@ duplizieren.
 Textfelder mit Verlauf verwalten neben dem Inhalt auch ihre Auswahl als
 `TextFieldValue`. Wird ihr Wert von außen ergänzt, etwa durch die lokale
 Texthilfe oder einen Verlaufseintrag, springt die Auswahl ans neue Textende.
-Compose scrollt die einzeilige Eingabe dadurch bis zum neuen Ende. Eine vom
-Menschen gesetzte Auswahl bleibt bei gewöhnlicher Tastatureingabe dagegen
-unverändert.
+Eine vom Menschen gesetzte Auswahl bleibt bei gewöhnlicher Tastatureingabe
+dagegen unverändert.
+
+Die mobilen Compose-Auswahlgriffe scrollen einzeilige Felder beim Ziehen am
+linken oder rechten Rand nicht auf allen Geräten zuverlässig weiter. Orts- und
+Postenfelder werden daher als logisch einzeilige, visuell mehrzeilige Eingaben
+dargestellt. Lange Inhalte brechen vollständig um und bleiben für direktes
+Antippen oder Ziehen erreichbar; der umgebende Editor übernimmt bei Bedarf das
+vertikale Scrollen. Die IME bietet weiterhin „Fertig“ statt eines
+Zeilenumbruchs an.
+
+## Geräteinstallation
+
+Debug- und Release-Paket besitzen absichtlich getrennte App-IDs, damit ein
+Entwicklungsbuild niemals die persönlichen Daten der regulären Installation
+überschreibt. Der Debug-Launchername lautet deshalb sichtbar `Bill Check
+Debug`. Nach einem Test auf einem persönlichen Gerät wird das Debug-Paket
+wieder entfernt; die signierte Release-App bleibt installiert.

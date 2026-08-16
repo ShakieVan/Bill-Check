@@ -104,6 +104,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.TextFieldValue
@@ -2341,7 +2342,9 @@ private fun HistoryTextField(
                 onValueChange(updated.text)
             },
             label = { Text(label) },
-            singleLine = true,
+            singleLine = false,
+            minLines = 1,
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
             trailingIcon = if (suggestions.isNotEmpty()) {
                 {
                     IconButton(onClick = { expanded = true }) {

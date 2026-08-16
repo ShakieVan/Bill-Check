@@ -123,7 +123,9 @@ Stand: 16.08.2026
   können einzelne Wörter oder Beträge per Tipp kontrolliert übernommen und bei
   Textfeldern aneinandergefügt werden. Nach einer solchen Ergänzung stehen
   sichtbarer Ausschnitt und Cursor am neuen Textende; eine normale manuelle
-  Cursorposition wird bei der Tastatureingabe nicht überschrieben.
+  Cursorposition wird bei der Tastatureingabe nicht überschrieben. Lange Orts-
+  und Postentexte brechen vollständig auf sichtbare Zeilen um, damit jede
+  Cursorposition ohne horizontales Randscrollen erreichbar bleibt.
 
 ## Darstellung
 
