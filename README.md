@@ -29,8 +29,9 @@ gespeicherte Belege und Übersichten vollständig nutzbar.
 - App-ID `de.shakie.billcheck`
 
 Das erste lauffähige Fundament umfasst Reiseanlage, lokale Speicherung,
-manuelle Belegerfassung, Löschen von Belegen und die festgelegte
-Rundungslogik. Kamera, KI-Erkennung und Rechnungsabgleich folgen iterativ.
+manuelle Belegerfassung mit einzelnen Posten, automatische oder feste
+Wechselkurse, Löschen von Belegen und die festgelegte Rundungslogik. Kamera,
+KI-Erkennung und Rechnungsabgleich folgen iterativ.
 
 ## Build
 

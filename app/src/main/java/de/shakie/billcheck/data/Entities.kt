@@ -2,8 +2,10 @@ package de.shakie.billcheck.data
 
 import androidx.room.Entity
 import androidx.room.ForeignKey
+import androidx.room.Embedded
 import androidx.room.Index
 import androidx.room.PrimaryKey
+import androidx.room.Relation
 
 @Entity(tableName = "trips", indices = [Index(value = ["sortPosition"], unique = true)])
 data class TripEntity(
@@ -12,6 +14,7 @@ data class TripEntity(
     val name: String,
     val foreignCurrencyCode: String,
     val defaultExchangeRate: String,
+    val exchangeRateMode: String,
     val defaultTipMinor: Long,
     val defaultTipCurrencyCode: String,
     val defaultTipSelected: Boolean,
@@ -67,6 +70,15 @@ data class ReceiptItemEntity(
     val name: String,
     val amountMinor: Long,
     val currencyCode: String,
+)
+
+data class ReceiptWithItems(
+    @Embedded val receipt: ReceiptEntity,
+    @Relation(
+        parentColumn = "id",
+        entityColumn = "receiptId",
+    )
+    val items: List<ReceiptItemEntity>,
 )
 
 @Entity(

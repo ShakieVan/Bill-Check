@@ -3,6 +3,11 @@ package de.shakie.billcheck.data
 import de.shakie.billcheck.domain.MoneyCalculator
 import java.util.UUID
 
+data class NewReceiptItem(
+    val name: String,
+    val amountMinor: Long,
+)
+
 class BillCheckRepository(database: BillCheckDatabase) {
     private val dao = database.dao()
 
@@ -14,6 +19,7 @@ class BillCheckRepository(database: BillCheckDatabase) {
         name: String,
         currencyCode: String,
         exchangeRate: String,
+        exchangeRateMode: String,
         defaultTipMinor: Long = 100,
         defaultTipCurrencyCode: String = "EUR",
     ): TripEntity {
@@ -24,6 +30,7 @@ class BillCheckRepository(database: BillCheckDatabase) {
             name = name.trim().ifBlank { "Reise 1" },
             foreignCurrencyCode = currencyCode,
             defaultExchangeRate = exchangeRate,
+            exchangeRateMode = exchangeRateMode,
             defaultTipMinor = defaultTipMinor,
             defaultTipCurrencyCode = defaultTipCurrencyCode,
             defaultTipSelected = false,
@@ -38,23 +45,25 @@ class BillCheckRepository(database: BillCheckDatabase) {
         checkNumber: String,
         foreignAmountMinor: Long,
         addDefaultTip: Boolean,
+        items: List<NewReceiptItem> = emptyList(),
+        exchangeRate: String = trip.defaultExchangeRate,
         occurredAt: Long = System.currentTimeMillis(),
     ) {
         val now = System.currentTimeMillis()
         val tipMinor = if (addDefaultTip) trip.defaultTipMinor else 0
-        dao.insertReceipt(
-            ReceiptEntity(
-                id = UUID.randomUUID().toString(),
+        val receiptId = UUID.randomUUID().toString()
+        val receipt = ReceiptEntity(
+                id = receiptId,
                 tripId = trip.id,
                 occurredAt = occurredAt,
                 location = location.trim(),
                 checkNumber = checkNumber.trim(),
                 foreignAmountMinor = foreignAmountMinor,
                 foreignCurrencyCode = trip.foreignCurrencyCode,
-                exchangeRate = trip.defaultExchangeRate,
+                exchangeRate = exchangeRate,
                 exactEuroCents = MoneyCalculator.calculateExactEuroCents(
                     foreignAmountMinor = foreignAmountMinor,
-                    exchangeRate = trip.defaultExchangeRate,
+                    exchangeRate = exchangeRate,
                     tipMinor = tipMinor,
                     tipCurrencyCode = trip.defaultTipCurrencyCode,
                 ),
@@ -63,7 +72,20 @@ class BillCheckRepository(database: BillCheckDatabase) {
                 imageUri = null,
                 reviewState = "CONFIRMED",
                 createdAt = now,
-            ),
+            )
+        val receiptItems = items.mapIndexed { index, item ->
+            ReceiptItemEntity(
+                id = UUID.randomUUID().toString(),
+                receiptId = receiptId,
+                sortPosition = index,
+                name = item.name.trim(),
+                amountMinor = item.amountMinor,
+                currencyCode = trip.foreignCurrencyCode,
+            )
+        }
+        dao.insertReceiptWithItems(
+            receipt = receipt,
+            items = receiptItems,
         )
     }
 

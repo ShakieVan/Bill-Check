@@ -9,6 +9,13 @@
     <string name="trip_name">Name der Reise</string>
     <string name="foreign_currency">Fremdwährung</string>
     <string name="exchange_rate">Kurs: Fremdwährung für 1 €</string>
+    <string name="refresh_rate">Wechselkurs online aktualisieren</string>
+    <string name="exchange_rate_updated">Online aktualisiert: %1$s</string>
+    <string name="exchange_rate_cached">Zwischengespeicherter Online-Kurs vom %1$s</string>
+    <string name="rate_lookup_failed">Online-Kurs nicht verfügbar. Der manuelle Wert bleibt erhalten.</string>
+    <string name="rate_attribution">Kurse von ExchangeRate-API</string>
+    <string name="daily_exchange_rate">Tageskurs verwenden</string>
+    <string name="daily_exchange_rate_hint">Bei jedem neuen Beleg online aktualisieren; offline gilt der eingestellte Kurs.</string>
     <string name="default_tip">Standard-Trinkgeld</string>
     <string name="tip_currency">Trinkgeldwährung</string>
     <string name="cancel">Abbrechen</string>
@@ -26,6 +33,17 @@
     <string name="location">Ort / Restaurant</string>
     <string name="check_number">Checknummer</string>
     <string name="amount_in_currency">Betrag (%1$s)</string>
+    <string name="receipt_exchange_rate">1 EUR = %1$s %2$s</string>
+    <string name="receipt_items">Einzelne Posten</string>
+    <string name="item_number">Posten %1$d</string>
+    <string name="item_name">Bezeichnung</string>
+    <string name="item_amount">Betrag (%1$s)</string>
+    <string name="add_item">Posten hinzufügen</string>
+    <string name="remove_item">Posten entfernen</string>
+    <string name="more_receipt_items">+ %1$d weitere</string>
+    <string name="item_sum_used_as_total">Postensumme %1$s wird als Gesamtbetrag übernommen.</string>
+    <string name="item_sum_matches">Postensumme stimmt: %1$s</string>
+    <string name="item_sum_differs">Postensumme %1$s · Differenz %2$s</string>
     <string name="add_default_tip">Standard-Trinkgeld hinzufügen</string>
     <string name="delete_receipt">Beleg löschen</string>
     <string name="not_yet_available">Folgt im nächsten Entwicklungsschritt.</string>

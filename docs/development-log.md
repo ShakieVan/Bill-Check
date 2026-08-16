@@ -45,3 +45,18 @@
 - Bei koordinatenbasierter Emulatorbedienung verschiebt die Bildschirmtastatur
   Compose-Dialoge nach oben. UI-Tests müssen deshalb semantische Selektoren
   statt fester Bildschirmkoordinaten verwenden.
+
+## 16.08.2026 – Belegposten und Online-Kurse
+
+- Manuelle Belege um beliebig viele benannte Einzelposten erweitert.
+- Leerer Gesamtbetrag übernimmt die Postensumme; Abweichungen werden sichtbar
+  gemacht, bleiben aber wegen möglicher Gebühren oder Rabatte zulässig.
+- Posten werden atomar mit dem Beleg gespeichert und im Dashboard angezeigt.
+- Schlüssellose EUR-Kursabfrage mit EGP-Unterstützung, Tagescache, Attribution
+  und Anbieterabstraktion ergänzt.
+- Feste und täglich aktualisierte Kurse sind pro Reise wählbar; jeder Beleg
+  behält seinen konkreten Kurs-Snapshot.
+- Datenbankschema 1→2 migriert und auf dem Emulator mit vorhandenen Belegen
+  ohne Datenverlust verifiziert.
+- GitHub Actions nach der Node-20-Abkündigung auf die aktuellen Hauptversionen
+  von Checkout, Java-Setup und Gradle-Setup angehoben.

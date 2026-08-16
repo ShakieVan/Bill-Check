@@ -27,6 +27,9 @@ Stand: 16.08.2026
   vorbereitet.
 - Ein Beleg speichert Fremdbetrag, Kurs-Snapshot, exakten Eurobetrag und
   optionales Trinkgeld.
+- Eine Reise wählt zwischen festem Kurs und täglicher Online-Aktualisierung.
+  Schlägt die Online-Abfrage fehl, bleibt der manuell eingestellte Kurs der
+  Offline-Fallback.
 - Exakte Eurobeträge werden kaufmännisch auf Cent gerundet.
 - Die prominente Beleganzeige rundet den exakten Gesamtbetrag inklusive
   Trinkgeld immer nach oben auf volle Euro.
@@ -42,6 +45,16 @@ Stand: 16.08.2026
 - App-Löschen trennt standardmäßig nur die Verknüpfung und lässt das
   Galerieoriginal bestehen.
 - Galerieimporte werden nicht dupliziert.
+
+## Belegposten
+
+- Ein Beleg kann beliebig viele benannte Einzelposten in seiner
+  Fremdwährung enthalten.
+- Ist kein Gesamtbetrag eingetragen, wird die Postensumme als Gesamtbetrag
+  übernommen.
+- Weicht ein eingetragener Gesamtbetrag von der Postensumme ab, wird die
+  Differenz sichtbar, das Speichern bleibt wegen Gebühren und Rabatten
+  möglich.
 
 ## Abgleich
 
@@ -73,4 +86,3 @@ Stand: 16.08.2026
 - `.billcheck` ist ein vollständiges, selektiv exportier- und importierbares
   Sicherungsarchiv einschließlich Bilder und Abgleichstatus.
 - Mehrere Reisen können beim Export und Import ausgewählt werden.
-
