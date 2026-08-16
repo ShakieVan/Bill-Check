@@ -1,0 +1,961 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Bill-Check V7 (Offline)</title>
+    <style>
+        :root {
+            --primary: #059669; /* Emerald 600 */
+            --primary-hover: #047857;
+            --secondary: #4f46e5; /* Indigo 600 */
+            --secondary-hover: #4338ca;
+            --bg-body: #f1f5f9; /* Slate 100 */
+            --bg-card: #ffffff;
+            --text-main: #0f172a; /* Slate 900 */
+            --text-muted: #64748b; /* Slate 500 */
+            --border: #e2e8f0; /* Slate 200 */
+            --danger: #ef4444;
+            --success-bg: #dcfce7;
+            --warning-bg: #fef9c3;
+            --error-bg: #fee2e2;
+        }
+
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --bg-body: #0f172a;
+                --bg-card: #1e293b;
+                --text-main: #f8fafc;
+                --text-muted: #94a3b8;
+                --border: #334155;
+            }
+        }
+
+        * { box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background-color: var(--bg-body); color: var(--text-main); margin: 0; padding: 1rem; line-height: 1.5; }
+        
+        /* Layout */
+        .container { max-width: 900px; margin: 0 auto; }
+        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; }
+        .logo { display: flex; align-items: center; gap: 0.75rem; font-size: 1.5rem; font-weight: 700; }
+        .logo-icon { background: var(--primary); color: white; padding: 0.5rem; border-radius: 0.5rem; line-height: 0; }
+        
+        /* Dashboard Grid */
+        .dashboard { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1rem; margin-bottom: 2rem; }
+        .card { background: var(--bg-card); padding: 1.25rem; border-radius: 0.75rem; box-shadow: 0 1px 3px rgba(0,0,0,0.1); border: 1px solid var(--border); }
+        .card-title { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); font-weight: 600; margin-bottom: 0.5rem; }
+        .big-number { font-size: 1.875rem; font-weight: 700; }
+        .sub-text { font-size: 0.75rem; color: var(--text-muted); margin-top: 0.25rem; }
+        
+        .border-l-primary { border-left: 4px solid var(--primary); }
+        .border-l-secondary { border-left: 4px solid #60a5fa; } /* Blue */
+        .border-l-neutral { border-left: 4px solid #94a3b8; }
+
+        /* Actions Bar */
+        .actions { display: flex; flex-wrap: wrap; gap: 0.75rem; margin-bottom: 2rem; }
+        .btn { display: inline-flex; align-items: center; gap: 0.5rem; padding: 0.5rem 1rem; border-radius: 0.5rem; font-weight: 600; font-size: 0.875rem; cursor: pointer; border: none; transition: background-color 0.2s; text-decoration: none; }
+        .btn:active { transform: scale(0.98); }
+        
+        .btn-primary { background-color: var(--primary); color: white; }
+        .btn-primary:hover { background-color: var(--primary-hover); }
+        
+        .btn-secondary { background-color: var(--secondary); color: white; }
+        .btn-secondary:hover { background-color: var(--secondary-hover); }
+        
+        .btn-neutral { background-color: var(--border); color: var(--text-main); }
+        .btn-neutral:hover { opacity: 0.9; }
+
+        .btn-icon { padding: 0.5rem; border-radius: 50%; background: transparent; color: var(--text-muted); }
+        .btn-icon:hover { color: var(--primary); background: rgba(0,0,0,0.05); }
+
+        /* Table */
+        .table-container { background: var(--bg-card); border-radius: 1rem; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); overflow: hidden; border: 1px solid var(--border); }
+        .table-header { padding: 1rem; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; background: rgba(0,0,0,0.02); }
+        .table-scroll { overflow-x: auto; }
+        table { w-full; width: 100%; border-collapse: collapse; font-size: 0.875rem; text-align: left; }
+        th { padding: 0.75rem 1rem; color: var(--text-muted); font-weight: 600; text-transform: uppercase; font-size: 0.75rem; background: rgba(0,0,0,0.02); }
+        td { padding: 0.75rem 1rem; border-bottom: 1px solid var(--border); }
+        tr:last-child td { border-bottom: none; }
+        .text-right { text-align: right; }
+        .text-center { text-align: center; }
+        .font-mono { font-family: monospace; }
+        .font-bold { font-weight: 700; }
+        
+        /* Modal */
+        .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.6); backdrop-filter: blur(4px); display: none; align-items: center; justify-content: center; z-index: 50; padding: 1rem; }
+        .modal-overlay.open { display: flex; }
+        .modal-card { background: var(--bg-card); width: 100%; max-width: 500px; border-radius: 1rem; padding: 1.5rem; max-height: 90vh; overflow-y: auto; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1); }
+        
+        /* Form Elements */
+        .form-group { margin-bottom: 1rem; }
+        .label { display: block; font-size: 0.75rem; font-weight: 600; color: var(--text-muted); margin-bottom: 0.25rem; }
+        .input { width: 100%; padding: 0.5rem; border: 1px solid var(--border); border-radius: 0.5rem; background: var(--bg-body); color: var(--text-main); font-size: 0.875rem; }
+        .input:focus { outline: 2px solid var(--primary); border-color: transparent; }
+        .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; }
+        
+        /* Upload Box */
+        .upload-box { display: block; border: 2px dashed var(--border); border-radius: 0.75rem; padding: 2rem; text-align: center; cursor: pointer; transition: all 0.2s; background: rgba(0,0,0,0.02); }
+        .upload-box:hover { border-color: var(--primary); background: rgba(5, 150, 105, 0.05); }
+        .hidden { display: none !important; }
+
+        /* Tabs */
+        .tabs { display: flex; background: var(--border); padding: 4px; border-radius: 0.5rem; margin-bottom: 1rem; }
+        .tab { flex: 1; text-align: center; padding: 0.5rem; font-size: 0.875rem; font-weight: 500; border-radius: 0.375rem; cursor: pointer; border: none; background: transparent; color: var(--text-muted); }
+        .tab.active { background: var(--bg-card); color: var(--text-main); box-shadow: 0 1px 2px rgba(0,0,0,0.1); }
+
+        /* Item List in Modal */
+        .item-row { display: flex; justify-content: space-between; align-items: center; padding: 0.5rem; background: var(--bg-body); border: 1px solid var(--border); border-radius: 0.5rem; margin-bottom: 0.5rem; }
+        .item-row.editing { border-color: var(--secondary); background: rgba(79, 70, 229, 0.05); }
+        .badge { display: inline-block; padding: 0.1rem 0.4rem; border-radius: 0.25rem; font-size: 0.7rem; background: #e2e8f0; color: #475569; font-family: monospace; }
+        
+        /* Details Expansion */
+        .details-row { background: rgba(0,0,0,0.02); display: none; }
+        .details-row.open { display: table-row; }
+        .details-content { padding: 0.5rem 1rem 0.5rem 3rem; }
+        .chevron { transition: transform 0.2s; display: inline-block; width: 16px; height: 16px; }
+        .chevron.rotated { transform: rotate(90deg); }
+
+        /* Loader */
+        .spinner { border: 2px solid #f3f3f3; border-top: 2px solid var(--primary); border-radius: 50%; width: 16px; height: 16px; animation: spin 1s linear infinite; display: inline-block; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+        /* Status Colors */
+        .row-ok { background-color: var(--success-bg) !important; color: #000; }
+        .row-warning { background-color: var(--warning-bg) !important; color: #000; }
+        .row-error { background-color: var(--error-bg) !important; color: #000; }
+
+        /* Markdown Styles */
+        .prose h1, .prose h2, .prose h3 { margin-top: 1rem; margin-bottom: 0.5rem; font-weight: bold; }
+        .prose ul { padding-left: 1.5rem; margin-bottom: 1rem; }
+        .prose p { margin-bottom: 0.75rem; }
+        .prose strong { font-weight: 700; color: var(--secondary); }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <!-- Header -->
+    <div class="header">
+        <div class="logo">
+            <div class="logo-icon">
+                <svg width="24" height="24" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
+                </svg>
+            </div>
+            <span>Bill-Check <small style="font-weight:400; opacity:0.6; font-size: 0.8rem;">v7</small></span>
+        </div>
+        <button id="settings-btn" class="btn-icon" title="Einstellungen">
+            <svg width="24" height="24" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426-1.756-2.924-1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+            </svg>
+        </button>
+    </div>
+
+    <!-- Dashboard -->
+    <div class="dashboard">
+        <div class="card border-l-neutral">
+            <div class="card-title">Reine Belege (EUR)</div>
+            <div class="big-number" id="dash-total-eur">0 €</div>
+            <div class="sub-text">ca. <span id="dash-total-egp">0</span> EGP</div>
+        </div>
+        <div class="card border-l-primary">
+            <div class="card-title">Gesamt (inkl. Tip)</div>
+            <div style="color: var(--primary)" class="big-number" id="dash-grand-total">0 €</div>
+            <div class="sub-text" id="dash-tips-subtitle">Davon Trinkgeld: 0 €</div>
+        </div>
+        <div class="card border-l-secondary">
+            <div class="card-title">Anzahl</div>
+            <div class="big-number" id="dash-count">0</div>
+            <div class="sub-text" id="dash-last-entry">Leer</div>
+        </div>
+    </div>
+
+    <!-- Actions -->
+    <div class="actions">
+        <button id="add-entry-btn" class="btn btn-primary">
+            <span>+ Beleg erfassen</span>
+        </button>
+        <button id="reconcile-btn" class="btn btn-secondary">
+            <span>Endabrechnung prüfen</span>
+        </button>
+        <div style="margin-left: auto; display: flex; gap: 0.5rem;">
+            <button id="export-csv-btn" class="btn btn-neutral">Teilen/Export</button>
+            <button id="import-csv-btn" class="btn btn-neutral">Import</button>
+            <!-- Improved accept attribute for mobile file pickers -->
+            <input type="file" id="import-csv-input" accept=".csv,text/csv,application/vnd.ms-excel,text/plain" class="hidden">
+        </div>
+    </div>
+
+    <!-- Table -->
+    <div class="table-container">
+        <div class="table-header">
+            <div style="font-weight: bold;">Beleg-Liste</div>
+            <button id="reset-colors-btn" class="btn btn-neutral hidden" style="font-size: 0.75rem; padding: 0.25rem 0.5rem;">Markierungen löschen</button>
+        </div>
+        <div class="table-scroll">
+            <table>
+                <thead>
+                    <tr>
+                        <th style="width: 30px"></th>
+                        <th>Datum</th>
+                        <th>Ort / Check#</th>
+                        <th>Posten</th>
+                        <th class="text-right">EGP</th>
+                        <th class="text-right">EUR</th>
+                        <th class="text-center">Tip</th>
+                        <th class="text-right">Aktion</th>
+                    </tr>
+                </thead>
+                <tbody id="data-table-body"></tbody>
+            </table>
+        </div>
+        <div id="empty-state" style="padding: 3rem; text-align: center; color: var(--text-muted);">
+            Noch keine Belege vorhanden.
+        </div>
+    </div>
+
+    <!-- Analysis Result -->
+    <div id="analysis-section" class="card hidden" style="margin-top: 1.5rem; border-color: var(--secondary);">
+        <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 1rem; color: var(--secondary); font-weight: bold;">
+            <svg width="20" height="20" fill="currentColor" viewBox="0 0 20 20"><path d="M10 2a8 8 0 100 16 8 8 0 000-16zm0 14a6 6 0 110-12 6 6 0 010 12z"/></svg>
+            KI-Analyse Ergebnis
+        </div>
+        <div id="analysis-content" class="prose" style="font-size: 0.9rem;"></div>
+    </div>
+
+    <footer style="margin-top: 3rem; text-align: center; font-size: 0.75rem; color: var(--text-muted);">
+        <p>Daten werden lokal im Browser gespeichert.</p>
+        <p>Modell: <span id="model-display">...</span></p>
+    </footer>
+</div>
+
+<!-- MODAL: Entry -->
+<div id="entry-modal" class="modal-overlay">
+    <div class="modal-card">
+        <h3 style="font-size: 1.25rem; font-weight: 700; margin-bottom: 1rem;">Beleg bearbeiten</h3>
+        
+        <div class="tabs">
+            <button class="tab active" id="tab-photo">Foto-Scan</button>
+            <button class="tab" id="tab-manual">Manuell</button>
+        </div>
+
+        <div id="photo-upload-section">
+            <label class="upload-box">
+                <input type="file" id="receipt-photo" accept="image/*" class="hidden">
+                <div style="font-size: 2rem; color: var(--text-muted); margin-bottom: 0.5rem;">📷</div>
+                <div style="color: var(--text-muted); font-size: 0.875rem;">Foto aufnehmen oder wählen</div>
+            </label>
+            <div id="scan-status" style="text-align: center; margin-top: 0.5rem; font-size: 0.8rem; color: var(--primary); height: 1.2rem;"></div>
+        </div>
+
+        <form id="entry-form" style="margin-top: 1rem;">
+            <input type="hidden" id="entry-id">
+            
+            <div class="grid-2">
+                <div class="form-group">
+                    <label class="label">Datum & Zeit</label>
+                    <input type="datetime-local" id="inp-datetime" class="input" required>
+                </div>
+                <div class="form-group">
+                    <label class="label">Check Nr.</label>
+                    <input type="text" id="inp-check" class="input" placeholder="1234">
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label class="label">Ort / Restaurant</label>
+                <input type="text" id="inp-location" class="input" placeholder="Bar Name">
+            </div>
+
+            <div style="border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); padding: 1rem 0; margin: 1rem 0;">
+                <label class="label">Einzelposten</label>
+                <div id="modal-items-list" style="max-height: 150px; overflow-y: auto; margin-bottom: 0.5rem;">
+                    <div style="text-align: center; color: var(--text-muted); font-style: italic; font-size: 0.8rem;">Keine Posten</div>
+                </div>
+                
+                <div style="display: flex; gap: 0.5rem;">
+                    <input type="text" id="new-item-name" class="input" style="flex: 2;" placeholder="Name">
+                    <input type="number" id="new-item-price" class="input" style="flex: 1;" placeholder="0.00">
+                    <select id="new-item-currency" class="input" style="width: 70px;">
+                        <option value="EGP">EGP</option>
+                        <option value="EUR">EUR</option>
+                    </select>
+                    <button type="button" id="btn-add-item" class="btn btn-secondary" style="padding: 0 0.75rem;">+</button>
+                    <button type="button" id="btn-cancel-edit" class="btn btn-neutral hidden" style="padding: 0 0.75rem; color: var(--danger);">×</button>
+                </div>
+            </div>
+
+            <div class="grid-2" style="align-items: end;">
+                <div class="form-group">
+                    <label class="label">Gesamt (EGP)</label>
+                    <input type="number" step="0.01" id="inp-egp" class="input font-mono font-bold" required>
+                </div>
+                <div class="form-group">
+                    <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; padding: 0.5rem; border: 1px solid var(--border); border-radius: 0.5rem;">
+                        <input type="checkbox" id="inp-tip">
+                        <span style="font-size: 0.875rem;">+ 1€ Tip</span>
+                    </label>
+                </div>
+            </div>
+
+            <div style="background: var(--success-bg); padding: 0.5rem; border-radius: 0.5rem; text-align: center; margin-top: 1rem;">
+                <span style="font-size: 0.75rem; color: var(--primary-hover);">Umrechnung: </span>
+                <strong style="color: var(--primary-hover); font-size: 1.1rem;" id="calc-eur-preview">0 €</strong>
+            </div>
+
+            <div style="display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 1.5rem;">
+                <button type="button" id="modal-cancel" class="btn btn-neutral">Abbrechen</button>
+                <button type="submit" id="modal-save" class="btn btn-primary">
+                    Speichern <span class="spinner hidden" style="margin-left: 0.5rem; border-color: #fff; border-top-color: transparent;"></span>
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- MODAL: Reconciliation -->
+<div id="recon-modal" class="modal-overlay">
+    <div class="modal-card">
+        <h3>Abrechnung prüfen</h3>
+        <p style="font-size: 0.875rem; color: var(--text-muted); margin-bottom: 1rem;">Vergleich Foto der Endabrechnung mit App-Daten.</p>
+        <label class="upload-box" style="display: block; margin-bottom: 1rem;">
+            <input type="file" id="final-bill-photo" accept="image/*" class="hidden">
+            <span>Foto wählen</span>
+        </label>
+        <div id="recon-status" style="text-align: center; font-size: 0.875rem; color: var(--secondary); margin-bottom: 1rem;"></div>
+        <div class="text-right">
+            <button id="recon-cancel" class="btn btn-neutral">Schließen</button>
+        </div>
+    </div>
+</div>
+
+<!-- MODAL: Settings -->
+<div id="settings-modal" class="modal-overlay">
+    <div class="modal-card">
+        <h3>Einstellungen</h3>
+        <div class="form-group">
+            <label class="label">Gemini API Key</label>
+            <input type="password" id="api-key" class="input">
+            <a href="https://aistudio.google.com/app/apikey" target="_blank" style="font-size: 0.75rem; color: var(--secondary); text-decoration: none; margin-top: 0.25rem; display: inline-block;">Key erstellen ↗</a>
+        </div>
+        <div class="form-group">
+            <div style="display: flex; justify-content: space-between;">
+                <label class="label">Modell</label>
+                <button type="button" id="refresh-models-btn" style="border:none; background:none; color:var(--secondary); font-size: 0.75rem; cursor: pointer;">Neu laden</button>
+            </div>
+            <select id="model-select" class="input"></select>
+        </div>
+        <div class="form-group">
+            <label class="label">Wechselkurs (EGP -> 1€)</label>
+            <div style="display: flex; gap: 0.5rem;">
+                <input type="number" id="exchange-rate" class="input" step="0.1">
+                <button id="fetch-rate-btn" class="btn btn-neutral" style="font-size: 0.75rem;">Online Update</button>
+            </div>
+            <div id="rate-msg" style="font-size: 0.75rem; margin-top: 0.25rem;"></div>
+        </div>
+        <div class="text-right" style="margin-top: 1rem;">
+            <button id="settings-close" class="btn btn-primary">Speichern</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    // --- SIMPLE MARKDOWN PARSER (OFFLINE REPLACEMENT) ---
+    function parseMarkdown(text) {
+        if (!text) return '';
+        let html = text
+            // Headers
+            .replace(/^### (.*$)/gim, '<h3>$1</h3>')
+            .replace(/^## (.*$)/gim, '<h2>$1</h2>')
+            .replace(/^# (.*$)/gim, '<h1>$1</h1>')
+            // Bold
+            .replace(/\*\*(.*?)\*\*/gim, '<strong>$1</strong>')
+            // Lists
+            .replace(/^\s*-\s(.*$)/gim, '<ul><li>$1</li></ul>')
+            // Fix double ULs if multiple lines
+            .replace(/<\/ul>\n<ul>/gim, '')
+            // Paragraphs (double break)
+            .replace(/\n\n/gim, '<p></p>')
+            // Line breaks
+            .replace(/\n/gim, '<br>');
+        return html;
+    }
+
+    // --- DOM HELPER ---
+    const $ = id => document.getElementById(id);
+
+    // --- STATE ---
+    let entries = JSON.parse(localStorage.getItem('billCheckEntries')) || [];
+    let tempItems = [];
+    let editingItemIndex = -1;
+
+    // --- CONFIG ---
+    const getSettings = () => ({
+        apiKey: localStorage.getItem('billCheckApiKey') || '',
+        rate: parseFloat(localStorage.getItem('billCheckRate')) || 55.5,
+        model: localStorage.getItem('billCheckModel') || 'gemini-1.5-flash'
+    });
+
+    // --- UI RENDER ---
+    const renderUI = () => {
+        const tbody = $('data-table-body');
+        tbody.innerHTML = '';
+        let totalEur = 0, totalEgp = 0, totalTips = 0;
+        const rate = getSettings().rate;
+
+        const sorted = [...entries].sort((a,b) => new Date(b.datetime) - new Date(a.datetime));
+        
+        if(sorted.length === 0) $('empty-state').classList.remove('hidden');
+        else $('empty-state').classList.add('hidden');
+
+        sorted.forEach(e => {
+            const eur = Math.round(e.egp / rate);
+            totalEur += eur;
+            totalEgp += e.egp;
+            if(e.tip) totalTips += 1;
+
+            const hasItems = Array.isArray(e.items) && e.items.length > 0;
+            const count = hasItems ? e.items.length : (e.items ? 1 : 0);
+            
+            // Main Row
+            const tr = document.createElement('tr');
+            if(e.statusClass) tr.className = e.statusClass.replace('row-status-', 'row-'); // map old classes to new
+
+            tr.innerHTML = `
+                <td class="text-center">${hasItems ? `<span class="chevron" id="chev-${e.id}" onclick="toggleRow('${e.id}')">▶</span>` : ''}</td>
+                <td>${new Date(e.datetime).toLocaleDateString('de-DE', {day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit'})}</td>
+                <td style="min-width: 160px;">
+                    <div style="font-weight:500">${e.location}</div>
+                    <div style="font-size:0.75rem; color:var(--text-muted)">#${e.checkNo || '?'}</div>
+                </td>
+                <td class="text-center" onclick="toggleRow('${e.id}')" style="cursor:pointer; color:var(--text-muted)">${count}</td>
+                <td class="text-right font-mono">${e.egp.toFixed(2)}</td>
+                <td class="text-right font-bold" style="white-space:nowrap">${eur} €</td>
+                <td class="text-center">${e.tip ? '<span class="badge">+1€</span>' : '-'}</td>
+                <td class="text-right">
+                    <button onclick="editEntry('${e.id}')" style="border:none;background:none;cursor:pointer">✏️</button>
+                    <button onclick="delEntry('${e.id}')" style="border:none;background:none;cursor:pointer;color:var(--danger)">🗑️</button>
+                </td>
+            `;
+            tbody.appendChild(tr);
+
+            // Details Row
+            if(hasItems) {
+                const detTr = document.createElement('tr');
+                detTr.id = `detail-${e.id}`;
+                detTr.className = 'details-row';
+                let html = '<td colspan="8"><div class="details-content">';
+                e.items.forEach(i => {
+                    const iEur = i.currency === 'EUR' ? i.price : Math.round(i.price / rate);
+                    html += `<div style="display:flex; justify-content:space-between; font-size:0.8rem; border-bottom:1px dashed var(--border); padding:2px 0;">
+                        <span>${i.name}</span>
+                        <span>${i.currency === 'EUR' ? i.price.toFixed(2)+'€' : i.price.toFixed(2)+' ('+iEur+'€)'}</span>
+                    </div>`;
+                });
+                html += '</div></td>';
+                detTr.innerHTML = html;
+                tbody.appendChild(detTr);
+            }
+        });
+
+        $('dash-total-eur').textContent = totalEur + ' €';
+        $('dash-total-egp').textContent = Math.round(totalEgp);
+        $('dash-grand-total').textContent = (totalEur + totalTips) + ' €';
+        $('dash-tips-subtitle').textContent = `Davon Trinkgeld: ${totalTips} €`;
+        $('dash-count').textContent = entries.length;
+        $('dash-last-entry').textContent = entries.length ? new Date(sorted[0].datetime).toLocaleDateString() : 'Leer';
+        
+        $('model-display').textContent = localStorage.getItem('billCheckModelName') || getSettings().model;
+        
+        if(entries.some(e => e.statusClass)) $('reset-colors-btn').classList.remove('hidden');
+        else $('reset-colors-btn').classList.add('hidden');
+    };
+
+    window.toggleRow = id => {
+        const row = $(`detail-${id}`);
+        const chev = $(`chev-${id}`);
+        if(row) row.classList.toggle('open');
+        if(chev) {
+            chev.textContent = row.classList.contains('open') ? '▼' : '▶';
+        }
+    };
+    
+    window.delEntry = id => {
+        if(confirm('Löschen?')) {
+            entries = entries.filter(e => e.id !== id);
+            localStorage.setItem('billCheckEntries', JSON.stringify(entries));
+            renderUI();
+        }
+    };
+
+    // --- MODAL & ITEMS ---
+    const updateModalItems = () => {
+        const list = $('modal-items-list');
+        list.innerHTML = '';
+        let sumEgp = 0;
+        const rate = getSettings().rate;
+
+        if(tempItems.length === 0) {
+            list.innerHTML = '<div style="text-align:center; color:var(--text-muted); padding:1rem;">Keine Posten</div>';
+        } else {
+            tempItems.forEach((item, idx) => {
+                const val = item.currency === 'EUR' ? item.price * rate : item.price;
+                sumEgp += val;
+                
+                const div = document.createElement('div');
+                div.className = `item-row ${idx === editingItemIndex ? 'editing' : ''}`;
+                div.innerHTML = `
+                    <span style="font-weight:500; font-size:0.85rem;">${item.name}</span>
+                    <div style="display:flex; align-items:center; gap:0.5rem;">
+                        <span class="badge">${item.price.toFixed(2)} ${item.currency}</span>
+                        <button type="button" onclick="editItem(${idx})" style="border:none; background:none; cursor:pointer;">✏️</button>
+                        <button type="button" onclick="delItem(${idx})" style="border:none; background:none; cursor:pointer; color:var(--danger)">×</button>
+                    </div>
+                `;
+                list.appendChild(div);
+            });
+            $('inp-egp').value = sumEgp.toFixed(2);
+            updateCalc();
+        }
+    };
+
+    window.editItem = idx => {
+        editingItemIndex = idx;
+        const item = tempItems[idx];
+        $('new-item-name').value = item.name;
+        $('new-item-price').value = item.price;
+        $('new-item-currency').value = item.currency;
+        
+        const btn = $('btn-add-item');
+        btn.textContent = '✓';
+        btn.classList.remove('btn-secondary');
+        btn.classList.add('btn-primary');
+        $('btn-cancel-edit').classList.remove('hidden');
+    };
+
+    window.delItem = idx => {
+        if(editingItemIndex === idx) cancelEdit();
+        tempItems.splice(idx, 1);
+        if(editingItemIndex > idx) editingItemIndex--;
+        updateModalItems();
+    };
+
+    const cancelEdit = () => {
+        editingItemIndex = -1;
+        $('new-item-name').value = '';
+        $('new-item-price').value = '';
+        
+        const btn = $('btn-add-item');
+        btn.textContent = '+';
+        btn.classList.remove('btn-primary');
+        btn.classList.add('btn-secondary');
+        $('btn-cancel-edit').classList.add('hidden');
+    };
+
+    $('btn-cancel-edit').onclick = cancelEdit;
+
+    $('btn-add-item').onclick = () => {
+        const name = $('new-item-name').value;
+        const price = parseFloat($('new-item-price').value);
+        const cur = $('new-item-currency').value;
+        if(!name || isNaN(price)) return;
+
+        if(editingItemIndex > -1) {
+            tempItems[editingItemIndex] = { name, price, currency: cur };
+            cancelEdit();
+        } else {
+            tempItems.push({ name, price, currency: cur });
+            $('new-item-name').value = '';
+            $('new-item-price').value = '';
+        }
+        updateModalItems();
+    };
+
+    // --- GEMINI LOGIC (With Retry) ---
+    const wait = ms => new Promise(r => setTimeout(r, ms));
+    const callGemini = async (prompt, img, sys, retry = 0) => {
+        const set = getSettings();
+        if(!set.apiKey) throw new Error("Kein API Key");
+        
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${set.model}:generateContent?key=${set.apiKey}`;
+        const parts = [{text: prompt}];
+        if(img) parts.push({inlineData: {mimeType: "image/jpeg", data: img}});
+
+        const body = { contents: [{parts}], generationConfig: {responseMimeType: "application/json"} };
+        if(sys) body.systemInstruction = {parts: [{text: sys}]};
+
+        const res = await fetch(url, {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)});
+        
+        if(res.status === 429 && retry < 3) {
+            await wait((retry + 1) * 2000);
+            return callGemini(prompt, img, sys, retry + 1);
+        }
+        
+        if(!res.ok) throw new Error("API Error " + res.status);
+        const json = await res.json();
+        return JSON.parse(json.candidates[0].content.parts[0].text);
+    };
+
+    // --- HANDLERS ---
+    const updateCalc = () => {
+        const val = parseFloat($('inp-egp').value) || 0;
+        $('calc-eur-preview').textContent = Math.round(val / getSettings().rate) + ' €';
+    };
+    $('inp-egp').oninput = updateCalc;
+
+    // Scan
+    $('receipt-photo').onchange = async e => {
+        const f = e.target.files[0];
+        if(!f) return;
+        
+        $('scan-status').textContent = 'Analysiere...';
+        $('modal-save').disabled = true;
+
+        const reader = new FileReader();
+        reader.onload = async () => {
+            try {
+                const b64 = reader.result.split(',')[1];
+                const prompt = `Analysiere den Kassenzettel und antworte mit diesem JSON-Format:
+                {
+                    "datetime": "ISO Datum Zeit",
+                    "location": "Name des Restaurants/Bar",
+                    "checkNo": "Check Nummer",
+                    "lineItems": [{"name": "Menge + Artikel", "price": 0.0, "currency": "EGP"}],
+                    "totalEgp": 0.0
+                }
+                Hinweise:
+                - Location: Suche explizit nach dem Namen der Bar oder des Restaurants (z.B. "Lobby Bar", "Sunset Restaurant", "Pool Bar"). Ignoriere den allgemeinen Hotelnamen, falls ein spezifischerer Ort genannt wird.
+                - Währung: Kleine Beträge (<10) sind oft EUR, große EGP.
+                - Nimm bei lineItems den Zeilen-Gesamtpreis.`;
+                
+                const data = await callGemini(prompt, b64);
+                if(data.datetime) $('inp-datetime').value = data.datetime;
+                if(data.location) $('inp-location').value = data.location;
+                if(data.checkNo) $('inp-check').value = data.checkNo;
+                
+                if(data.lineItems) {
+                    tempItems = data.lineItems.map(i => ({...i, currency: i.currency || 'EGP'}));
+                    updateModalItems();
+                } else if(data.totalEgp) {
+                    $('inp-egp').value = data.totalEgp;
+                    updateCalc();
+                }
+
+                // Switch tabs
+                $('photo-upload-section').classList.add('hidden');
+                $('tab-photo').classList.remove('active');
+                $('tab-manual').classList.add('active');
+                $('scan-status').textContent = '';
+                
+            } catch(err) {
+                alert(err.message);
+                $('scan-status').textContent = 'Fehler';
+            } finally {
+                $('modal-save').disabled = false;
+            }
+        };
+        reader.readAsDataURL(f);
+    };
+
+    // Save
+    $('entry-form').onsubmit = e => {
+        e.preventDefault();
+        const id = $('entry-id').value;
+        const entry = {
+            id: id || Date.now().toString(),
+            datetime: $('inp-datetime').value,
+            location: $('inp-location').value,
+            checkNo: $('inp-check').value,
+            items: tempItems.length ? tempItems : "Manuell",
+            egp: parseFloat($('inp-egp').value),
+            tip: $('inp-tip').checked
+        };
+        
+        if(id) {
+            const idx = entries.findIndex(x => x.id === id);
+            if(idx > -1) entries[idx] = {...entries[idx], ...entry};
+        } else {
+            entries.push(entry);
+        }
+        
+        localStorage.setItem('billCheckEntries', JSON.stringify(entries));
+        renderUI();
+        $('entry-modal').classList.remove('open');
+    };
+
+    // Export with Share API
+    $('export-csv-btn').onclick = async () => {
+        const rate = getSettings().rate;
+        const header = "Datum;Ort;CheckNr;Inhalt;EGP;EUR;Tip\n";
+        const rows = entries.map(e => {
+            const itemsStr = Array.isArray(e.items) ? JSON.stringify(e.items).replace(/"/g, '""') : e.items;
+            const eur = Math.round(e.egp / rate);
+            return `${e.datetime};${e.location};${e.checkNo};"${itemsStr}";${e.egp};${eur};${e.tip?1:0}`;
+        }).join("\n");
+        
+        // Generate Filename with Timestamp: Billcheck_YYMMDD_HHMMSS.csv
+        const now = new Date();
+        const pad = n => n.toString().padStart(2, '0');
+        const yy = now.getFullYear().toString().slice(-2);
+        const mm = pad(now.getMonth() + 1);
+        const dd = pad(now.getDate());
+        const hh = pad(now.getHours());
+        const min = pad(now.getMinutes());
+        const ss = pad(now.getSeconds());
+        const filename = `Billcheck_${yy}${mm}${dd}_${hh}${min}${ss}.csv`;
+
+        const blob = new Blob(["\uFEFF" + header + rows], { type: 'text/csv;charset=utf-8;' });
+        const file = new File([blob], filename, { type: "text/csv" });
+
+        // Detect Mobile for Share API preference (Desktop often supports share but users prefer download)
+        const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+
+        // Mobile Share Check
+        if (isMobile && navigator.canShare && navigator.canShare({ files: [file] })) {
+            try {
+                await navigator.share({
+                    files: [file],
+                    title: filename, // Use filename as title helps some android intent handlers
+                    text: 'Dein Export aus Bill-Check'
+                });
+            } catch (err) {
+                console.log('Teilen abgebrochen', err);
+            }
+        } else {
+            // Fallback Desktop / Template Style
+            const link = document.createElement("a");
+            link.href = URL.createObjectURL(blob);
+            link.download = filename;
+            link.click();
+        }
+    };
+
+    // Import with Robust CSV Parsing
+    function parseCSVLine(line) {
+        const result = [];
+        let startValueIndex = 0;
+        let inQuotes = false;
+        
+        for (let i = 0; i < line.length; i++) {
+            const char = line[i];
+            
+            if (char === '"') {
+                inQuotes = !inQuotes;
+            } else if (char === ';' && !inQuotes) {
+                let val = line.substring(startValueIndex, i);
+                result.push(val);
+                startValueIndex = i + 1;
+            }
+        }
+        // Push last value
+        result.push(line.substring(startValueIndex));
+        
+        // Clean up quotes
+        return result.map(val => {
+            val = val.trim();
+            if (val.startsWith('"') && val.endsWith('"')) {
+                // Remove outer quotes and fix escaped double quotes
+                return val.slice(1, -1).replace(/""/g, '"');
+            }
+            return val;
+        });
+    }
+
+    $('import-csv-btn').onclick = () => $('import-csv-input').click();
+    $('import-csv-input').onchange = e => {
+        const f = e.target.files[0];
+        if(!f) return;
+        const r = new FileReader();
+        r.onload = ev => {
+            const lines = ev.target.result.split('\n').filter(l => l.trim());
+            // Check Header (simple check)
+            if(lines.length > 0 && !lines[0].toLowerCase().includes('datum')) { 
+                alert('Falsches Format: Header nicht gefunden.'); return; 
+            }
+            lines.shift(); // Remove Header
+            
+            if(confirm(`${lines.length} Zeilen importieren?`)) {
+                const newE = lines.map((l, i) => {
+                    const cols = parseCSVLine(l);
+                    if(!cols || cols.length < 5) return null;
+                    
+                    let items = cols[3];
+                    // Attempt JSON parse
+                    try { 
+                        if(items.startsWith('[')) items = JSON.parse(items); 
+                    } catch(e) {
+                        console.warn("JSON Parse Error for row " + i, e);
+                    }
+
+                    return {
+                        id: Date.now() + i + '',
+                        datetime: cols[0],
+                        location: cols[1],
+                        checkNo: cols[2],
+                        items: items,
+                        egp: parseFloat(cols[4]),
+                        tip: (cols[6] && cols[6].includes('1'))
+                    };
+                }).filter(x => x);
+                entries = newE;
+                localStorage.setItem('billCheckEntries', JSON.stringify(entries));
+                renderUI();
+            }
+        };
+        r.readAsText(f);
+        $('import-csv-input').value = '';
+    };
+
+    window.editEntry = id => {
+        const e = entries.find(x => x.id === id);
+        if(!e) return;
+        $('entry-id').value = e.id;
+        $('inp-datetime').value = e.datetime;
+        $('inp-location').value = e.location;
+        $('inp-check').value = e.checkNo;
+        $('inp-egp').value = e.egp;
+        $('inp-tip').checked = e.tip;
+        
+        tempItems = Array.isArray(e.items) ? JSON.parse(JSON.stringify(e.items)) : [];
+        updateModalItems();
+        updateCalc();
+        
+        $('tab-manual').click();
+        $('entry-modal').classList.add('open');
+    };
+
+    // Modals & Tabs
+    $('add-entry-btn').onclick = () => {
+        $('entry-form').reset();
+        $('entry-id').value = '';
+        const now = new Date();
+        now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+        $('inp-datetime').value = now.toISOString().slice(0,16);
+        $('inp-tip').checked = true;
+        tempItems = [];
+        updateModalItems();
+        updateCalc();
+        $('tab-photo').click();
+        $('entry-modal').classList.add('open');
+    };
+    
+    $('modal-cancel').onclick = () => $('entry-modal').classList.remove('open');
+    $('recon-cancel').onclick = () => $('recon-modal').classList.remove('open');
+    $('settings-close').onclick = () => {
+        localStorage.setItem('billCheckApiKey', $('api-key').value);
+        localStorage.setItem('billCheckRate', $('exchange-rate').value);
+        const sel = $('model-select');
+        localStorage.setItem('billCheckModel', sel.value);
+        if(sel.options[sel.selectedIndex]) {
+            localStorage.setItem('billCheckModelName', sel.options[sel.selectedIndex].text);
+        }
+        renderUI();
+        $('settings-modal').classList.remove('open');
+    };
+
+    $('settings-btn').onclick = () => {
+        const s = getSettings();
+        $('api-key').value = s.apiKey;
+        $('exchange-rate').value = s.rate;
+        // Load Models if not loaded
+        const sel = $('model-select');
+        if(sel.options.length === 0) {
+            const opt = document.createElement('option');
+            opt.value = s.model;
+            opt.text = localStorage.getItem('billCheckModelName') || s.model;
+            sel.add(opt);
+        }
+        sel.value = s.model;
+        $('settings-modal').classList.add('open');
+    };
+
+    $('tab-manual').onclick = () => {
+        $('photo-upload-section').classList.add('hidden');
+        $('tab-photo').classList.remove('active');
+        $('tab-manual').classList.add('active');
+    };
+    $('tab-photo').onclick = () => {
+        $('photo-upload-section').classList.remove('hidden');
+        $('tab-manual').classList.remove('active');
+        $('tab-photo').classList.add('active');
+    };
+
+    // Model Fetcher
+    $('refresh-models-btn').onclick = async () => {
+        const key = $('api-key').value;
+        if(!key) return alert('Key fehlt');
+        try {
+            const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${key}`);
+            const data = await res.json();
+            const sel = $('model-select');
+            sel.innerHTML = '';
+            data.models.filter(m => m.name.includes('gemini') && m.supportedGenerationMethods.includes('generateContent'))
+                .forEach(m => {
+                    const opt = document.createElement('option');
+                    opt.value = m.name.replace('models/', '');
+                    opt.text = m.displayName || opt.value;
+                    sel.add(opt);
+                });
+            sel.value = getSettings().model;
+        } catch(e) { alert(e.message); }
+    };
+
+    // Reconcile
+    $('reconcile-btn').onclick = () => $('recon-modal').classList.add('open');
+    $('final-bill-photo').onchange = async e => {
+        const f = e.target.files[0];
+        if(!f) return;
+        $('recon-status').textContent = 'Prüfe...';
+        const reader = new FileReader();
+        reader.onload = async () => {
+            const b64 = reader.result.split(',')[1];
+            const context = entries.map(x => `ID:${x.id}, ${x.egp} EGP`).join('\n');
+            const prompt = `Vergleiche Hotelrechnung (Bild) mit App-Daten:\n${context}\nAntworte JSON: {"analysis": "MD Text", "actions": [{"id": "ID", "status": "ok"|"warning"|"error"}]}`;
+            try {
+                const res = await callGemini(prompt, b64, "Rechnungsprüfer");
+                if(res.actions) {
+                    entries = entries.map(ent => {
+                        const act = res.actions.find(a => a.id === ent.id);
+                        return act ? {...ent, statusClass: 'row-'+act.status} : ent;
+                    });
+                    localStorage.setItem('billCheckEntries', JSON.stringify(entries));
+                    renderUI();
+                }
+                $('analysis-content').innerHTML = parseMarkdown(res.analysis);
+                $('analysis-section').classList.remove('hidden');
+                $('recon-modal').classList.remove('open');
+            } catch(err) { $('recon-status').textContent = err.message; }
+        };
+        reader.readAsDataURL(f);
+    };
+
+    // Rate Fetcher
+    $('fetch-rate-btn').onclick = async () => {
+        const btn = $('fetch-rate-btn');
+        const msg = $('rate-msg');
+        btn.disabled = true;
+        btn.textContent = '...';
+        
+        try {
+            const res = await fetch('https://open.er-api.com/v6/latest/EUR');
+            if(!res.ok) throw new Error("Netzwerkfehler");
+            const data = await res.json();
+            if(data.rates && data.rates.EGP) {
+                $('exchange-rate').value = data.rates.EGP.toFixed(2);
+                msg.textContent = `Kurs: 1 EUR = ${data.rates.EGP} EGP`;
+                msg.style.color = 'var(--primary)';
+            }
+        } catch(e) {
+            msg.textContent = e.message;
+            msg.style.color = 'var(--danger)';
+        } finally {
+            btn.disabled = false;
+            btn.textContent = 'Online Update';
+        }
+    };
+
+    renderUI();
+</script>
+</body>
+</html>

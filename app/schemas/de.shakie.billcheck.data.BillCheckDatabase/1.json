@@ -1,0 +1,517 @@
+{
+  "formatVersion": 1,
+  "database": {
+    "version": 1,
+    "identityHash": "86588a4b6ac4b3adc82ffeab419a4e73",
+    "entities": [
+      {
+        "tableName": "trips",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `sortPosition` INTEGER NOT NULL, `name` TEXT NOT NULL, `foreignCurrencyCode` TEXT NOT NULL, `defaultExchangeRate` TEXT NOT NULL, `defaultTipMinor` INTEGER NOT NULL, `defaultTipCurrencyCode` TEXT NOT NULL, `defaultTipSelected` INTEGER NOT NULL, `imageStorageMode` TEXT NOT NULL, `createdAt` INTEGER NOT NULL, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sortPosition",
+            "columnName": "sortPosition",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "name",
+            "columnName": "name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "foreignCurrencyCode",
+            "columnName": "foreignCurrencyCode",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "defaultExchangeRate",
+            "columnName": "defaultExchangeRate",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "defaultTipMinor",
+            "columnName": "defaultTipMinor",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "defaultTipCurrencyCode",
+            "columnName": "defaultTipCurrencyCode",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "defaultTipSelected",
+            "columnName": "defaultTipSelected",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "imageStorageMode",
+            "columnName": "imageStorageMode",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "createdAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_trips_sortPosition",
+            "unique": true,
+            "columnNames": [
+              "sortPosition"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_trips_sortPosition` ON `${TABLE_NAME}` (`sortPosition`)"
+          }
+        ]
+      },
+      {
+        "tableName": "receipts",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `tripId` TEXT NOT NULL, `occurredAt` INTEGER NOT NULL, `location` TEXT NOT NULL, `checkNumber` TEXT NOT NULL, `foreignAmountMinor` INTEGER NOT NULL, `foreignCurrencyCode` TEXT NOT NULL, `exchangeRate` TEXT NOT NULL, `exactEuroCents` INTEGER NOT NULL, `tipMinor` INTEGER NOT NULL, `tipCurrencyCode` TEXT NOT NULL, `imageUri` TEXT, `reviewState` TEXT NOT NULL, `createdAt` INTEGER NOT NULL, PRIMARY KEY(`id`), FOREIGN KEY(`tripId`) REFERENCES `trips`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "tripId",
+            "columnName": "tripId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "occurredAt",
+            "columnName": "occurredAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "location",
+            "columnName": "location",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "checkNumber",
+            "columnName": "checkNumber",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "foreignAmountMinor",
+            "columnName": "foreignAmountMinor",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "foreignCurrencyCode",
+            "columnName": "foreignCurrencyCode",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "exchangeRate",
+            "columnName": "exchangeRate",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "exactEuroCents",
+            "columnName": "exactEuroCents",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "tipMinor",
+            "columnName": "tipMinor",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "tipCurrencyCode",
+            "columnName": "tipCurrencyCode",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "imageUri",
+            "columnName": "imageUri",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "reviewState",
+            "columnName": "reviewState",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "createdAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_receipts_tripId",
+            "unique": false,
+            "columnNames": [
+              "tripId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_receipts_tripId` ON `${TABLE_NAME}` (`tripId`)"
+          },
+          {
+            "name": "index_receipts_tripId_checkNumber",
+            "unique": false,
+            "columnNames": [
+              "tripId",
+              "checkNumber"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_receipts_tripId_checkNumber` ON `${TABLE_NAME}` (`tripId`, `checkNumber`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "trips",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "tripId"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "receipt_items",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `receiptId` TEXT NOT NULL, `sortPosition` INTEGER NOT NULL, `name` TEXT NOT NULL, `amountMinor` INTEGER NOT NULL, `currencyCode` TEXT NOT NULL, PRIMARY KEY(`id`), FOREIGN KEY(`receiptId`) REFERENCES `receipts`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "receiptId",
+            "columnName": "receiptId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sortPosition",
+            "columnName": "sortPosition",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "name",
+            "columnName": "name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "amountMinor",
+            "columnName": "amountMinor",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "currencyCode",
+            "columnName": "currencyCode",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_receipt_items_receiptId",
+            "unique": false,
+            "columnNames": [
+              "receiptId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_receipt_items_receiptId` ON `${TABLE_NAME}` (`receiptId`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "receipts",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "receiptId"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "reconciliations",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `tripId` TEXT NOT NULL, `title` TEXT NOT NULL, `statementImageUri` TEXT, `createdAt` INTEGER NOT NULL, PRIMARY KEY(`id`), FOREIGN KEY(`tripId`) REFERENCES `trips`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "tripId",
+            "columnName": "tripId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "title",
+            "columnName": "title",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "statementImageUri",
+            "columnName": "statementImageUri",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "createdAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_reconciliations_tripId",
+            "unique": false,
+            "columnNames": [
+              "tripId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_reconciliations_tripId` ON `${TABLE_NAME}` (`tripId`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "trips",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "tripId"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "statement_lines",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `reconciliationId` TEXT NOT NULL, `occurredOn` INTEGER, `description` TEXT NOT NULL, `checkNumber` TEXT NOT NULL, `amountMinor` INTEGER NOT NULL, `currencyCode` TEXT NOT NULL, `status` TEXT NOT NULL, `acceptedWithoutReceipt` INTEGER NOT NULL, PRIMARY KEY(`id`), FOREIGN KEY(`reconciliationId`) REFERENCES `reconciliations`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "reconciliationId",
+            "columnName": "reconciliationId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "occurredOn",
+            "columnName": "occurredOn",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "description",
+            "columnName": "description",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "checkNumber",
+            "columnName": "checkNumber",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "amountMinor",
+            "columnName": "amountMinor",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "currencyCode",
+            "columnName": "currencyCode",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "status",
+            "columnName": "status",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "acceptedWithoutReceipt",
+            "columnName": "acceptedWithoutReceipt",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_statement_lines_reconciliationId",
+            "unique": false,
+            "columnNames": [
+              "reconciliationId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_statement_lines_reconciliationId` ON `${TABLE_NAME}` (`reconciliationId`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "reconciliations",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "reconciliationId"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "receipt_matches",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`statementLineId` TEXT NOT NULL, `receiptId` TEXT NOT NULL, `matchedManually` INTEGER NOT NULL, PRIMARY KEY(`statementLineId`, `receiptId`), FOREIGN KEY(`statementLineId`) REFERENCES `statement_lines`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE , FOREIGN KEY(`receiptId`) REFERENCES `receipts`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "statementLineId",
+            "columnName": "statementLineId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "receiptId",
+            "columnName": "receiptId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "matchedManually",
+            "columnName": "matchedManually",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "statementLineId",
+            "receiptId"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_receipt_matches_receiptId",
+            "unique": true,
+            "columnNames": [
+              "receiptId"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_receipt_matches_receiptId` ON `${TABLE_NAME}` (`receiptId`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "statement_lines",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "statementLineId"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          },
+          {
+            "table": "receipts",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "receiptId"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          }
+        ]
+      }
+    ],
+    "setupQueries": [
+      "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '86588a4b6ac4b3adc82ffeab419a4e73')"
+    ]
+  }
+}

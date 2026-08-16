@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Bill Check</string>
+    <string name="select_trip">Reise auswählen</string>
+    <string name="new_trip">Neue Reise</string>
+    <string name="first_trip_title">Deine erste Reise</string>
+    <string name="first_trip_text">Lege eine Reise an, um Belege zu erfassen und deine Ausgaben im Blick zu behalten.</string>
+    <string name="create_trip">Reise anlegen</string>
+    <string name="trip_name">Name der Reise</string>
+    <string name="foreign_currency">Fremdwährung</string>
+    <string name="exchange_rate">Kurs: Fremdwährung für 1 €</string>
+    <string name="default_tip">Standard-Trinkgeld</string>
+    <string name="tip_currency">Trinkgeldwährung</string>
+    <string name="cancel">Abbrechen</string>
+    <string name="save">Speichern</string>
+    <string name="rounded_total">Schnelle Übersicht</string>
+    <string name="rounded_total_hint">centgenaue Summe aufgerundet</string>
+    <string name="exact_total">Exakt</string>
+    <string name="receipts_count">Belege</string>
+    <string name="receipt_list">Belegliste</string>
+    <string name="no_receipts">Noch keine Belege vorhanden.</string>
+    <string name="add_receipt">Beleg erfassen</string>
+    <string name="take_photo">Foto</string>
+    <string name="choose_image">Bild wählen</string>
+    <string name="manual_entry">Manuell erfassen</string>
+    <string name="location">Ort / Restaurant</string>
+    <string name="check_number">Checknummer</string>
+    <string name="amount_in_currency">Betrag (%1$s)</string>
+    <string name="add_default_tip">Standard-Trinkgeld hinzufügen</string>
+    <string name="delete_receipt">Beleg löschen</string>
+    <string name="not_yet_available">Folgt im nächsten Entwicklungsschritt.</string>
+    <string name="invalid_amount">Bitte einen gültigen positiven Betrag eingeben.</string>
+    <string name="rate_example">z. B. 55,5</string>
+    <string name="amount_example">0,00</string>
+    <string name="trip_default_name">Reise 1</string>
+</resources>

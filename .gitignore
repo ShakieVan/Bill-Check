@@ -1,0 +1,27 @@
+# Private travel data and local exports
+Urlaubsbeispiel/
+private-data/
+*.billcheck
+
+# Android / Gradle
+.gradle/
+build/
+**/build/
+local.properties
+.kotlin/
+
+# IDE
+.idea/
+*.iml
+
+# Signing and secrets
+key.properties
+*.jks
+*.keystore
+.env
+secrets.properties
+
+# Local system files
+.DS_Store
+Thumbs.db
+

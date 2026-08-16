@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Bill Check</string>
+    <string name="select_trip">Select trip</string>
+    <string name="new_trip">New trip</string>
+    <string name="first_trip_title">Your first trip</string>
+    <string name="first_trip_text">Create a trip to record receipts and keep track of your spending.</string>
+    <string name="create_trip">Create trip</string>
+    <string name="trip_name">Trip name</string>
+    <string name="foreign_currency">Foreign currency</string>
+    <string name="exchange_rate">Rate: foreign currency for €1</string>
+    <string name="default_tip">Default tip</string>
+    <string name="tip_currency">Tip currency</string>
+    <string name="cancel">Cancel</string>
+    <string name="save">Save</string>
+    <string name="rounded_total">Quick overview</string>
+    <string name="rounded_total_hint">exact total rounded up</string>
+    <string name="exact_total">Exact</string>
+    <string name="receipts_count">Receipts</string>
+    <string name="receipt_list">Receipt list</string>
+    <string name="no_receipts">No receipts yet.</string>
+    <string name="add_receipt">Add receipt</string>
+    <string name="take_photo">Photo</string>
+    <string name="choose_image">Choose image</string>
+    <string name="manual_entry">Enter manually</string>
+    <string name="location">Location / restaurant</string>
+    <string name="check_number">Check number</string>
+    <string name="amount_in_currency">Amount (%1$s)</string>
+    <string name="add_default_tip">Add default tip</string>
+    <string name="delete_receipt">Delete receipt</string>
+    <string name="not_yet_available">Coming in the next development step.</string>
+    <string name="invalid_amount">Enter a valid positive amount.</string>
+    <string name="rate_example">e.g. 55.5</string>
+    <string name="amount_example">0.00</string>
+    <string name="trip_default_name">Trip 1</string>
+</resources>
