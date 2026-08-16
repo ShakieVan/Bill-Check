@@ -155,4 +155,30 @@
     <string name="model_context">Kontext: %1$s Eingabe · %2$s Ausgabe</string>
     <string name="quota_not_available">Das persönliche Restkontingent stellt Gemini nicht über den API-Key bereit. Aktive RPM-, TPM- und Tageslimits sowie die Nutzung zeigt Google AI Studio.</string>
     <string name="open_quota_dashboard">Kontingent in AI Studio prüfen</string>
+    <string name="export_data">Daten exportieren</string>
+    <string name="import_data">Daten importieren</string>
+    <string name="export_action">Exportieren</string>
+    <string name="import_action">Importieren</string>
+    <string name="export_format">Format</string>
+    <string name="export_format_backup">Bill-Check-Sicherung (.billcheck)</string>
+    <string name="export_format_backup_detail">Vollständige Wiederherstellung mit Bildern, Posten und Abgleichen.</string>
+    <string name="export_format_csv">CSV-Bericht</string>
+    <string name="export_format_csv_detail">Lesbare Übersicht ohne Bilder und Einzelposten; wieder importierbar.</string>
+    <string name="export_format_pdf">PDF-Bericht</string>
+    <string name="export_format_pdf_detail">Druckbare Reise- und Abgleichübersicht.</string>
+    <string name="select_trips">Reisen auswählen</string>
+    <string name="import_backup_description">Vollständige Sicherung erkannt. Wähle die wiederherzustellenden Reisen.</string>
+    <string name="import_csv_description">CSV-Bericht erkannt. Reisen, Belege und Abgleichübersichten werden ohne Bilder und Einzelposten wiederhergestellt.</string>
+    <string name="import_trip_counts">%1$d Belege · %2$d Abgleiche</string>
+    <string name="data_transfer">Datentransfer</string>
+    <string name="transfer_working">Datei wird verarbeitet …</string>
+    <string name="export_complete">Export abgeschlossen</string>
+    <string name="export_complete_message">Die ausgewählten Reisen wurden gespeichert.</string>
+    <string name="import_complete">Import abgeschlossen</string>
+    <plurals name="import_complete_message">
+        <item quantity="one">%d Reise wurde als neuer Eintrag wiederhergestellt.</item>
+        <item quantity="other">%d Reisen wurden als neue Einträge wiederhergestellt.</item>
+    </plurals>
+    <string name="transfer_error">Datentransfer fehlgeschlagen</string>
+    <string name="transfer_error_message">Die gewählte Datei konnte nicht verarbeitet werden.</string>
 </resources>

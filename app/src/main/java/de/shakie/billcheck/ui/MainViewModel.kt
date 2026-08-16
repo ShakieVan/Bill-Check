@@ -21,6 +21,8 @@ import de.shakie.billcheck.domain.ExtractedReceipt
 import de.shakie.billcheck.domain.ExtractedStatement
 import de.shakie.billcheck.data.OcrToken
 import de.shakie.billcheck.data.GeminiModelInfo
+import de.shakie.billcheck.data.ExportFormat
+import de.shakie.billcheck.data.ImportPreview
 import java.math.BigDecimal
 import java.math.RoundingMode
 import java.util.Locale
@@ -66,6 +68,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val aiExtractionProvider = billCheckApplication.aiExtractionProvider
     private val localTextRecognizer = billCheckApplication.localTextRecognizer
     private val geminiModelCatalog = billCheckApplication.geminiModelCatalog
+    private val dataTransferManager = billCheckApplication.dataTransferManager
     private val selectedTripId = MutableStateFlow<String?>(null)
     private val _exchangeRateLookup = MutableStateFlow<ExchangeRateLookupState>(ExchangeRateLookupState.Idle)
     val exchangeRateLookup: StateFlow<ExchangeRateLookupState> = _exchangeRateLookup.asStateFlow()
@@ -79,6 +82,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val localOcr = _localOcr.asStateFlow()
     private val _geminiModels = MutableStateFlow<GeminiModelsState>(GeminiModelsState.Idle)
     val geminiModels = _geminiModels.asStateFlow()
+    private val _transfer = MutableStateFlow<TransferState>(TransferState.Idle)
+    val transfer = _transfer.asStateFlow()
 
     private val trips = repository.trips.stateIn(
         viewModelScope,
@@ -413,6 +418,41 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         _localOcr.value = LocalOcrState.Idle
     }
 
+    fun exportData(uri: Uri, tripIds: Set<String>, format: ExportFormat) {
+        _transfer.value = TransferState.Working
+        viewModelScope.launch {
+            runCatching { dataTransferManager.export(uri, tripIds, format) }
+                .onSuccess { _transfer.value = TransferState.ExportSuccess(format) }
+                .onFailure { _transfer.value = TransferState.Error(it.message.orEmpty()) }
+        }
+    }
+
+    fun previewImport(uri: Uri) {
+        _transfer.value = TransferState.Working
+        viewModelScope.launch {
+            runCatching { dataTransferManager.previewImport(uri) }
+                .onSuccess { _transfer.value = TransferState.ImportReady(it) }
+                .onFailure { _transfer.value = TransferState.Error(it.message.orEmpty()) }
+        }
+    }
+
+    fun importSelectedTrips(sourceTripIds: Set<String>) {
+        _transfer.value = TransferState.Working
+        viewModelScope.launch {
+            runCatching { dataTransferManager.importSelected(sourceTripIds) }
+                .onSuccess { importedIds ->
+                    importedIds.firstOrNull()?.let { selectedTripId.value = it }
+                    _transfer.value = TransferState.ImportSuccess(importedIds.size)
+                }
+                .onFailure { _transfer.value = TransferState.Error(it.message.orEmpty()) }
+        }
+    }
+
+    fun clearTransferState() {
+        if (_transfer.value is TransferState.ImportReady) dataTransferManager.clearPendingImport()
+        _transfer.value = TransferState.Idle
+    }
+
     fun createReconciliation(title: String, imageUri: String? = null) {
         val trip = uiState.value.selectedTrip ?: return
         viewModelScope.launch { repository.createReconciliation(trip, title, imageUri) }
@@ -585,4 +625,13 @@ sealed interface GeminiModelsState {
     data object MissingApiKey : GeminiModelsState
     data class Success(val models: List<GeminiModelInfo>) : GeminiModelsState
     data class Error(val message: String) : GeminiModelsState
+}
+
+sealed interface TransferState {
+    data object Idle : TransferState
+    data object Working : TransferState
+    data class ExportSuccess(val format: ExportFormat) : TransferState
+    data class ImportReady(val preview: ImportPreview) : TransferState
+    data class ImportSuccess(val tripCount: Int) : TransferState
+    data class Error(val message: String) : TransferState
 }

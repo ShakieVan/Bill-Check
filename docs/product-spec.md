@@ -133,3 +133,8 @@ Stand: 16.08.2026
 - `.billcheck` ist ein vollständiges, selektiv exportier- und importierbares
   Sicherungsarchiv einschließlich Bilder und Abgleichstatus.
 - Mehrere Reisen können beim Export und Import ausgewählt werden.
+- Ein CSV-Bericht enthält Reise-, Beleg- und Abgleichübersichten ohne Bilder
+  und Einzelposten. Beim erneuten Import entsteht wieder eine bedienbare
+  Abgleichansicht.
+- Importierte Reisen sind neue Datensätze; Namenskollisionen werden mit einem
+  sichtbaren „(Import)“-Zusatz aufgelöst.

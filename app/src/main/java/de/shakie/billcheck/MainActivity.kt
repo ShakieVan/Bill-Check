@@ -99,6 +99,7 @@ import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -125,7 +126,10 @@ import de.shakie.billcheck.ui.ExchangeRateLookupState
 import de.shakie.billcheck.ui.AiExtractionState
 import de.shakie.billcheck.ui.LocalOcrState
 import de.shakie.billcheck.ui.GeminiModelsState
+import de.shakie.billcheck.ui.TransferState
 import de.shakie.billcheck.ui.ReconciliationManagerDialog
+import de.shakie.billcheck.data.ExportFormat
+import de.shakie.billcheck.data.ImportPreview
 import de.shakie.billcheck.ui.theme.BillCheckTheme
 import androidx.compose.foundation.isSystemInDarkTheme
 import java.math.BigDecimal
@@ -182,6 +186,7 @@ private fun BillCheckApp(
     val aiExtraction by viewModel.aiExtraction.collectAsStateWithLifecycle()
     val localOcr by viewModel.localOcr.collectAsStateWithLifecycle()
     val geminiModels by viewModel.geminiModels.collectAsStateWithLifecycle()
+    val transferState by viewModel.transfer.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val imageStorage = remember { ReceiptImageStorage(context) }
     var showCreateTrip by remember { mutableStateOf(false) }
@@ -190,6 +195,7 @@ private fun BillCheckApp(
     var editingReceipt by remember { mutableStateOf<ReceiptWithItems?>(null) }
     var showAppMenu by remember { mutableStateOf(false) }
     var showSettings by remember { mutableStateOf(false) }
+    var showExport by remember { mutableStateOf(false) }
     var showReconciliations by remember { mutableStateOf(false) }
     var pendingCameraUriString by rememberSaveable { mutableStateOf<String?>(null) }
     var pendingImageUriString by rememberSaveable { mutableStateOf<String?>(null) }
@@ -198,6 +204,7 @@ private fun BillCheckApp(
     var imageTargetHadLinkedImage by rememberSaveable { mutableStateOf(false) }
     var imageTargetReconciliationId by rememberSaveable { mutableStateOf<String?>(null) }
     var reconciliationReturnId by rememberSaveable { mutableStateOf<String?>(null) }
+    var pendingExportTripIds by remember { mutableStateOf<Set<String>>(emptySet()) }
     val pendingCameraUri = pendingCameraUriString?.let(Uri::parse)
     val pendingImageUri = pendingImageUriString?.let(Uri::parse)
     val snackbar = remember { SnackbarHostState() }
@@ -230,6 +237,34 @@ private fun BillCheckApp(
             pendingImageUriString = uri.toString()
         } else if (imageTargetReconciliationId != null) {
             showReconciliations = true
+        }
+    }
+    val backupExportLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/octet-stream"),
+    ) { uri ->
+        if (uri != null) viewModel.exportData(uri, pendingExportTripIds, ExportFormat.BILL_CHECK)
+    }
+    val csvExportLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("text/csv"),
+    ) { uri ->
+        if (uri != null) viewModel.exportData(uri, pendingExportTripIds, ExportFormat.CSV)
+    }
+    val pdfExportLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/pdf"),
+    ) { uri ->
+        if (uri != null) viewModel.exportData(uri, pendingExportTripIds, ExportFormat.PDF)
+    }
+    val importLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument(),
+    ) { uri ->
+        if (uri != null) {
+            runCatching {
+                context.contentResolver.takePersistableUriPermission(
+                    uri,
+                    android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION,
+                )
+            }
+            viewModel.previewImport(uri)
         }
     }
     val takePhoto = {
@@ -330,6 +365,22 @@ private fun BillCheckApp(
                                 expanded = showAppMenu,
                                 onDismissRequest = { showAppMenu = false },
                             ) {
+                                DropdownMenuItem(
+                                    text = { Text(stringResource(R.string.export_data)) },
+                                    onClick = {
+                                        showAppMenu = false
+                                        showExport = true
+                                    },
+                                )
+                                DropdownMenuItem(
+                                    text = { Text(stringResource(R.string.import_data)) },
+                                    onClick = {
+                                        showAppMenu = false
+                                        importLauncher.launch(
+                                            arrayOf("application/zip", "application/octet-stream", "text/csv", "text/plain"),
+                                        )
+                                    },
+                                )
                                 DropdownMenuItem(
                                     text = { Text(stringResource(R.string.settings)) },
                                     onClick = {
@@ -511,6 +562,52 @@ private fun BillCheckApp(
             onSaveAiSettings = viewModel::saveAiSettings,
             onClearAiApiKey = viewModel::clearAiApiKey,
             onDismiss = { showSettings = false },
+        )
+    }
+
+    if (showExport) {
+        ExportDataDialog(
+            trips = state.trips,
+            onDismiss = { showExport = false },
+            onExport = { format, tripIds ->
+                showExport = false
+                pendingExportTripIds = tripIds
+                val date = java.time.LocalDate.now().toString()
+                when (format) {
+                    ExportFormat.BILL_CHECK -> backupExportLauncher.launch("Bill-Check_$date.billcheck")
+                    ExportFormat.CSV -> csvExportLauncher.launch("Bill-Check_$date.csv")
+                    ExportFormat.PDF -> pdfExportLauncher.launch("Bill-Check_$date.pdf")
+                }
+            },
+        )
+    }
+
+    when (val transfer = transferState) {
+        TransferState.Idle -> Unit
+        TransferState.Working -> TransferWorkingDialog()
+        is TransferState.ImportReady -> ImportTripsDialog(
+            preview = transfer.preview,
+            onDismiss = viewModel::clearTransferState,
+            onImport = viewModel::importSelectedTrips,
+        )
+        is TransferState.ExportSuccess -> TransferMessageDialog(
+            title = stringResource(R.string.export_complete),
+            message = stringResource(R.string.export_complete_message),
+            onDismiss = viewModel::clearTransferState,
+        )
+        is TransferState.ImportSuccess -> TransferMessageDialog(
+            title = stringResource(R.string.import_complete),
+            message = pluralStringResource(
+                R.plurals.import_complete_message,
+                transfer.tripCount,
+                transfer.tripCount,
+            ),
+            onDismiss = viewModel::clearTransferState,
+        )
+        is TransferState.Error -> TransferMessageDialog(
+            title = stringResource(R.string.transfer_error),
+            message = transfer.message.ifBlank { stringResource(R.string.transfer_error_message) },
+            onDismiss = viewModel::clearTransferState,
         )
     }
 
@@ -753,6 +850,193 @@ private fun BillCheckApp(
             )
         }
     }
+}
+
+@Composable
+private fun ExportDataDialog(
+    trips: List<TripEntity>,
+    onDismiss: () -> Unit,
+    onExport: (ExportFormat, Set<String>) -> Unit,
+) {
+    var format by remember { mutableStateOf(ExportFormat.BILL_CHECK) }
+    var selectedIds by remember(trips) { mutableStateOf(trips.mapTo(mutableSetOf()) { it.id }) }
+    TransferSelectionDialog(
+        title = stringResource(R.string.export_data),
+        confirmLabel = stringResource(R.string.export_action),
+        confirmEnabled = selectedIds.isNotEmpty(),
+        onDismiss = onDismiss,
+        onConfirm = { onExport(format, selectedIds) },
+    ) {
+        Text(stringResource(R.string.export_format), style = MaterialTheme.typography.titleMedium)
+        ExportFormat.entries.forEach { candidate ->
+            val title = when (candidate) {
+                ExportFormat.BILL_CHECK -> stringResource(R.string.export_format_backup)
+                ExportFormat.CSV -> stringResource(R.string.export_format_csv)
+                ExportFormat.PDF -> stringResource(R.string.export_format_pdf)
+            }
+            val detail = when (candidate) {
+                ExportFormat.BILL_CHECK -> stringResource(R.string.export_format_backup_detail)
+                ExportFormat.CSV -> stringResource(R.string.export_format_csv_detail)
+                ExportFormat.PDF -> stringResource(R.string.export_format_pdf_detail)
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth().clickable { format = candidate }.padding(vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                RadioButton(selected = format == candidate, onClick = { format = candidate })
+                Spacer(Modifier.width(8.dp))
+                Column {
+                    Text(title, fontWeight = FontWeight.SemiBold)
+                    Text(detail, style = MaterialTheme.typography.bodySmall)
+                }
+            }
+        }
+        HorizontalDivider(Modifier.padding(vertical = 8.dp))
+        Text(stringResource(R.string.select_trips), style = MaterialTheme.typography.titleMedium)
+        trips.forEach { trip ->
+            Row(
+                modifier = Modifier.fillMaxWidth().clickable {
+                    selectedIds = selectedIds.toMutableSet().apply {
+                        if (!add(trip.id)) remove(trip.id)
+                    }
+                }.padding(vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Checkbox(
+                    checked = trip.id in selectedIds,
+                    onCheckedChange = { checked ->
+                        selectedIds = selectedIds.toMutableSet().apply {
+                            if (checked) add(trip.id) else remove(trip.id)
+                        }
+                    },
+                )
+                Text(trip.name)
+            }
+        }
+    }
+}
+
+@Composable
+private fun ImportTripsDialog(
+    preview: ImportPreview,
+    onDismiss: () -> Unit,
+    onImport: (Set<String>) -> Unit,
+) {
+    var selectedIds by remember(preview) {
+        mutableStateOf(preview.trips.mapTo(mutableSetOf()) { it.sourceId })
+    }
+    TransferSelectionDialog(
+        title = stringResource(R.string.import_data),
+        confirmLabel = stringResource(R.string.import_action),
+        confirmEnabled = selectedIds.isNotEmpty(),
+        onDismiss = onDismiss,
+        onConfirm = { onImport(selectedIds) },
+    ) {
+        Text(
+            when (preview.format) {
+                de.shakie.billcheck.data.TransferFormat.BILL_CHECK ->
+                    stringResource(R.string.import_backup_description)
+                de.shakie.billcheck.data.TransferFormat.CSV ->
+                    stringResource(R.string.import_csv_description)
+            },
+            style = MaterialTheme.typography.bodyMedium,
+        )
+        preview.trips.forEach { trip ->
+            Row(
+                modifier = Modifier.fillMaxWidth().clickable {
+                    selectedIds = selectedIds.toMutableSet().apply {
+                        if (!add(trip.sourceId)) remove(trip.sourceId)
+                    }
+                }.padding(vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Checkbox(
+                    checked = trip.sourceId in selectedIds,
+                    onCheckedChange = { checked ->
+                        selectedIds = selectedIds.toMutableSet().apply {
+                            if (checked) add(trip.sourceId) else remove(trip.sourceId)
+                        }
+                    },
+                )
+                Column {
+                    Text(trip.name, fontWeight = FontWeight.SemiBold)
+                    Text(
+                        stringResource(
+                            R.string.import_trip_counts,
+                            trip.receiptCount,
+                            trip.reconciliationCount,
+                        ),
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun TransferSelectionDialog(
+    title: String,
+    confirmLabel: String,
+    confirmEnabled: Boolean,
+    onDismiss: () -> Unit,
+    onConfirm: () -> Unit,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    Dialog(onDismissRequest = onDismiss) {
+        Surface(
+            modifier = Modifier.fillMaxWidth().fillMaxHeight(0.86f),
+            shape = RoundedCornerShape(28.dp),
+            tonalElevation = 6.dp,
+        ) {
+            Column(Modifier.fillMaxSize()) {
+                Text(
+                    title,
+                    modifier = Modifier.padding(24.dp, 22.dp, 24.dp, 14.dp),
+                    style = MaterialTheme.typography.headlineSmall,
+                )
+                Column(
+                    modifier = Modifier.weight(1f).verticalScroll(rememberScrollState())
+                        .padding(horizontal = 24.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    content = content,
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(12.dp, 8.dp, 16.dp, 12.dp),
+                    horizontalArrangement = Arrangement.End,
+                ) {
+                    TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
+                    TextButton(onClick = onConfirm, enabled = confirmEnabled) { Text(confirmLabel) }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun TransferWorkingDialog() {
+    AlertDialog(
+        onDismissRequest = {},
+        title = { Text(stringResource(R.string.data_transfer)) },
+        text = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                CircularProgressIndicator(Modifier.size(28.dp), strokeWidth = 3.dp)
+                Spacer(Modifier.width(12.dp))
+                Text(stringResource(R.string.transfer_working))
+            }
+        },
+        confirmButton = {},
+    )
+}
+
+@Composable
+private fun TransferMessageDialog(title: String, message: String, onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = { Text(message) },
+        confirmButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.ok)) } },
+    )
 }
 
 @Composable

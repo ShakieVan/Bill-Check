@@ -34,7 +34,9 @@ automatische oder feste Wechselkurse, Kamera- und Galeriebelege, persistente
 Hell-/Dunkel-Darstellung sowie die festgelegte Rundungslogik. Zwischen- und
 Endrechnungen können automatisch oder manuell 1:1 abgeglichen werden. Für
 Bilddaten stehen eine bestätigungspflichtige Gemini-Auswertung und eine
-vollständig lokale OCR-Bausteinhilfe bereit.
+vollständig lokale OCR-Bausteinhilfe bereit. Selektive `.billcheck`-
+Vollsicherungen sowie CSV-/PDF-Berichte können direkt über den Android-
+Dateidialog exportiert werden; Vollarchiv und CSV sind wieder importierbar.
 
 ## Build
 

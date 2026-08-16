@@ -17,6 +17,12 @@ interface BillCheckDao {
     @Query("SELECT COALESCE(MAX(sortPosition), -1) + 1 FROM trips")
     suspend fun nextTripPosition(): Int
 
+    @Query("SELECT * FROM trips WHERE id IN (:tripIds) ORDER BY sortPosition")
+    suspend fun getTrips(tripIds: List<String>): List<TripEntity>
+
+    @Query("SELECT name FROM trips")
+    suspend fun getTripNames(): List<String>
+
     @Insert(onConflict = OnConflictStrategy.ABORT)
     suspend fun insertTrip(trip: TripEntity)
 
@@ -41,6 +47,10 @@ interface BillCheckDao {
     @Transaction
     @Query("SELECT * FROM receipts WHERE tripId = :tripId ORDER BY occurredAt DESC, createdAt DESC")
     fun observeReceipts(tripId: String): Flow<List<ReceiptWithItems>>
+
+    @Transaction
+    @Query("SELECT * FROM receipts WHERE tripId = :tripId ORDER BY occurredAt, createdAt")
+    suspend fun getReceiptsWithItems(tripId: String): List<ReceiptWithItems>
 
     @Query(
         """
@@ -70,6 +80,9 @@ interface BillCheckDao {
 
     @Insert(onConflict = OnConflictStrategy.ABORT)
     suspend fun insertReceiptItems(items: List<ReceiptItemEntity>)
+
+    @Insert(onConflict = OnConflictStrategy.ABORT)
+    suspend fun insertReceipts(receipts: List<ReceiptEntity>)
 
     @Transaction
     suspend fun insertReceiptWithItems(
@@ -106,8 +119,15 @@ interface BillCheckDao {
     @Query("SELECT * FROM reconciliations WHERE tripId = :tripId ORDER BY createdAt DESC")
     fun observeReconciliations(tripId: String): Flow<List<ReconciliationWithLines>>
 
+    @Transaction
+    @Query("SELECT * FROM reconciliations WHERE tripId = :tripId ORDER BY createdAt")
+    suspend fun getReconciliations(tripId: String): List<ReconciliationWithLines>
+
     @Insert(onConflict = OnConflictStrategy.ABORT)
     suspend fun insertReconciliation(reconciliation: ReconciliationEntity)
+
+    @Insert(onConflict = OnConflictStrategy.ABORT)
+    suspend fun insertReconciliations(reconciliations: List<ReconciliationEntity>)
 
     @Insert(onConflict = OnConflictStrategy.ABORT)
     suspend fun insertStatementLine(line: StatementLineEntity)
@@ -152,6 +172,26 @@ interface BillCheckDao {
 
     @Insert(onConflict = OnConflictStrategy.ABORT)
     suspend fun insertReceiptMatch(match: ReceiptMatchEntity)
+
+    @Insert(onConflict = OnConflictStrategy.ABORT)
+    suspend fun insertReceiptMatches(matches: List<ReceiptMatchEntity>)
+
+    @Transaction
+    suspend fun insertTransferredTrip(
+        trip: TripEntity,
+        receipts: List<ReceiptEntity>,
+        items: List<ReceiptItemEntity>,
+        reconciliations: List<ReconciliationEntity>,
+        lines: List<StatementLineEntity>,
+        matches: List<ReceiptMatchEntity>,
+    ) {
+        insertTrip(trip)
+        if (receipts.isNotEmpty()) insertReceipts(receipts)
+        if (items.isNotEmpty()) insertReceiptItems(items)
+        if (reconciliations.isNotEmpty()) insertReconciliations(reconciliations)
+        if (lines.isNotEmpty()) insertStatementLines(lines)
+        if (matches.isNotEmpty()) insertReceiptMatches(matches)
+    }
 
     @Transaction
     suspend fun replaceReceiptMatch(match: ReceiptMatchEntity) {

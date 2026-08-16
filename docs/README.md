@@ -17,6 +17,8 @@ Fehlschläge dauerhaft außerhalb einzelner Chats fest.
   1:1-Zuordnung, Status und Lebenszyklus von Rechnungsabgleichen
 - [`decisions/ai-image-extraction.md`](decisions/ai-image-extraction.md):
   Providergrenze, Schlüsselablage, Bildqualität und Ergebnisprüfung
+- [`decisions/data-transfer-formats.md`](decisions/data-transfer-formats.md):
+  selektive Vollsicherung, CSV-/PDF-Berichte und Importverhalten
 - [`technical-notes/editor-dialog-layout.md`](technical-notes/editor-dialog-layout.md):
   tastaturfester, wiederverwendbarer Aufbau für Eingabedialoge
 - [`technical-notes/emulator-test-images.md`](technical-notes/emulator-test-images.md):

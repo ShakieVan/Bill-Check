@@ -188,3 +188,25 @@
 - Dabei erkannt, dass ein allgemeines Ortsfeld zusätzlich Hotel und Stadt
   enthielt. Prompt, Schema und Regressionstest verlangen nun ausschließlich
   den konkreten Restaurant-/Bar-/Lounge-Namen.
+
+## 16.08.2026 – Selektiver Export und Import
+
+- Versioniertes `.billcheck`-Vollarchiv mit Reisen, Belegen, Einzelposten,
+  Bildern, Rechnungsabgleichen, Status und 1:1-Zuordnungen umgesetzt.
+- CSV-Bericht als wieder importierbare Übersicht und PDF als druckbaren
+  Nur-Lese-Bericht ergänzt; Einzelposten bleiben bewusst dem Vollarchiv
+  vorbehalten.
+- Vor Export und Import eine Mehrfachauswahl der Reisen eingebaut. Der Import
+  zeigt vor dem Schreiben Name, Beleg- und Abgleichanzahl.
+- Beim Import sämtliche IDs neu erzeugt und Referenzen konsistent abgebildet;
+  doppelte Namen erhalten einen nummerierten „(Import)“-Zusatz.
+- Wiederhergestellte Bilder sicher über MediaStore erneut im Album
+  `DCIM/Bill Check` veröffentlicht.
+- Vollständigen Emulator-Durchstich ausgeführt: zwei Reisen mit 2,2-MB-Archiv
+  exportiert, genau eine ausgewählt, drei Belege und ein verknüpftes Bild
+  wiederhergestellt und Galerieoriginal geprüft.
+- Android DocumentsUI ergänzte bei `application/zip` trotz gewünschtem Namen
+  ein `.zip`. Der Vollarchiv-Export verwendet deshalb
+  `application/octet-stream`; der sichtbare Name bleibt exakt `.billcheck`.
+- CSV-Quoting und Roundtrip einschließlich Semikolon, Anführungszeichen,
+  historischen Kursen und manueller Zuordnung per Unit-Test abgesichert.

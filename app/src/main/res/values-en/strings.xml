@@ -155,4 +155,30 @@
     <string name="model_context">Context: %1$s input · %2$s output</string>
     <string name="quota_not_available">Gemini does not expose your remaining quota through an API key. Google AI Studio shows active RPM, TPM and daily limits plus usage.</string>
     <string name="open_quota_dashboard">Check quota in AI Studio</string>
+    <string name="export_data">Export data</string>
+    <string name="import_data">Import data</string>
+    <string name="export_action">Export</string>
+    <string name="import_action">Import</string>
+    <string name="export_format">Format</string>
+    <string name="export_format_backup">Bill Check backup (.billcheck)</string>
+    <string name="export_format_backup_detail">Complete restore including images, items, and reconciliations.</string>
+    <string name="export_format_csv">CSV report</string>
+    <string name="export_format_csv_detail">Readable overview without images or individual items; importable again.</string>
+    <string name="export_format_pdf">PDF report</string>
+    <string name="export_format_pdf_detail">Printable trip and reconciliation overview.</string>
+    <string name="select_trips">Select trips</string>
+    <string name="import_backup_description">Complete backup detected. Select the trips to restore.</string>
+    <string name="import_csv_description">CSV report detected. Trips, receipts, and reconciliation summaries are restored without images or individual items.</string>
+    <string name="import_trip_counts">%1$d receipts · %2$d reconciliations</string>
+    <string name="data_transfer">Data transfer</string>
+    <string name="transfer_working">Processing file …</string>
+    <string name="export_complete">Export complete</string>
+    <string name="export_complete_message">The selected trips were saved.</string>
+    <string name="import_complete">Import complete</string>
+    <plurals name="import_complete_message">
+        <item quantity="one">%d trip was restored as a new entry.</item>
+        <item quantity="other">%d trips were restored as new entries.</item>
+    </plurals>
+    <string name="transfer_error">Data transfer failed</string>
+    <string name="transfer_error_message">The selected file could not be processed.</string>
 </resources>
