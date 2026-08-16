@@ -188,6 +188,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         useDailyRate: Boolean,
         defaultTipMinor: Long,
         defaultTipCurrencyCode: String,
+        defaultTipSelected: Boolean,
     ) {
         viewModelScope.launch {
             val trip = repository.createTrip(
@@ -197,6 +198,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 exchangeRateMode = if (useDailyRate) "DAILY" else "FIXED",
                 defaultTipMinor = defaultTipMinor,
                 defaultTipCurrencyCode = defaultTipCurrencyCode,
+                defaultTipSelected = defaultTipSelected,
             )
             setSelectedTrip(trip.id)
         }
@@ -222,6 +224,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         useDailyRate: Boolean,
         defaultTipMinor: Long,
         defaultTipCurrencyCode: String,
+        defaultTipSelected: Boolean,
     ): Boolean {
         val normalizedRate = normalizeDecimal(exchangeRate)
             ?.toBigDecimalOrNull()
@@ -242,6 +245,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 exchangeRateMode = if (useDailyRate) "DAILY" else "FIXED",
                 defaultTipMinor = defaultTipMinor,
                 defaultTipCurrencyCode = normalizedTipCurrency,
+                defaultTipSelected = defaultTipSelected,
             )
         }
         return true

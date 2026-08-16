@@ -245,3 +245,18 @@
   „noch kein öffentliches Release“ erscheint. Minifizierte, signierte
   Release-APK gebaut, Signatur/Metadaten geprüft und erfolgreich im
   Android-16-Emulator gestartet.
+
+## 16.08.2026 – Abschließender Spezifikationsaudit
+
+- Sämtliche Produktabschnitte gegen den implementierten Stand geprüft; die
+  speicheroptimierte Bildablage bleibt wie spezifiziert eine ausdrücklich
+  spätere Option, damit die aktuelle OCR-/KI-Qualität nicht beeinträchtigt
+  wird.
+- Veralteten Platzhaltertext zur noch nicht vorhandenen Bilderkennung
+  entfernt und die Notiz für das erste öffentliche Release korrigiert.
+- Deutsch und Englisch zusätzlich über Androids systemeigene App-Sprachauswahl
+  veröffentlicht; die App folgt damit der gewählten Gerätesprache ohne eigene
+  parallele Spracheinstellung.
+- Bisher im Datenmodell bereits vorbereitete Reiseoption zum Vorauswählen des
+  Standard-Trinkgelds vollständig in Anlage und Bearbeitung verdrahtet. Der
+  vorgeschlagene Betrag bleibt 1 EUR, die Vorauswahl bleibt standardmäßig aus.

@@ -112,6 +112,8 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.zIndex
 import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import de.shakie.billcheck.data.ReceiptEntity
 import de.shakie.billcheck.data.ReceiptImageStorage
@@ -243,7 +245,7 @@ private fun BillCheckApp(
     val updateAvailableMessage = stringResource(R.string.update_available)
     val updatesLabel = stringResource(R.string.updates)
 
-    LaunchedEffect(Unit) {
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
         viewModel.checkForAppUpdate(force = false)
     }
 
@@ -583,8 +585,16 @@ private fun BillCheckApp(
                 showCreateTrip = false
                 viewModel.clearExchangeRateLookup()
             },
-            onSave = { name, currency, rate, useDailyRate, tipMinor, tipCurrency ->
-                viewModel.createTrip(name, currency, rate, useDailyRate, tipMinor, tipCurrency)
+            onSave = { name, currency, rate, useDailyRate, tipMinor, tipCurrency, tipSelected ->
+                viewModel.createTrip(
+                    name,
+                    currency,
+                    rate,
+                    useDailyRate,
+                    tipMinor,
+                    tipCurrency,
+                    tipSelected,
+                )
                 showCreateTrip = false
                 viewModel.clearExchangeRateLookup()
                 true
@@ -602,7 +612,7 @@ private fun BillCheckApp(
                 editingTrip = null
                 viewModel.clearExchangeRateLookup()
             },
-            onSave = { name, currency, rate, useDailyRate, tipMinor, tipCurrency ->
+            onSave = { name, currency, rate, useDailyRate, tipMinor, tipCurrency, tipSelected ->
                 viewModel.updateTrip(
                     existing = trip,
                     name = name,
@@ -611,6 +621,7 @@ private fun BillCheckApp(
                     useDailyRate = useDailyRate,
                     defaultTipMinor = tipMinor,
                     defaultTipCurrencyCode = tipCurrency,
+                    defaultTipSelected = tipSelected,
                 ).also { saved ->
                     if (saved) {
                         editingTrip = null
@@ -1683,7 +1694,7 @@ private fun TripEditorDialog(
     exchangeRateLookup: ExchangeRateLookupState,
     onLookupRate: (String) -> Unit,
     onDismiss: () -> Unit,
-    onSave: (String, String, String, Boolean, Long, String) -> Boolean,
+    onSave: (String, String, String, Boolean, Long, String, Boolean) -> Boolean,
 ) {
     val stateKey = existing?.id
     var name by remember(stateKey) { mutableStateOf(existing?.name ?: suggestedName) }
@@ -1694,6 +1705,9 @@ private fun TripEditorDialog(
     }
     var tipCurrency by remember(stateKey) {
         mutableStateOf(existing?.defaultTipCurrencyCode ?: "EUR")
+    }
+    var tipSelected by remember(stateKey) {
+        mutableStateOf(existing?.defaultTipSelected ?: false)
     }
     var rateWasEdited by remember(stateKey) { mutableStateOf(false) }
     var useDailyRate by remember(stateKey) {
@@ -1729,6 +1743,7 @@ private fun TripEditorDialog(
                 useDailyRate,
                 MainViewModel.parseMinor(tip) ?: 100,
                 tipCurrency.ifBlank { "EUR" },
+                tipSelected,
             )
             invalidRate = !saved
         },
@@ -1837,6 +1852,21 @@ private fun TripEditorDialog(
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                 )
                 OutlinedTextField(tipCurrency, { tipCurrency = it.uppercase().take(3) }, label = { Text(stringResource(R.string.tip_currency)) })
+                Row(
+                    modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp))
+                        .clickable { tipSelected = !tipSelected }.padding(10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text(stringResource(R.string.default_tip_preselected))
+                        Text(
+                            stringResource(R.string.default_tip_preselected_hint),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Switch(checked = tipSelected, onCheckedChange = null)
+                }
     }
 }
 

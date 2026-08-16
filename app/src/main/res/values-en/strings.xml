@@ -22,6 +22,8 @@
     <string name="switch_on">On</string>
     <string name="switch_off">Off</string>
     <string name="default_tip">Default tip</string>
+    <string name="default_tip_preselected">Preselect tip</string>
+    <string name="default_tip_preselected_hint">Initially enable it for new receipts; remains off by default.</string>
     <string name="tip_currency">Tip currency</string>
     <string name="cancel">Cancel</string>
     <string name="save">Save</string>
@@ -50,7 +52,6 @@
     <string name="no_image_linked">No image is linked to this receipt yet.</string>
     <string name="analyze_image">Analyze image</string>
     <string name="image_analysis">Image analysis</string>
-    <string name="image_analysis_coming_soon">This entry point is prepared for running AI or OCR analysis again. Recognition itself follows in a later development step.</string>
     <string name="image_unavailable">Image unavailable</string>
     <string name="camera_start_failed">The image could not be prepared for the camera.</string>
     <string name="manual_entry">Enter manually</string>

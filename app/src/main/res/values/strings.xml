@@ -22,6 +22,8 @@
     <string name="switch_on">Ein</string>
     <string name="switch_off">Aus</string>
     <string name="default_tip">Standard-Trinkgeld</string>
+    <string name="default_tip_preselected">Trinkgeld vorauswählen</string>
+    <string name="default_tip_preselected_hint">Bei neuen Belegen zunächst aktivieren; bleibt standardmäßig ausgeschaltet.</string>
     <string name="tip_currency">Trinkgeldwährung</string>
     <string name="cancel">Abbrechen</string>
     <string name="save">Speichern</string>
@@ -50,7 +52,6 @@
     <string name="no_image_linked">Noch kein Bild mit diesem Beleg verknüpft.</string>
     <string name="analyze_image">Bild auswerten</string>
     <string name="image_analysis">Bildauswertung</string>
-    <string name="image_analysis_coming_soon">Dieser Einstieg ist für die erneute KI- oder OCR-Auswertung vorbereitet. Die Erkennung selbst folgt in einem späteren Entwicklungsschritt.</string>
     <string name="image_unavailable">Bild nicht verfügbar</string>
     <string name="camera_start_failed">Das Bild konnte nicht für die Kamera vorbereitet werden.</string>
     <string name="manual_entry">Manuell erfassen</string>

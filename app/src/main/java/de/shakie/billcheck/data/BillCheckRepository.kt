@@ -44,6 +44,7 @@ class BillCheckRepository(database: BillCheckDatabase) {
         exchangeRateMode: String,
         defaultTipMinor: Long = 100,
         defaultTipCurrencyCode: String = "EUR",
+        defaultTipSelected: Boolean = false,
     ): TripEntity {
         val now = System.currentTimeMillis()
         return TripEntity(
@@ -55,7 +56,7 @@ class BillCheckRepository(database: BillCheckDatabase) {
             exchangeRateMode = exchangeRateMode,
             defaultTipMinor = defaultTipMinor,
             defaultTipCurrencyCode = defaultTipCurrencyCode,
-            defaultTipSelected = false,
+            defaultTipSelected = defaultTipSelected,
             imageStorageMode = "ORIGINAL",
             createdAt = now,
         ).also { dao.insertTrip(it) }
@@ -69,6 +70,7 @@ class BillCheckRepository(database: BillCheckDatabase) {
         exchangeRateMode: String,
         defaultTipMinor: Long,
         defaultTipCurrencyCode: String,
+        defaultTipSelected: Boolean,
     ) {
         dao.updateTrip(
             existing.copy(
@@ -78,6 +80,7 @@ class BillCheckRepository(database: BillCheckDatabase) {
                 exchangeRateMode = exchangeRateMode,
                 defaultTipMinor = defaultTipMinor,
                 defaultTipCurrencyCode = defaultTipCurrencyCode,
+                defaultTipSelected = defaultTipSelected,
             ),
         )
     }
