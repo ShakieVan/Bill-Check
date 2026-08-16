@@ -16,6 +16,8 @@
     <string name="rate_attribution">Rates by ExchangeRate-API</string>
     <string name="daily_exchange_rate">Use daily rate</string>
     <string name="daily_exchange_rate_hint">Refresh online for each new receipt; offline uses the entered rate.</string>
+    <string name="switch_on">On</string>
+    <string name="switch_off">Off</string>
     <string name="default_tip">Default tip</string>
     <string name="tip_currency">Tip currency</string>
     <string name="cancel">Cancel</string>
@@ -37,11 +39,16 @@
     <string name="save_image_link">Save image</string>
     <string name="unlink_image">Unlink image from entry</string>
     <string name="close">Close</string>
-    <string name="close_image_review">Return without linking</string>
+    <string name="close_image_review">Cancel</string>
     <string name="receipt_image">Receipt image</string>
     <string name="image_unavailable">Image unavailable</string>
     <string name="camera_start_failed">The image could not be prepared for the camera.</string>
     <string name="manual_entry">Enter manually</string>
+    <string name="edit_receipt">Edit receipt</string>
+    <string name="trips">Trips</string>
+    <string name="open_trip_menu">Open trip menu</string>
+    <string name="open_app_menu">Open app menu</string>
+    <string name="settings">Settings</string>
     <string name="location">Location / restaurant</string>
     <string name="check_number">Check number</string>
     <string name="amount_in_currency">Amount (%1$s)</string>

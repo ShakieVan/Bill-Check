@@ -18,12 +18,13 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -34,15 +35,15 @@ import androidx.compose.material.icons.automirrored.filled.ReceiptLong
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.DeleteOutline
-import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Image
+import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.RemoveCircleOutline
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
@@ -53,14 +54,22 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalDrawerSheet
+import androidx.compose.material3.ModalNavigationDrawer
+import androidx.compose.material3.NavigationDrawerItem
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.DrawerValue
+import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -72,6 +81,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -79,6 +89,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import de.shakie.billcheck.data.ReceiptEntity
@@ -124,6 +135,8 @@ private fun BillCheckApp(viewModel: MainViewModel = viewModel()) {
     val imageStorage = remember { ReceiptImageStorage(context) }
     var showCreateTrip by remember { mutableStateOf(false) }
     var showManualReceipt by remember { mutableStateOf(false) }
+    var editingReceipt by remember { mutableStateOf<ReceiptWithItems?>(null) }
+    var showAppMenu by remember { mutableStateOf(false) }
     var pendingCameraUriString by rememberSaveable { mutableStateOf<String?>(null) }
     var pendingImageUriString by rememberSaveable { mutableStateOf<String?>(null) }
     var imageTargetReceiptId by rememberSaveable { mutableStateOf<String?>(null) }
@@ -131,7 +144,9 @@ private fun BillCheckApp(viewModel: MainViewModel = viewModel()) {
     val pendingImageUri = pendingImageUriString?.let(Uri::parse)
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
+    val drawerState = rememberDrawerState(DrawerValue.Closed)
     val cameraError = stringResource(R.string.camera_start_failed)
+    val comingSoon = stringResource(R.string.not_yet_available)
 
     val cameraLauncher = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { saved ->
         pendingCameraUri?.let { uri ->
@@ -165,10 +180,62 @@ private fun BillCheckApp(viewModel: MainViewModel = viewModel()) {
         )
     }
 
-    Scaffold(
-        snackbarHost = { SnackbarHost(snackbar) },
-        topBar = {
-            CenterAlignedTopAppBar(
+    ModalNavigationDrawer(
+        drawerState = drawerState,
+        drawerContent = {
+            ModalDrawerSheet {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(24.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(
+                        Icons.AutoMirrored.Filled.ReceiptLong,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                    )
+                    Spacer(Modifier.width(10.dp))
+                    Text("Bill Check", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                }
+                HorizontalDivider()
+                Text(
+                    stringResource(R.string.trips),
+                    modifier = Modifier.padding(24.dp, 18.dp, 24.dp, 8.dp),
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                state.trips.forEach { trip ->
+                    NavigationDrawerItem(
+                        label = { Text(trip.name) },
+                        selected = state.selectedTrip?.id == trip.id,
+                        onClick = {
+                            viewModel.selectTrip(trip.id)
+                            scope.launch { drawerState.close() }
+                        },
+                        modifier = Modifier.padding(horizontal = 12.dp),
+                    )
+                }
+                NavigationDrawerItem(
+                    label = { Text(stringResource(R.string.new_trip)) },
+                    selected = false,
+                    icon = { Icon(Icons.Default.Add, contentDescription = null) },
+                    onClick = {
+                        scope.launch { drawerState.close() }
+                        showCreateTrip = true
+                    },
+                    modifier = Modifier.padding(horizontal = 12.dp),
+                )
+            }
+        },
+    ) {
+        Scaffold(
+            snackbarHost = { SnackbarHost(snackbar) },
+            topBar = {
+                TopAppBar(
+                    navigationIcon = {
+                        IconButton(onClick = { scope.launch { drawerState.open() } }) {
+                            Icon(Icons.Default.Menu, contentDescription = stringResource(R.string.open_trip_menu))
+                        }
+                    },
                 title = {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(
@@ -180,11 +247,30 @@ private fun BillCheckApp(viewModel: MainViewModel = viewModel()) {
                         Text("Bill Check", fontWeight = FontWeight.Bold)
                     }
                 },
-            )
-        },
-    ) { padding ->
-        if (pendingImageUri != null) {
-            ReceiptImageReview(
+                    actions = {
+                        Box {
+                            IconButton(onClick = { showAppMenu = true }) {
+                                Icon(Icons.Default.MoreVert, contentDescription = stringResource(R.string.open_app_menu))
+                            }
+                            DropdownMenu(
+                                expanded = showAppMenu,
+                                onDismissRequest = { showAppMenu = false },
+                            ) {
+                                DropdownMenuItem(
+                                    text = { Text(stringResource(R.string.settings)) },
+                                    onClick = {
+                                        showAppMenu = false
+                                        scope.launch { snackbar.showSnackbar(comingSoon) }
+                                    },
+                                )
+                            }
+                        }
+                    },
+                )
+            },
+        ) { padding ->
+            if (pendingImageUri != null) {
+                ReceiptImageReview(
                 imageUri = requireNotNull(pendingImageUri),
                 modifier = Modifier.padding(padding),
                 onTakeAnother = takePhoto,
@@ -207,18 +293,16 @@ private fun BillCheckApp(viewModel: MainViewModel = viewModel()) {
                         imageTargetReceiptId = null
                     }
                 },
-            )
-        } else if (state.trips.isEmpty()) {
-            EmptyTrips(
+                )
+            } else if (state.trips.isEmpty()) {
+                EmptyTrips(
                 modifier = Modifier.padding(padding),
                 onCreate = { showCreateTrip = true },
-            )
-        } else {
-            Dashboard(
+                )
+            } else {
+                Dashboard(
                 state = state,
                 modifier = Modifier.padding(padding),
-                onSelectTrip = viewModel::selectTrip,
-                onCreateTrip = { showCreateTrip = true },
                 onManualReceipt = { showManualReceipt = true },
                 onCamera = {
                     imageTargetReceiptId = null
@@ -232,8 +316,10 @@ private fun BillCheckApp(viewModel: MainViewModel = viewModel()) {
                     imageTargetReceiptId = receipt.id
                     pendingImageUriString = receipt.imageUri
                 },
+                onEditReceipt = { editingReceipt = it },
                 onDeleteReceipt = viewModel::deleteReceipt,
-            )
+                )
+            }
         }
     }
 
@@ -256,7 +342,7 @@ private fun BillCheckApp(viewModel: MainViewModel = viewModel()) {
 
     state.selectedTrip?.let { trip ->
         if (showManualReceipt) {
-            ManualReceiptDialog(
+            ReceiptEditorDialog(
                 trip = trip,
                 onDismiss = { showManualReceipt = false },
                 onSave = { location, check, amount, tip, itemDrafts ->
@@ -273,6 +359,25 @@ private fun BillCheckApp(viewModel: MainViewModel = viewModel()) {
                             pendingImageUriString = null
                             imageTargetReceiptId = null
                         }
+                    }
+                },
+            )
+        }
+        editingReceipt?.let { existing ->
+            ReceiptEditorDialog(
+                trip = trip,
+                existing = existing,
+                onDismiss = { editingReceipt = null },
+                onSave = { location, check, amount, tip, itemDrafts ->
+                    viewModel.updateReceipt(
+                        existing = existing,
+                        location = location,
+                        checkNumber = check,
+                        foreignAmountText = amount,
+                        addDefaultTip = tip,
+                        itemDrafts = itemDrafts,
+                    ).also { saved ->
+                        if (saved) editingReceipt = null
                     }
                 },
             )
@@ -320,12 +425,11 @@ private fun EmptyTrips(modifier: Modifier, onCreate: () -> Unit) {
 private fun Dashboard(
     state: MainUiState,
     modifier: Modifier,
-    onSelectTrip: (String) -> Unit,
-    onCreateTrip: () -> Unit,
     onManualReceipt: () -> Unit,
     onCamera: () -> Unit,
     onGallery: () -> Unit,
     onOpenReceiptImage: (ReceiptEntity) -> Unit,
+    onEditReceipt: (ReceiptWithItems) -> Unit,
     onDeleteReceipt: (ReceiptEntity) -> Unit,
 ) {
     LazyColumn(
@@ -333,14 +437,6 @@ private fun Dashboard(
         contentPadding = PaddingValues(16.dp, 8.dp, 16.dp, 32.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        item {
-            TripSelector(
-                trips = state.trips,
-                selected = state.selectedTrip,
-                onSelect = onSelectTrip,
-                onCreate = onCreateTrip,
-            )
-        }
         item {
             Summary(state)
         }
@@ -376,44 +472,8 @@ private fun Dashboard(
             }
         } else {
             items(state.receipts, key = { it.receipt.id }) { receipt ->
-                ReceiptCard(receipt, onDeleteReceipt, onOpenReceiptImage)
+                ReceiptCard(receipt, onDeleteReceipt, onOpenReceiptImage, onEditReceipt)
             }
-        }
-    }
-}
-
-@Composable
-private fun TripSelector(
-    trips: List<TripEntity>,
-    selected: TripEntity?,
-    onSelect: (String) -> Unit,
-    onCreate: () -> Unit,
-) {
-    var expanded by remember { mutableStateOf(false) }
-    Box {
-        OutlinedButton(onClick = { expanded = true }, modifier = Modifier.fillMaxWidth()) {
-            Text(selected?.name.orEmpty(), modifier = Modifier.weight(1f))
-            Icon(Icons.Default.ExpandMore, contentDescription = stringResource(R.string.select_trip))
-        }
-        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-            trips.forEach { trip ->
-                DropdownMenuItem(
-                    text = { Text(trip.name) },
-                    onClick = {
-                        onSelect(trip.id)
-                        expanded = false
-                    },
-                )
-            }
-            HorizontalDivider()
-            DropdownMenuItem(
-                text = { Text(stringResource(R.string.new_trip)) },
-                leadingIcon = { Icon(Icons.Default.Add, contentDescription = null) },
-                onClick = {
-                    expanded = false
-                    onCreate()
-                },
-            )
         }
     }
 }
@@ -425,6 +485,15 @@ private fun Summary(state: MainUiState) {
         shape = RoundedCornerShape(24.dp),
     ) {
         Column(Modifier.padding(20.dp)) {
+            state.selectedTrip?.let { trip ->
+                Text(
+                    trip.name,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                )
+                Spacer(Modifier.height(10.dp))
+            }
             Text(
                 stringResource(R.string.rounded_total),
                 style = MaterialTheme.typography.labelLarge,
@@ -498,11 +567,15 @@ private fun ReceiptCard(
     receiptWithItems: ReceiptWithItems,
     onDelete: (ReceiptEntity) -> Unit,
     onOpenImage: (ReceiptEntity) -> Unit,
+    onEdit: (ReceiptWithItems) -> Unit,
 ) {
     val receipt = receiptWithItems.receipt
     val exactCents = MoneyCalculator.exactEuroCents(receipt)
     val rounded = MoneyCalculator.roundedUpEuro(exactCents)
-    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
+    Card(
+        onClick = { onEdit(receiptWithItems) },
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+    ) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(16.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -694,7 +767,11 @@ private fun CreateTripDialog(
                     )
                 }
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(16.dp))
+                        .clickable { useDailyRate = !useDailyRate }
+                        .padding(10.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Column(Modifier.weight(1f)) {
@@ -705,7 +782,22 @@ private fun CreateTripDialog(
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
-                    Switch(checked = useDailyRate, onCheckedChange = { useDailyRate = it })
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(
+                            stringResource(if (useDailyRate) R.string.switch_on else R.string.switch_off),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                        Switch(
+                            checked = useDailyRate,
+                            onCheckedChange = null,
+                            colors = SwitchDefaults.colors(
+                                uncheckedThumbColor = MaterialTheme.colorScheme.primary,
+                                uncheckedTrackColor = MaterialTheme.colorScheme.surfaceVariant,
+                                uncheckedBorderColor = MaterialTheme.colorScheme.primary,
+                            ),
+                        )
+                    }
                 }
                 OutlinedTextField(
                     tip,
@@ -735,29 +827,62 @@ private fun CreateTripDialog(
 }
 
 @Composable
-private fun ManualReceiptDialog(
+private fun ReceiptEditorDialog(
     trip: TripEntity,
+    existing: ReceiptWithItems? = null,
     onDismiss: () -> Unit,
     onSave: (String, String, String, Boolean, List<ReceiptItemDraft>) -> Boolean,
 ) {
-    var location by remember { mutableStateOf("") }
-    var check by remember { mutableStateOf("") }
-    var amount by remember { mutableStateOf("") }
-    var addTip by remember { mutableStateOf(trip.defaultTipSelected) }
-    var invalid by remember { mutableStateOf(false) }
-    var nextItemId by remember { mutableStateOf(1L) }
-    var items by remember { mutableStateOf(listOf(EditableReceiptItem(id = 0))) }
+    val stateKey = existing?.receipt?.id
+    var location by remember(stateKey) { mutableStateOf(existing?.receipt?.location.orEmpty()) }
+    var check by remember(stateKey) { mutableStateOf(existing?.receipt?.checkNumber.orEmpty()) }
+    var amount by remember(stateKey) {
+        mutableStateOf(existing?.receipt?.foreignAmountMinor?.let(::formatInputMinor).orEmpty())
+    }
+    var addTip by remember(stateKey) {
+        mutableStateOf(existing?.receipt?.tipMinor?.let { it > 0 } ?: trip.defaultTipSelected)
+    }
+    var invalid by remember(stateKey) { mutableStateOf(false) }
+    val initialItems = existing?.items
+        ?.sortedBy { it.sortPosition }
+        ?.mapIndexed { index, item ->
+            EditableReceiptItem(
+                id = index.toLong(),
+                name = item.name,
+                amountText = formatInputMinor(item.amountMinor),
+            )
+        }
+        .orEmpty()
+        .ifEmpty { listOf(EditableReceiptItem(id = 0)) }
+    var nextItemId by remember(stateKey) { mutableStateOf(initialItems.size.toLong()) }
+    var items by remember(stateKey) { mutableStateOf(initialItems) }
     val itemSumMinor = items.mapNotNull { MainViewModel.parseMinor(it.amountText) }.sum()
     val receiptMinor = MainViewModel.parseMinor(amount)
 
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.add_receipt)) },
-        text = {
+    Dialog(onDismissRequest = onDismiss) {
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .fillMaxHeight(0.92f)
+                .imePadding(),
+            shape = RoundedCornerShape(28.dp),
+            tonalElevation = 6.dp,
+        ) {
             Column(
-                modifier = Modifier.heightIn(max = 560.dp).verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
+                modifier = Modifier.fillMaxSize(),
             ) {
+                Text(
+                    stringResource(if (existing == null) R.string.add_receipt else R.string.edit_receipt),
+                    modifier = Modifier.padding(24.dp, 22.dp, 24.dp, 14.dp),
+                    style = MaterialTheme.typography.headlineSmall,
+                )
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .verticalScroll(rememberScrollState())
+                        .padding(horizontal = 24.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
                 OutlinedTextField(location, { location = it }, label = { Text(stringResource(R.string.location)) })
                 OutlinedTextField(check, { check = it }, label = { Text(stringResource(R.string.check_number)) })
                 OutlinedTextField(
@@ -888,23 +1013,29 @@ private fun ManualReceiptDialog(
                         )
                     }
                 }
+                    Spacer(Modifier.height(24.dp))
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(12.dp, 8.dp, 16.dp, 12.dp),
+                    horizontalArrangement = Arrangement.End,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
+                    TextButton(onClick = {
+                        invalid = !onSave(
+                            location,
+                            check,
+                            amount,
+                            addTip,
+                            items.map { ReceiptItemDraft(it.name, it.amountText) },
+                        )
+                    }) {
+                        Text(stringResource(R.string.save))
+                    }
+                }
             }
-        },
-        confirmButton = {
-            TextButton(onClick = {
-                invalid = !onSave(
-                    location,
-                    check,
-                    amount,
-                    addTip,
-                    items.map { ReceiptItemDraft(it.name, it.amountText) },
-                )
-            }) {
-                Text(stringResource(R.string.save))
-            }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } },
-    )
+        }
+    }
 }
 
 private data class EditableReceiptItem(
@@ -914,6 +1045,10 @@ private data class EditableReceiptItem(
 )
 
 private fun formatEuroCents(cents: Long): String = formatMinor(cents, "EUR")
+
+private fun formatInputMinor(minor: Long): String = BigDecimal.valueOf(minor, 2)
+    .stripTrailingZeros()
+    .toPlainString()
 
 private fun formatMinor(minor: Long, currencyCode: String): String = runCatching {
     NumberFormat.getCurrencyInstance().apply {

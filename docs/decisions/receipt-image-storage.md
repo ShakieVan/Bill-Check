@@ -37,3 +37,11 @@ bereits veröffentlicht; bei Abbruch wird er wieder entfernt. Zusätzlich prüft
 Bill Check bei uneinheitlichen Kamera-Rückgabewerten, ob tatsächlich Bilddaten
 geschrieben wurden.
 
+## Geräteentscheidung
+
+Der Systemkamera-Fluss wurde auf einem Samsung Galaxy S24 Ultra praktisch
+geprüft. Dort stehen die gewohnte Samsung-Kameraauswahl und Zoomstufen zur
+Verfügung und der Ablauf wurde vom Nutzer ausdrücklich bestätigt. Bill Check
+bleibt deshalb bei der externen Systemkamera und führt vorerst keine eigene
+CameraX-Oberfläche samt zusätzlicher Kameraberechtigung ein. Die sehr einfache
+Kamera des Android-Emulators ist kein Maßstab für die reale Gerätebedienung.

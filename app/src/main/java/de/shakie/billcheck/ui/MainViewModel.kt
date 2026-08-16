@@ -153,6 +153,30 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch { repository.deleteReceipt(receipt) }
     }
 
+    fun updateReceipt(
+        existing: ReceiptWithItems,
+        location: String,
+        checkNumber: String,
+        foreignAmountText: String,
+        addDefaultTip: Boolean,
+        itemDrafts: List<ReceiptItemDraft>,
+    ): Boolean {
+        val trip = uiState.value.selectedTrip ?: return false
+        val input = parseReceiptInput(foreignAmountText, itemDrafts) ?: return false
+        viewModelScope.launch {
+            repository.updateReceipt(
+                trip = trip,
+                existing = existing.receipt,
+                location = location,
+                checkNumber = checkNumber,
+                foreignAmountMinor = input.totalMinor,
+                addDefaultTip = addDefaultTip,
+                items = input.items,
+            )
+        }
+        return true
+    }
+
     fun updateReceiptImage(receiptId: String, imageUri: String?) {
         viewModelScope.launch { repository.updateReceiptImage(receiptId, imageUri) }
     }

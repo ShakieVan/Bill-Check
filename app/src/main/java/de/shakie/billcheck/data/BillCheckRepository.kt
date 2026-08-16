@@ -92,6 +92,42 @@ class BillCheckRepository(database: BillCheckDatabase) {
 
     suspend fun deleteReceipt(receipt: ReceiptEntity) = dao.deleteReceipt(receipt)
 
+    suspend fun updateReceipt(
+        trip: TripEntity,
+        existing: ReceiptEntity,
+        location: String,
+        checkNumber: String,
+        foreignAmountMinor: Long,
+        addDefaultTip: Boolean,
+        items: List<NewReceiptItem>,
+    ) {
+        val tipMinor = if (addDefaultTip) trip.defaultTipMinor else 0
+        val receipt = existing.copy(
+            location = location.trim(),
+            checkNumber = checkNumber.trim(),
+            foreignAmountMinor = foreignAmountMinor,
+            exactEuroCents = MoneyCalculator.calculateExactEuroCents(
+                foreignAmountMinor = foreignAmountMinor,
+                exchangeRate = existing.exchangeRate,
+                tipMinor = tipMinor,
+                tipCurrencyCode = trip.defaultTipCurrencyCode,
+            ),
+            tipMinor = tipMinor,
+            tipCurrencyCode = trip.defaultTipCurrencyCode,
+        )
+        val receiptItems = items.mapIndexed { index, item ->
+            ReceiptItemEntity(
+                id = UUID.randomUUID().toString(),
+                receiptId = existing.id,
+                sortPosition = index,
+                name = item.name.trim(),
+                amountMinor = item.amountMinor,
+                currencyCode = existing.foreignCurrencyCode,
+            )
+        }
+        dao.updateReceiptWithItems(receipt, receiptItems)
+    }
+
     suspend fun updateReceiptImage(receiptId: String, imageUri: String?) =
         dao.updateReceiptImage(receiptId, imageUri)
 }

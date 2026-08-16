@@ -83,3 +83,18 @@
   Absturz. Bill Check veröffentlicht den leeren Ziel-Eintrag daher vor dem
   Kameraaufruf und entfernt ihn bei Abbruch; Aufnahme, Prüfansicht und
   Galerieerhalt wurden anschließend vollständig durchgespielt.
+
+## 16.08.2026 – UX-Pass nach S24-Ultra-Test
+
+- Externe Systemkamera auf einem Galaxy S24 Ultra bestätigt und die erwogene
+  CameraX-Eigenentwicklung bewusst verworfen.
+- Ausgeschalteten Tageskurs-Schalter mit farbigem Bedienelement, kompletter
+  klickbarer Zeile und explizitem Status „Ein/Aus“ eindeutig gemacht.
+- Technische Beschriftung „Ohne Verknüpfung zurück“ durch „Abbrechen“ ersetzt.
+- Belegerfassung in einen nahezu bildschirmhohen Editor mit festem Kopf,
+  festem Aktionsbereich und unabhängig scrollbar gestalteter Feldfläche umgebaut.
+- Vorhandene Belege einschließlich Einzelposten und Trinkgeldwahl editierbar
+  gemacht; das Bild bleibt beim Bearbeiten erhalten.
+- Große Reise-Drop-down-Box aus der Übersicht entfernt. Reisen und „Neue
+  Reise“ liegen nun im Burgermenü, der vorbereitete Einstellungseinstieg im
+  Dreipunktmenü.

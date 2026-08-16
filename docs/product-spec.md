@@ -13,6 +13,13 @@ Stand: 16.08.2026
 6. Automatische Vorschläge kontrollieren und ungeklärte Zeilen manuell
    zuordnen oder als bekannt akzeptieren.
 
+## Navigation
+
+- Das Burgermenü links oben enthält die Reisen und das Anlegen einer neuen
+  Reise. Die aktive Reise bleibt in der Übersicht kompakt sichtbar.
+- Das Dreipunktmenü rechts oben ist der Einstieg für die späteren
+  App-Einstellungen.
+
 ## Reisen
 
 - Reisen haben einen Namen, eine unsichtbare Sortierposition, eine
@@ -59,6 +66,11 @@ Stand: 16.08.2026
 - Weicht ein eingetragener Gesamtbetrag von der Postensumme ab, wird die
   Differenz sichtbar, das Speichern bleibt wegen Gebühren und Rabatten
   möglich.
+- Ein gespeicherter Beleg kann durch Antippen einschließlich Ort,
+  Checknummer, Gesamtbetrag, Trinkgeldwahl und Einzelposten bearbeitet werden.
+- Der Belegeditor besitzt einen festen Kopf und Aktionsbereich; nur sein Inhalt
+  scrollt und bleibt auch bei geöffneter Bildschirmtastatur vollständig
+  erreichbar.
 
 ## Abgleich
 

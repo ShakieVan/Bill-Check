@@ -16,6 +16,8 @@
     <string name="rate_attribution">Kurse von ExchangeRate-API</string>
     <string name="daily_exchange_rate">Tageskurs verwenden</string>
     <string name="daily_exchange_rate_hint">Bei jedem neuen Beleg online aktualisieren; offline gilt der eingestellte Kurs.</string>
+    <string name="switch_on">Ein</string>
+    <string name="switch_off">Aus</string>
     <string name="default_tip">Standard-Trinkgeld</string>
     <string name="tip_currency">Trinkgeldwährung</string>
     <string name="cancel">Abbrechen</string>
@@ -37,11 +39,16 @@
     <string name="save_image_link">Bild speichern</string>
     <string name="unlink_image">Bild vom Eintrag lösen</string>
     <string name="close">Schließen</string>
-    <string name="close_image_review">Ohne Verknüpfung zurück</string>
+    <string name="close_image_review">Abbrechen</string>
     <string name="receipt_image">Belegbild</string>
     <string name="image_unavailable">Bild nicht verfügbar</string>
     <string name="camera_start_failed">Das Bild konnte nicht für die Kamera vorbereitet werden.</string>
     <string name="manual_entry">Manuell erfassen</string>
+    <string name="edit_receipt">Beleg bearbeiten</string>
+    <string name="trips">Reisen</string>
+    <string name="open_trip_menu">Reisemenü öffnen</string>
+    <string name="open_app_menu">App-Menü öffnen</string>
+    <string name="settings">Einstellungen</string>
     <string name="location">Ort / Restaurant</string>
     <string name="check_number">Checknummer</string>
     <string name="amount_in_currency">Betrag (%1$s)</string>
