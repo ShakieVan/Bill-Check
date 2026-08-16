@@ -1,5 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <color name="launcher_background">#F3F6FA</color>
+    <color name="widget_surface">#F7F8FA</color>
+    <color name="widget_border">#D9DEE7</color>
+    <color name="widget_text">#17202D</color>
+    <color name="widget_secondary_text">#5D6775</color>
+    <color name="widget_accent">#1769AA</color>
+    <color name="widget_action_surface">#E4EDF7</color>
 </resources>
-

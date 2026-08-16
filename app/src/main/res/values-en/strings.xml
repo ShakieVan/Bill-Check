@@ -181,4 +181,12 @@
     </plurals>
     <string name="transfer_error">Data transfer failed</string>
     <string name="transfer_error_message">The selected file could not be processed.</string>
+    <string name="widget_description">Trip overview and quick receipt capture</string>
+    <string name="widget_no_trip">No trip yet</string>
+    <string name="widget_rounded_total">€%1$d</string>
+    <string name="widget_exact_and_count">Exact %1$s · %2$d receipts</string>
+    <string name="widget_photo">Photo</string>
+    <string name="widget_image">Image</string>
+    <string name="widget_manual">Manual</string>
+    <string name="widget_statement">Statement</string>
 </resources>

@@ -19,6 +19,8 @@ Fehlschläge dauerhaft außerhalb einzelner Chats fest.
   Providergrenze, Schlüsselablage, Bildqualität und Ergebnisprüfung
 - [`decisions/data-transfer-formats.md`](decisions/data-transfer-formats.md):
   selektive Vollsicherung, CSV-/PDF-Berichte und Importverhalten
+- [`decisions/home-screen-widget.md`](decisions/home-screen-widget.md):
+  Reiseübersicht und direkte Erfassungsaktionen auf dem Homescreen
 - [`technical-notes/editor-dialog-layout.md`](technical-notes/editor-dialog-layout.md):
   tastaturfester, wiederverwendbarer Aufbau für Eingabedialoge
 - [`technical-notes/emulator-test-images.md`](technical-notes/emulator-test-images.md):

@@ -181,4 +181,12 @@
     </plurals>
     <string name="transfer_error">Datentransfer fehlgeschlagen</string>
     <string name="transfer_error_message">Die gewählte Datei konnte nicht verarbeitet werden.</string>
+    <string name="widget_description">Reiseübersicht und schnelle Belegerfassung</string>
+    <string name="widget_no_trip">Noch keine Reise</string>
+    <string name="widget_rounded_total">%1$d €</string>
+    <string name="widget_exact_and_count">Exakt %1$s · %2$d Belege</string>
+    <string name="widget_photo">Foto</string>
+    <string name="widget_image">Bild</string>
+    <string name="widget_manual">Manuell</string>
+    <string name="widget_statement">Rechnung</string>
 </resources>

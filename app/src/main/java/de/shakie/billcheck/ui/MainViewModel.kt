@@ -1,6 +1,7 @@
 package de.shakie.billcheck.ui
 
 import android.app.Application
+import android.content.Context
 import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
@@ -23,6 +24,7 @@ import de.shakie.billcheck.data.OcrToken
 import de.shakie.billcheck.data.GeminiModelInfo
 import de.shakie.billcheck.data.ExportFormat
 import de.shakie.billcheck.data.ImportPreview
+import de.shakie.billcheck.BillCheckWidget
 import java.math.BigDecimal
 import java.math.RoundingMode
 import java.util.Locale
@@ -69,7 +71,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val localTextRecognizer = billCheckApplication.localTextRecognizer
     private val geminiModelCatalog = billCheckApplication.geminiModelCatalog
     private val dataTransferManager = billCheckApplication.dataTransferManager
-    private val selectedTripId = MutableStateFlow<String?>(null)
+    private val widgetPreferences = application.getSharedPreferences(
+        BillCheckWidget.SELECTED_TRIP_PREFERENCES,
+        Context.MODE_PRIVATE,
+    )
+    private val selectedTripId = MutableStateFlow(
+        widgetPreferences.getString(BillCheckWidget.SELECTED_TRIP_ID, null),
+    )
     private val _exchangeRateLookup = MutableStateFlow<ExchangeRateLookupState>(ExchangeRateLookupState.Idle)
     val exchangeRateLookup: StateFlow<ExchangeRateLookupState> = _exchangeRateLookup.asStateFlow()
     private val _candidateSelection = MutableStateFlow(CandidateSelectionState())
@@ -135,8 +143,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         MainUiState(),
     )
 
+    init {
+        viewModelScope.launch {
+            uiState.collect { BillCheckWidget.updateAll(application) }
+        }
+    }
+
     fun selectTrip(id: String) {
-        selectedTripId.value = id
+        setSelectedTrip(id)
     }
 
     fun createTrip(
@@ -156,7 +170,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 defaultTipMinor = defaultTipMinor,
                 defaultTipCurrencyCode = defaultTipCurrencyCode,
             )
-            selectedTripId.value = trip.id
+            setSelectedTrip(trip.id)
         }
     }
 
@@ -441,7 +455,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             runCatching { dataTransferManager.importSelected(sourceTripIds) }
                 .onSuccess { importedIds ->
-                    importedIds.firstOrNull()?.let { selectedTripId.value = it }
+                    importedIds.firstOrNull()?.let(::setSelectedTrip)
                     _transfer.value = TransferState.ImportSuccess(importedIds.size)
                 }
                 .onFailure { _transfer.value = TransferState.Error(it.message.orEmpty()) }
@@ -451,6 +465,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun clearTransferState() {
         if (_transfer.value is TransferState.ImportReady) dataTransferManager.clearPendingImport()
         _transfer.value = TransferState.Idle
+    }
+
+    private fun setSelectedTrip(id: String) {
+        selectedTripId.value = id
+        widgetPreferences.edit().putString(BillCheckWidget.SELECTED_TRIP_ID, id).apply()
+        BillCheckWidget.updateAll(getApplication())
     }
 
     fun createReconciliation(title: String, imageUri: String? = null) {

@@ -210,3 +210,16 @@
   `application/octet-stream`; der sichtbare Name bleibt exakt `.billcheck`.
 - CSV-Quoting und Roundtrip einschließlich Semikolon, Anführungszeichen,
   historischen Kursen und manueller Zuordnung per Unit-Test abgesichert.
+
+## 16.08.2026 – Homescreen-Widget
+
+- Native Widget-Übersicht für die zuletzt gewählte Reise ergänzt: prominent
+  aufgerundete Euro, centgenaue Summe und Belegzahl.
+- Schnellaktionen für Kamera, vorhandenes Bild, manuellen Beleg und
+  Rechnungsabgleich direkt mit den vorhandenen App-Abläufen verbunden.
+- Hell-/Dunkelfarben, öffnende Gesamtfläche, Room-Hintergrundzugriff und
+  Aktualisierung nach Daten- oder Reiseänderungen umgesetzt.
+- Widget im Android-16-Launcher hinzugefügt und mit echten lokalen Reisedaten
+  geprüft; alle vier Einstiege öffnen Kamera, Photo Picker, Belegeditor oder
+  Abgleichsverwaltung wie vorgesehen.
+- Unit-Tests und Android-Lint nach der Integration ohne Befund ausgeführt.

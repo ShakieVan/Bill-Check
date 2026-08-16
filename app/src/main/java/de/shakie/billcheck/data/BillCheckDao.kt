@@ -20,6 +20,9 @@ interface BillCheckDao {
     @Query("SELECT * FROM trips WHERE id IN (:tripIds) ORDER BY sortPosition")
     suspend fun getTrips(tripIds: List<String>): List<TripEntity>
 
+    @Query("SELECT * FROM trips ORDER BY sortPosition")
+    suspend fun getAllTrips(): List<TripEntity>
+
     @Query("SELECT name FROM trips")
     suspend fun getTripNames(): List<String>
 

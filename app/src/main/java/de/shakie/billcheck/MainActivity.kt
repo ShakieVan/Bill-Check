@@ -2,6 +2,7 @@ package de.shakie.billcheck
 
 import android.os.Bundle
 import android.net.Uri
+import android.content.Intent
 import androidx.activity.ComponentActivity
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
@@ -141,13 +142,18 @@ import java.util.Currency
 import java.util.Locale
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlin.math.roundToInt
 
 class MainActivity : ComponentActivity() {
+    private val widgetAction = MutableStateFlow<String?>(null)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        widgetAction.value = intent.action.takeIf(::isWidgetAction)
         enableEdgeToEdge()
         setContent {
+            val requestedWidgetAction by widgetAction.collectAsStateWithLifecycle()
             val preferences = remember {
                 getSharedPreferences("bill_check_preferences", MODE_PRIVATE)
             }
@@ -162,6 +168,8 @@ class MainActivity : ComponentActivity() {
             BillCheckTheme(darkTheme = darkTheme) {
                 BillCheckApp(
                     darkTheme = darkTheme,
+                    widgetAction = requestedWidgetAction,
+                    onWidgetActionConsumed = { widgetAction.value = null },
                     onDarkThemeChange = { useDarkTheme ->
                         darkTheme = useDarkTheme
                         preferences.edit().putBoolean("dark_theme", useDarkTheme).apply()
@@ -170,12 +178,28 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        widgetAction.value = intent.action.takeIf(::isWidgetAction)
+    }
+
+    private fun isWidgetAction(action: String?): Boolean = action in setOf(
+        BillCheckWidget.ACTION_OPEN,
+        BillCheckWidget.ACTION_PHOTO,
+        BillCheckWidget.ACTION_IMAGE,
+        BillCheckWidget.ACTION_MANUAL,
+        BillCheckWidget.ACTION_STATEMENT,
+    )
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun BillCheckApp(
     darkTheme: Boolean,
+    widgetAction: String?,
+    onWidgetActionConsumed: () -> Unit,
     onDarkThemeChange: (Boolean) -> Unit,
     viewModel: MainViewModel = viewModel(),
 ) {
@@ -283,6 +307,24 @@ private fun BillCheckApp(
     }
     val browseFolders = {
         documentLauncher.launch(OpenImageDocumentContract.BILL_CHECK_FOLDER)
+    }
+
+    LaunchedEffect(widgetAction) {
+        when (widgetAction) {
+            BillCheckWidget.ACTION_PHOTO -> {
+                imageTargetReceiptId = null
+                imageTargetHadLinkedImage = false
+                takePhoto()
+            }
+            BillCheckWidget.ACTION_IMAGE -> {
+                imageTargetReceiptId = null
+                imageTargetHadLinkedImage = false
+                chooseImage()
+            }
+            BillCheckWidget.ACTION_MANUAL -> showManualReceipt = true
+            BillCheckWidget.ACTION_STATEMENT -> showReconciliations = true
+        }
+        if (widgetAction != null) onWidgetActionConsumed()
     }
 
     ModalNavigationDrawer(
