@@ -64,6 +64,9 @@ Stand: 16.08.2026
   und ausdrücklich bestätigt.
 - Verknüpfte Bilder werden in der Belegliste als Miniatur angezeigt und können
   dort ersetzt oder vom Eintrag gelöst werden.
+- Im Belegeditor öffnet ein Tipp auf die Miniatur eine bildschirmfüllende
+  Ansicht mit Pinch-Zoom, Verschieben und Doppeltipp-Zoom. Ein eigener
+  „Bearbeiten“-Button trennt diese Prüfung klar von Ersetzen und Entknüpfen.
 - Kamera und Photo Picker sind auch direkt im Editor neuer und bestehender
   Belege erreichbar. Noch nicht gespeicherte Felder und Posten bleiben beim
   Wechsel zur Bildprüfung erhalten.

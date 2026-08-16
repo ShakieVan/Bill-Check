@@ -3,6 +3,7 @@ package de.shakie.billcheck.ui
 import android.app.Application
 import android.content.Context
 import android.net.Uri
+import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import de.shakie.billcheck.BillCheckApplication
@@ -452,6 +453,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             runCatching { localTextRecognizer.recognize(Uri.parse(imageUri)) }
                 .onSuccess { _localOcr.value = LocalOcrState.Success(imageUri, it) }
                 .onFailure {
+                    Log.e("BillCheckOcr", "Offline text recognition failed", it)
                     _localOcr.value = LocalOcrState.Error(
                         imageUri,
                         it.message?.take(300).orEmpty(),

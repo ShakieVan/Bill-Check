@@ -48,7 +48,9 @@
     <string name="close_image_review">Abbrechen</string>
     <string name="receipt_image">Belegbild</string>
     <string name="image_linked">Bild verknüpft</string>
-    <string name="tap_to_review_image">Antippen zum Prüfen, Ersetzen oder Entfernen</string>
+    <string name="edit">Bearbeiten</string>
+    <string name="tap_image_to_enlarge">Bild zum Vergrößern antippen</string>
+    <string name="fullscreen_image_zoom_hint">Mit zwei Fingern zoomen · Doppeltippen zum Vergrößern</string>
     <string name="no_image_linked">Noch kein Bild mit diesem Beleg verknüpft.</string>
     <string name="analyze_image">Bild auswerten</string>
     <string name="image_analysis">Bildauswertung</string>

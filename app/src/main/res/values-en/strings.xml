@@ -48,7 +48,9 @@
     <string name="close_image_review">Cancel</string>
     <string name="receipt_image">Receipt image</string>
     <string name="image_linked">Image linked</string>
-    <string name="tap_to_review_image">Tap to review, replace, or remove</string>
+    <string name="edit">Edit</string>
+    <string name="tap_image_to_enlarge">Tap image to enlarge</string>
+    <string name="fullscreen_image_zoom_hint">Pinch to zoom · Double-tap to enlarge</string>
     <string name="no_image_linked">No image is linked to this receipt yet.</string>
     <string name="analyze_image">Analyze image</string>
     <string name="image_analysis">Image analysis</string>

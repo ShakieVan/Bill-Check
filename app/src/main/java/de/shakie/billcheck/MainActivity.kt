@@ -126,6 +126,7 @@ import de.shakie.billcheck.ui.OpenImageDocumentContract
 import de.shakie.billcheck.ui.ReceiptItemDraft
 import de.shakie.billcheck.ui.ReceiptImageReview
 import de.shakie.billcheck.ui.ReceiptThumbnail
+import de.shakie.billcheck.ui.FullscreenReceiptImage
 import de.shakie.billcheck.ui.ExchangeRateLookupState
 import de.shakie.billcheck.ui.AiExtractionState
 import de.shakie.billcheck.ui.LocalOcrState
@@ -1906,6 +1907,7 @@ private fun ReceiptEditorDialog(
         mutableStateOf(existing?.receipt?.tipMinor?.let { it > 0 } ?: trip.defaultTipSelected)
     }
     var invalid by remember(stateKey) { mutableStateOf(false) }
+    var showFullscreenImage by remember(stateKey, imageUri) { mutableStateOf(false) }
     val initialItems = existing?.items
         ?.sortedBy { it.sortPosition }
         ?.mapIndexed { index, item ->
@@ -1957,6 +1959,7 @@ private fun ReceiptEditorDialog(
     ) {
                 ReceiptEditorImageSection(
                     imageUri = imageUri,
+                    onPreviewImage = { showFullscreenImage = true },
                     onTakePhoto = onTakePhoto,
                     onChooseImage = onChooseImage,
                     onBrowseFolders = onBrowseFolders,
@@ -2124,11 +2127,18 @@ private fun ReceiptEditorDialog(
                 }
                 Spacer(Modifier.height(24.dp))
     }
+    if (showFullscreenImage && imageUri != null) {
+        FullscreenReceiptImage(
+            imageUri = imageUri,
+            onDismiss = { showFullscreenImage = false },
+        )
+    }
 }
 
 @Composable
 private fun ReceiptEditorImageSection(
     imageUri: String?,
+    onPreviewImage: () -> Unit,
     onTakePhoto: () -> Unit,
     onChooseImage: () -> Unit,
     onBrowseFolders: () -> Unit,
@@ -2146,14 +2156,15 @@ private fun ReceiptEditorImageSection(
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(18.dp))
-                .clickable(onClick = onOpenImage)
                 .background(MaterialTheme.colorScheme.surfaceVariant)
                 .padding(10.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             ReceiptThumbnail(
                 imageUri = imageUri,
-                modifier = Modifier.size(84.dp),
+                modifier = Modifier
+                    .size(84.dp)
+                    .clickable(onClick = onPreviewImage),
             )
             Column(Modifier.padding(start = 12.dp).weight(1f)) {
                 Text(
@@ -2161,10 +2172,18 @@ private fun ReceiptEditorImageSection(
                     fontWeight = FontWeight.SemiBold,
                 )
                 Text(
-                    stringResource(R.string.tap_to_review_image),
+                    stringResource(R.string.tap_image_to_enlarge),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+                TextButton(
+                    onClick = onOpenImage,
+                    contentPadding = PaddingValues(horizontal = 0.dp),
+                ) {
+                    Icon(Icons.Default.Edit, contentDescription = null)
+                    Spacer(Modifier.width(4.dp))
+                    Text(stringResource(R.string.edit))
+                }
             }
         }
     } else {

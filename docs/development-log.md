@@ -273,3 +273,20 @@
   Android-Lint und minifiziertem Release-Build ausgeführt. Die signierte APK
   anschließend im Android-16-Emulator installiert, gestartet und ohne
   `AndroidRuntime`-Absturz kontrolliert.
+
+## 16.08.2026 – Vollbildprüfung und OCR-Releasekorrektur
+
+- Den vom Galaxy S24 Ultra geholten privaten Screenshot außerhalb des
+  Repositorys ausgewertet. Er zeigte eine interne Nullreferenz der lokalen
+  Texterkennung im minifizierten Release-Build.
+- OCR-Bilder nun in hoher, speicherbegrenzter Auflösung über Androids
+  `ImageDecoder` vorbereitet und Fehler mit vollständigem Stack protokolliert.
+- Den Stack über das R8-Mapping bis zu einer fehlerhaft zusammengeführten
+  internen ML-Kit-Telemetrieklasse zurückverfolgt und den betroffenen
+  ML-Kit-Bereich durch gezielte Keep-Regeln geschützt.
+- Fehler mit demselben privaten Beleg in der signierten Release-APK auf dem
+  S24 Ultra reproduziert und nach der Korrektur erfolgreich gegengeprüft:
+  Textbausteine und Zielfelder sichtbar, keine OCR-Fehlermeldung.
+- Belegminiatur und Bildverwaltung getrennt: Miniatur öffnet nun eine
+  bildschirmfüllende Ansicht mit 1–5-fachem Pinch-Zoom, Verschieben und
+  Doppeltipp; „Bearbeiten“ führt weiterhin zu Ersetzen und Entknüpfen.
