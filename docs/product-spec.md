@@ -45,6 +45,10 @@ Stand: 16.08.2026
 - App-Löschen trennt standardmäßig nur die Verknüpfung und lässt das
   Galerieoriginal bestehen.
 - Galerieimporte werden nicht dupliziert.
+- Jede Aufnahme und Auswahl wird vor dem Anlegen des Eintrags groß angezeigt
+  und ausdrücklich bestätigt.
+- Verknüpfte Bilder werden in der Belegliste als Miniatur angezeigt und können
+  dort ersetzt oder vom Eintrag gelöst werden.
 
 ## Belegposten
 

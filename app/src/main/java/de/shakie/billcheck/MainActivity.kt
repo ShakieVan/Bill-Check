@@ -1,10 +1,15 @@
 package de.shakie.billcheck
 
 import android.os.Bundle
+import android.net.Uri
 import androidx.activity.ComponentActivity
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -63,10 +68,12 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -75,12 +82,15 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import de.shakie.billcheck.data.ReceiptEntity
+import de.shakie.billcheck.data.ReceiptImageStorage
 import de.shakie.billcheck.data.ReceiptWithItems
 import de.shakie.billcheck.data.TripEntity
 import de.shakie.billcheck.domain.MoneyCalculator
 import de.shakie.billcheck.ui.MainUiState
 import de.shakie.billcheck.ui.MainViewModel
 import de.shakie.billcheck.ui.ReceiptItemDraft
+import de.shakie.billcheck.ui.ReceiptImageReview
+import de.shakie.billcheck.ui.ReceiptThumbnail
 import de.shakie.billcheck.ui.ExchangeRateLookupState
 import de.shakie.billcheck.ui.theme.BillCheckTheme
 import java.math.BigDecimal
@@ -110,11 +120,50 @@ class MainActivity : ComponentActivity() {
 private fun BillCheckApp(viewModel: MainViewModel = viewModel()) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val exchangeRateLookup by viewModel.exchangeRateLookup.collectAsStateWithLifecycle()
+    val context = LocalContext.current
+    val imageStorage = remember { ReceiptImageStorage(context) }
     var showCreateTrip by remember { mutableStateOf(false) }
     var showManualReceipt by remember { mutableStateOf(false) }
+    var pendingCameraUriString by rememberSaveable { mutableStateOf<String?>(null) }
+    var pendingImageUriString by rememberSaveable { mutableStateOf<String?>(null) }
+    var imageTargetReceiptId by rememberSaveable { mutableStateOf<String?>(null) }
+    val pendingCameraUri = pendingCameraUriString?.let(Uri::parse)
+    val pendingImageUri = pendingImageUriString?.let(Uri::parse)
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
-    val comingSoon = stringResource(R.string.not_yet_available)
+    val cameraError = stringResource(R.string.camera_start_failed)
+
+    val cameraLauncher = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { saved ->
+        pendingCameraUri?.let { uri ->
+            if (saved || imageStorage.hasImageData(uri)) {
+                runCatching { imageStorage.publishCameraImage(uri) }
+                pendingImageUriString = uri.toString()
+            } else {
+                runCatching { imageStorage.discardFailedCameraImage(uri) }
+            }
+        }
+        pendingCameraUriString = null
+    }
+    val galleryLauncher = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+        uri?.let {
+            imageStorage.persistPickedImageAccess(it)
+            pendingImageUriString = it.toString()
+        }
+    }
+    val takePhoto = {
+        runCatching { imageStorage.createCameraImage() }
+            .onSuccess { uri ->
+                pendingCameraUriString = uri.toString()
+                cameraLauncher.launch(uri)
+            }
+            .onFailure { scope.launch { snackbar.showSnackbar(cameraError) } }
+        Unit
+    }
+    val chooseImage = {
+        galleryLauncher.launch(
+            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly),
+        )
+    }
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbar) },
@@ -134,7 +183,32 @@ private fun BillCheckApp(viewModel: MainViewModel = viewModel()) {
             )
         },
     ) { padding ->
-        if (state.trips.isEmpty()) {
+        if (pendingImageUri != null) {
+            ReceiptImageReview(
+                imageUri = requireNotNull(pendingImageUri),
+                modifier = Modifier.padding(padding),
+                onTakeAnother = takePhoto,
+                onChooseAnother = chooseImage,
+                onUseImage = {
+                    imageTargetReceiptId?.let { receiptId ->
+                        viewModel.updateReceiptImage(receiptId, requireNotNull(pendingImageUriString))
+                        pendingImageUriString = null
+                        imageTargetReceiptId = null
+                    } ?: run { showManualReceipt = true }
+                },
+                onClose = {
+                    pendingImageUriString = null
+                    imageTargetReceiptId = null
+                },
+                onUnlink = imageTargetReceiptId?.let { receiptId ->
+                    {
+                        viewModel.updateReceiptImage(receiptId, null)
+                        pendingImageUriString = null
+                        imageTargetReceiptId = null
+                    }
+                },
+            )
+        } else if (state.trips.isEmpty()) {
             EmptyTrips(
                 modifier = Modifier.padding(padding),
                 onCreate = { showCreateTrip = true },
@@ -146,8 +220,18 @@ private fun BillCheckApp(viewModel: MainViewModel = viewModel()) {
                 onSelectTrip = viewModel::selectTrip,
                 onCreateTrip = { showCreateTrip = true },
                 onManualReceipt = { showManualReceipt = true },
-                onCamera = { scope.launch { snackbar.showSnackbar(comingSoon) } },
-                onGallery = { scope.launch { snackbar.showSnackbar(comingSoon) } },
+                onCamera = {
+                    imageTargetReceiptId = null
+                    takePhoto()
+                },
+                onGallery = {
+                    imageTargetReceiptId = null
+                    chooseImage()
+                },
+                onOpenReceiptImage = { receipt ->
+                    imageTargetReceiptId = receipt.id
+                    pendingImageUriString = receipt.imageUri
+                },
                 onDeleteReceipt = viewModel::deleteReceipt,
             )
         }
@@ -176,8 +260,19 @@ private fun BillCheckApp(viewModel: MainViewModel = viewModel()) {
                 trip = trip,
                 onDismiss = { showManualReceipt = false },
                 onSave = { location, check, amount, tip, itemDrafts ->
-                    viewModel.addReceipt(location, check, amount, tip, itemDrafts).also { saved ->
-                        if (saved) showManualReceipt = false
+                    viewModel.addReceipt(
+                        location,
+                        check,
+                        amount,
+                        tip,
+                        itemDrafts,
+                        pendingImageUri?.toString(),
+                    ).also { saved ->
+                        if (saved) {
+                            showManualReceipt = false
+                            pendingImageUriString = null
+                            imageTargetReceiptId = null
+                        }
                     }
                 },
             )
@@ -230,6 +325,7 @@ private fun Dashboard(
     onManualReceipt: () -> Unit,
     onCamera: () -> Unit,
     onGallery: () -> Unit,
+    onOpenReceiptImage: (ReceiptEntity) -> Unit,
     onDeleteReceipt: (ReceiptEntity) -> Unit,
 ) {
     LazyColumn(
@@ -280,7 +376,7 @@ private fun Dashboard(
             }
         } else {
             items(state.receipts, key = { it.receipt.id }) { receipt ->
-                ReceiptCard(receipt, onDeleteReceipt)
+                ReceiptCard(receipt, onDeleteReceipt, onOpenReceiptImage)
             }
         }
     }
@@ -401,6 +497,7 @@ private fun ReceiptActions(onCamera: () -> Unit, onGallery: () -> Unit, onManual
 private fun ReceiptCard(
     receiptWithItems: ReceiptWithItems,
     onDelete: (ReceiptEntity) -> Unit,
+    onOpenImage: (ReceiptEntity) -> Unit,
 ) {
     val receipt = receiptWithItems.receipt
     val exactCents = MoneyCalculator.exactEuroCents(receipt)
@@ -410,6 +507,15 @@ private fun ReceiptCard(
             modifier = Modifier.fillMaxWidth().padding(16.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
+            receipt.imageUri?.let { imageUri ->
+                ReceiptThumbnail(
+                    imageUri = imageUri,
+                    modifier = Modifier
+                        .size(72.dp)
+                        .clickable { onOpenImage(receipt) },
+                )
+                Spacer(Modifier.width(12.dp))
+            }
             Column(Modifier.weight(1f)) {
                 Text(
                     receipt.location.ifBlank { stringResource(R.string.add_receipt) },

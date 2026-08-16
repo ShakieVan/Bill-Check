@@ -48,6 +48,9 @@ interface BillCheckDao {
     @Update
     suspend fun updateReceipt(receipt: ReceiptEntity)
 
+    @Query("UPDATE receipts SET imageUri = :imageUri WHERE id = :receiptId")
+    suspend fun updateReceiptImage(receiptId: String, imageUri: String?)
+
     @Delete
     suspend fun deleteReceipt(receipt: ReceiptEntity)
 

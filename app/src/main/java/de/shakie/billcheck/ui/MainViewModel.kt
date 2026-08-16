@@ -123,6 +123,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         foreignAmountText: String,
         addDefaultTip: Boolean,
         itemDrafts: List<ReceiptItemDraft>,
+        imageUri: String? = null,
     ): Boolean {
         val trip = uiState.value.selectedTrip ?: return false
         val input = parseReceiptInput(foreignAmountText, itemDrafts) ?: return false
@@ -142,6 +143,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 addDefaultTip = addDefaultTip,
                 items = input.items,
                 exchangeRate = receiptRate,
+                imageUri = imageUri,
             )
         }
         return true
@@ -149,6 +151,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun deleteReceipt(receipt: ReceiptEntity) {
         viewModelScope.launch { repository.deleteReceipt(receipt) }
+    }
+
+    fun updateReceiptImage(receiptId: String, imageUri: String?) {
+        viewModelScope.launch { repository.updateReceiptImage(receiptId, imageUri) }
     }
 
     companion object {

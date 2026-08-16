@@ -60,3 +60,26 @@
   ohne Datenverlust verifiziert.
 - GitHub Actions nach der Node-20-Abkündigung auf die aktuellen Hauptversionen
   von Checkout, Java-Setup und Gradle-Setup angehoben.
+
+## 16.08.2026 – Kamera- und Galeriefluss
+
+- Systemkamera schreibt Aufnahmen ohne App-Kameraberechtigung in das sichtbare
+  Galeriealbum `Bill Check`.
+- Android Photo Picker für vorhandene Bilder integriert; Importe bleiben an
+  ihrem Ort und werden nicht dupliziert.
+- Native Prüfansicht mit Neuaufnahme, anderer Auswahl, bewusster Bestätigung
+  und Rückkehr ohne Verknüpfung ergänzt.
+- Bild-URI wird gemeinsam mit dem Beleg gespeichert und als Miniatur in der
+  Übersicht dargestellt.
+- Verknüpfte Bilder lassen sich ersetzen oder entknüpfen; das Galerieoriginal
+  bleibt dabei nachweislich erhalten.
+- URI-Zustand gegen Activity-Neuerstellung abgesichert.
+
+### Erkenntnis und behobener Fehlversuch
+
+- Ein zunächst verwendeter `IS_PENDING`-MediaStore-Eintrag ließ sich auf
+  Android 16 von der externen Systemkamera beim Bestätigen nicht erneut öffnen.
+  Der Emulator reproduzierte die Eigentümerprüfung bis zum Kameraprozess-
+  Absturz. Bill Check veröffentlicht den leeren Ziel-Eintrag daher vor dem
+  Kameraaufruf und entfernt ihn bei Abbruch; Aufnahme, Prüfansicht und
+  Galerieerhalt wurden anschließend vollständig durchgespielt.

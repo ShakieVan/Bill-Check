@@ -47,6 +47,7 @@ class BillCheckRepository(database: BillCheckDatabase) {
         addDefaultTip: Boolean,
         items: List<NewReceiptItem> = emptyList(),
         exchangeRate: String = trip.defaultExchangeRate,
+        imageUri: String? = null,
         occurredAt: Long = System.currentTimeMillis(),
     ) {
         val now = System.currentTimeMillis()
@@ -69,7 +70,7 @@ class BillCheckRepository(database: BillCheckDatabase) {
                 ),
                 tipMinor = tipMinor,
                 tipCurrencyCode = trip.defaultTipCurrencyCode,
-                imageUri = null,
+                imageUri = imageUri,
                 reviewState = "CONFIRMED",
                 createdAt = now,
             )
@@ -90,4 +91,7 @@ class BillCheckRepository(database: BillCheckDatabase) {
     }
 
     suspend fun deleteReceipt(receipt: ReceiptEntity) = dao.deleteReceipt(receipt)
+
+    suspend fun updateReceiptImage(receiptId: String, imageUri: String?) =
+        dao.updateReceiptImage(receiptId, imageUri)
 }
