@@ -143,3 +143,24 @@
   Textfeldern eingebaut; Betrag und Checknummer bleiben unverändert.
 - Ordnerauswahl bis zur Bildprüfansicht sowie beide Vorschlagsmenüs im
   Android-16-Emulator geprüft.
+
+## 16.08.2026 – Zwischen- und Endrechnungsabgleich
+
+- Unabhängige Abgleichsläufe pro Zwischen- oder Endrechnung mit optionalem
+  Rechnungsbild und beliebig vielen editierbaren Rechnungszeilen ergänzt.
+- Checknummern für den Vergleich normalisiert, damit insbesondere führende
+  Nullen und Trennzeichen auf der Hotelrechnung nicht stören.
+- Automatischen sicheren Treffer auf identische Checknummer, Währung und
+  Betrag begrenzt; schwächere Kandidaten werden nach Checknummer, Betrag,
+  Datum und Ort für die manuelle Auswahl gerankt.
+- Datenbankseitige 1:1-Zuordnung eingeführt. Bereits in einem anderen Lauf
+  zugeordnete Belege werden nicht erneut angeboten oder automatisch benutzt.
+- Statusdarstellung in Grün (korrekt/akzeptiert), Gelb (unsicher), Orange
+  (Betragsabweichung) und Rot (nicht gefunden) umgesetzt.
+- Manuelles Zuordnen, Ändern und Lösen sowie „bekannt/akzeptiert“, komplettes
+  Zurücksetzen, erneuter Abgleich und kaskadierendes Löschen eines Laufs
+  ergänzt.
+- Room-Schema 2→3 migriert und Matcher mit Unit-Tests abgesichert.
+- Den kompletten Bedienweg im Android-16-Emulator mit Bestandsbelegen geprüft:
+  Lauf und Zeile anlegen, Kandidatenranking, unsichere Zuordnung, Reset,
+  Akzeptieren und bestätigtes Löschen.

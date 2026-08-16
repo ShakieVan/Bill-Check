@@ -102,6 +102,51 @@ interface BillCheckDao {
     @Delete
     suspend fun deleteReceipt(receipt: ReceiptEntity)
 
+    @Transaction
+    @Query("SELECT * FROM reconciliations WHERE tripId = :tripId ORDER BY createdAt DESC")
+    fun observeReconciliations(tripId: String): Flow<List<ReconciliationWithLines>>
+
+    @Insert(onConflict = OnConflictStrategy.ABORT)
+    suspend fun insertReconciliation(reconciliation: ReconciliationEntity)
+
+    @Insert(onConflict = OnConflictStrategy.ABORT)
+    suspend fun insertStatementLine(line: StatementLineEntity)
+
+    @Update
+    suspend fun updateStatementLine(line: StatementLineEntity)
+
+    @Delete
+    suspend fun deleteStatementLine(line: StatementLineEntity)
+
+    @Query("UPDATE reconciliations SET title = :title, statementImageUri = :imageUri WHERE id = :reconciliationId")
+    suspend fun updateReconciliation(reconciliationId: String, title: String, imageUri: String?)
+
+    @Query("SELECT * FROM receipts WHERE tripId = :tripId ORDER BY occurredAt DESC, createdAt DESC")
+    suspend fun getReceipts(tripId: String): List<ReceiptEntity>
+
+    @Query(
+        "SELECT receipt_matches.* FROM receipt_matches " +
+            "INNER JOIN statement_lines ON statement_lines.id = receipt_matches.statementLineId " +
+            "INNER JOIN reconciliations ON reconciliations.id = statement_lines.reconciliationId " +
+            "WHERE reconciliations.tripId = :tripId",
+    )
+    suspend fun getTripMatches(tripId: String): List<ReceiptMatchEntity>
+
+    @Query("DELETE FROM receipt_matches WHERE statementLineId = :statementLineId OR receiptId = :receiptId")
+    suspend fun clearConflictingMatches(statementLineId: String, receiptId: String)
+
+    @Insert(onConflict = OnConflictStrategy.ABORT)
+    suspend fun insertReceiptMatch(match: ReceiptMatchEntity)
+
+    @Transaction
+    suspend fun replaceReceiptMatch(match: ReceiptMatchEntity) {
+        clearConflictingMatches(match.statementLineId, match.receiptId)
+        insertReceiptMatch(match)
+    }
+
+    @Query("DELETE FROM receipt_matches WHERE statementLineId = :statementLineId")
+    suspend fun deleteStatementLineMatch(statementLineId: String)
+
     @Query("DELETE FROM receipt_matches WHERE statementLineId IN (SELECT id FROM statement_lines WHERE reconciliationId = :reconciliationId)")
     suspend fun resetMatches(reconciliationId: String)
 

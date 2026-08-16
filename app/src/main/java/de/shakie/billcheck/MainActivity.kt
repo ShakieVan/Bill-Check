@@ -117,6 +117,7 @@ import de.shakie.billcheck.ui.ReceiptItemDraft
 import de.shakie.billcheck.ui.ReceiptImageReview
 import de.shakie.billcheck.ui.ReceiptThumbnail
 import de.shakie.billcheck.ui.ExchangeRateLookupState
+import de.shakie.billcheck.ui.ReconciliationManagerDialog
 import de.shakie.billcheck.ui.theme.BillCheckTheme
 import androidx.compose.foundation.isSystemInDarkTheme
 import java.math.BigDecimal
@@ -168,6 +169,7 @@ private fun BillCheckApp(
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val exchangeRateLookup by viewModel.exchangeRateLookup.collectAsStateWithLifecycle()
+    val candidateSelection by viewModel.candidateSelection.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val imageStorage = remember { ReceiptImageStorage(context) }
     var showCreateTrip by remember { mutableStateOf(false) }
@@ -177,11 +179,14 @@ private fun BillCheckApp(
     var showAppMenu by remember { mutableStateOf(false) }
     var showSettings by remember { mutableStateOf(false) }
     var showAnalysisInfo by remember { mutableStateOf(false) }
+    var showReconciliations by remember { mutableStateOf(false) }
     var pendingCameraUriString by rememberSaveable { mutableStateOf<String?>(null) }
     var pendingImageUriString by rememberSaveable { mutableStateOf<String?>(null) }
     var draftReceiptImageUriString by rememberSaveable { mutableStateOf<String?>(null) }
     var imageTargetReceiptId by rememberSaveable { mutableStateOf<String?>(null) }
     var imageTargetHadLinkedImage by rememberSaveable { mutableStateOf(false) }
+    var imageTargetReconciliationId by rememberSaveable { mutableStateOf<String?>(null) }
+    var reconciliationReturnId by rememberSaveable { mutableStateOf<String?>(null) }
     val pendingCameraUri = pendingCameraUriString?.let(Uri::parse)
     val pendingImageUri = pendingImageUriString?.let(Uri::parse)
     val snackbar = remember { SnackbarHostState() }
@@ -201,15 +206,19 @@ private fun BillCheckApp(
         pendingCameraUriString = null
     }
     val galleryLauncher = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
-        uri?.let {
-            imageStorage.persistPickedImageAccess(it)
-            pendingImageUriString = it.toString()
+        if (uri != null) {
+            imageStorage.persistPickedImageAccess(uri)
+            pendingImageUriString = uri.toString()
+        } else if (imageTargetReconciliationId != null) {
+            showReconciliations = true
         }
     }
     val documentLauncher = rememberLauncherForActivityResult(OpenImageDocumentContract()) { uri ->
-        uri?.let {
-            imageStorage.persistPickedImageAccess(it)
-            pendingImageUriString = it.toString()
+        if (uri != null) {
+            imageStorage.persistPickedImageAccess(uri)
+            pendingImageUriString = uri.toString()
+        } else if (imageTargetReconciliationId != null) {
+            showReconciliations = true
         }
     }
     val takePhoto = {
@@ -331,20 +340,39 @@ private fun BillCheckApp(
                 onChooseAnother = chooseImage,
                 onBrowseFolders = browseFolders,
                 onUseImage = {
-                    imageTargetReceiptId?.let { receiptId ->
-                        viewModel.updateReceiptImage(receiptId, requireNotNull(pendingImageUriString))
-                    } ?: run {
-                        draftReceiptImageUriString = pendingImageUriString
-                        showManualReceipt = true
+                    when {
+                        imageTargetReceiptId != null -> viewModel.updateReceiptImage(
+                            requireNotNull(imageTargetReceiptId),
+                            requireNotNull(pendingImageUriString),
+                        )
+                        imageTargetReconciliationId != null -> {
+                            state.reconciliations.firstOrNull {
+                                it.reconciliation.id == imageTargetReconciliationId
+                            }?.reconciliation?.let {
+                                viewModel.updateReconciliation(
+                                    it.id,
+                                    it.title,
+                                    requireNotNull(pendingImageUriString),
+                                )
+                            }
+                            showReconciliations = true
+                        }
+                        else -> {
+                            draftReceiptImageUriString = pendingImageUriString
+                            showManualReceipt = true
+                        }
                     }
                     pendingImageUriString = null
                     imageTargetReceiptId = null
+                    imageTargetReconciliationId = null
                     imageTargetHadLinkedImage = false
                 },
                 onClose = {
                     pendingImageUriString = null
                     imageTargetReceiptId = null
+                    imageTargetReconciliationId = null
                     imageTargetHadLinkedImage = false
+                    if (reconciliationReturnId != null) showReconciliations = true
                 },
                 onUnlink = when {
                     imageTargetReceiptId != null && imageTargetHadLinkedImage -> {
@@ -353,6 +381,19 @@ private fun BillCheckApp(
                             pendingImageUriString = null
                             imageTargetReceiptId = null
                             imageTargetHadLinkedImage = false
+                        }
+                    }
+                    imageTargetReconciliationId != null && imageTargetHadLinkedImage -> {
+                        {
+                            state.reconciliations.firstOrNull {
+                                it.reconciliation.id == imageTargetReconciliationId
+                            }?.reconciliation?.let {
+                                viewModel.updateReconciliation(it.id, it.title, null)
+                            }
+                            pendingImageUriString = null
+                            imageTargetReconciliationId = null
+                            imageTargetHadLinkedImage = false
+                            showReconciliations = true
                         }
                     }
                     pendingImageUriString == draftReceiptImageUriString -> {
@@ -396,6 +437,7 @@ private fun BillCheckApp(
                 },
                 onEditReceipt = { editingReceipt = it },
                 onDeleteReceipt = viewModel::deleteReceipt,
+                onOpenReconciliations = { showReconciliations = true },
                 )
             }
         }
@@ -569,6 +611,52 @@ private fun BillCheckApp(
             },
         )
     }
+
+    state.selectedTrip?.let { trip ->
+        if (showReconciliations && pendingImageUri == null) {
+            ReconciliationManagerDialog(
+                initialSelectedId = reconciliationReturnId,
+                reconciliations = state.reconciliations,
+                receipts = state.receipts,
+                defaultCurrencyCode = trip.foreignCurrencyCode,
+                candidateSelection = candidateSelection,
+                onDismiss = {
+                    showReconciliations = false
+                    reconciliationReturnId = null
+                    viewModel.clearCandidateSelection()
+                },
+                onCreate = viewModel::createReconciliation,
+                onUpdateHeader = viewModel::updateReconciliation,
+                onAddLine = viewModel::addStatementLine,
+                onUpdateLine = viewModel::updateStatementLine,
+                onDeleteLine = viewModel::deleteStatementLine,
+                onAcceptLine = viewModel::setStatementLineAccepted,
+                onLoadCandidates = viewModel::loadCandidates,
+                onClearCandidates = viewModel::clearCandidateSelection,
+                onAssignReceipt = viewModel::assignReceipt,
+                onClearLineMatch = viewModel::clearLineMatch,
+                onRun = viewModel::runReconciliation,
+                onReset = viewModel::resetReconciliation,
+                onDelete = viewModel::deleteReconciliation,
+                onOpenImage = { reconciliation ->
+                    reconciliationReturnId = reconciliation.reconciliation.id
+                    imageTargetReconciliationId = reconciliation.reconciliation.id
+                    imageTargetReceiptId = null
+                    imageTargetHadLinkedImage = true
+                    pendingImageUriString = reconciliation.reconciliation.statementImageUri
+                    showReconciliations = false
+                },
+                onChooseImage = { reconciliation ->
+                    reconciliationReturnId = reconciliation.reconciliation.id
+                    imageTargetReconciliationId = reconciliation.reconciliation.id
+                    imageTargetReceiptId = null
+                    imageTargetHadLinkedImage = reconciliation.reconciliation.statementImageUri != null
+                    showReconciliations = false
+                    chooseImage()
+                },
+            )
+        }
+    }
 }
 
 @Composable
@@ -737,6 +825,7 @@ private fun Dashboard(
     onOpenReceiptImage: (ReceiptEntity) -> Unit,
     onEditReceipt: (ReceiptWithItems) -> Unit,
     onDeleteReceipt: (ReceiptEntity) -> Unit,
+    onOpenReconciliations: () -> Unit,
 ) {
     LazyColumn(
         modifier = modifier.fillMaxSize(),
@@ -748,6 +837,13 @@ private fun Dashboard(
         }
         item {
             ReceiptActions(onCamera, onGallery, onBrowseFolders, onManualReceipt)
+        }
+        item {
+            OutlinedButton(onClick = onOpenReconciliations, modifier = Modifier.fillMaxWidth().height(50.dp)) {
+                Icon(Icons.Default.AutoAwesome, contentDescription = null)
+                Spacer(Modifier.width(8.dp))
+                Text(stringResource(R.string.check_statement))
+            }
         }
         item {
             Row(

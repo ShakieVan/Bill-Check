@@ -7,9 +7,13 @@ import de.shakie.billcheck.BillCheckApplication
 import de.shakie.billcheck.data.ReceiptEntity
 import de.shakie.billcheck.data.NewReceiptItem
 import de.shakie.billcheck.data.ReceiptWithItems
+import de.shakie.billcheck.data.ReconciliationWithLines
+import de.shakie.billcheck.data.StatementLineEntity
 import de.shakie.billcheck.data.TripEntity
+import de.shakie.billcheck.data.NewStatementLine
 import de.shakie.billcheck.domain.MoneyCalculator
 import de.shakie.billcheck.domain.ExchangeRateQuote
+import de.shakie.billcheck.domain.RankedReceiptCandidate
 import java.math.BigDecimal
 import java.math.RoundingMode
 import java.util.Locale
@@ -32,6 +36,13 @@ data class MainUiState(
     val roundedEuro: Long = 0,
     val locationSuggestions: List<String> = emptyList(),
     val itemNameSuggestions: List<String> = emptyList(),
+    val reconciliations: List<ReconciliationWithLines> = emptyList(),
+)
+
+data class CandidateSelectionState(
+    val lineId: String? = null,
+    val candidates: List<RankedReceiptCandidate> = emptyList(),
+    val loading: Boolean = false,
 )
 
 private data class ReceiptTextSuggestions(
@@ -47,6 +58,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val selectedTripId = MutableStateFlow<String?>(null)
     private val _exchangeRateLookup = MutableStateFlow<ExchangeRateLookupState>(ExchangeRateLookupState.Idle)
     val exchangeRateLookup: StateFlow<ExchangeRateLookupState> = _exchangeRateLookup.asStateFlow()
+    private val _candidateSelection = MutableStateFlow(CandidateSelectionState())
+    val candidateSelection: StateFlow<CandidateSelectionState> = _candidateSelection.asStateFlow()
 
     private val trips = repository.trips.stateIn(
         viewModelScope,
@@ -71,12 +84,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         } ?: flowOf(ReceiptTextSuggestions())
     }
 
+    private val reconciliations = selectedTrip.flatMapLatest { trip ->
+        trip?.let { repository.reconciliations(it.id) } ?: flowOf(emptyList())
+    }
+
     val uiState = combine(
         trips,
         selectedTrip,
         receipts,
         textSuggestions,
-    ) { currentTrips, currentTrip, currentReceipts, suggestions ->
+        reconciliations,
+    ) { currentTrips, currentTrip, currentReceipts, suggestions, currentReconciliations ->
         MainUiState(
             trips = currentTrips,
             selectedTrip = currentTrip,
@@ -85,6 +103,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             roundedEuro = MoneyCalculator.roundedUpTripEuro(currentReceipts.map { it.receipt }),
             locationSuggestions = suggestions.locations,
             itemNameSuggestions = suggestions.itemNames,
+            reconciliations = currentReconciliations,
         )
     }.stateIn(
         viewModelScope,
@@ -247,6 +266,98 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun updateReceiptImage(receiptId: String, imageUri: String?) {
         viewModelScope.launch { repository.updateReceiptImage(receiptId, imageUri) }
+    }
+
+    fun createReconciliation(title: String, imageUri: String? = null) {
+        val trip = uiState.value.selectedTrip ?: return
+        viewModelScope.launch { repository.createReconciliation(trip, title, imageUri) }
+    }
+
+    fun updateReconciliation(id: String, title: String, imageUri: String?) {
+        viewModelScope.launch { repository.updateReconciliation(id, title, imageUri) }
+    }
+
+    fun addStatementLine(
+        reconciliationId: String,
+        description: String,
+        checkNumber: String,
+        amountText: String,
+        currencyCode: String,
+        occurredOn: Long? = null,
+    ): Boolean {
+        val amountMinor = parseMinor(amountText)?.takeIf { it > 0 } ?: return false
+        viewModelScope.launch {
+            repository.addStatementLine(
+                reconciliationId,
+                NewStatementLine(description, checkNumber, amountMinor, currencyCode, occurredOn),
+            )
+        }
+        return true
+    }
+
+    fun updateStatementLine(
+        existing: StatementLineEntity,
+        description: String,
+        checkNumber: String,
+        amountText: String,
+        currencyCode: String,
+        occurredOn: Long? = null,
+    ): Boolean {
+        val amountMinor = parseMinor(amountText)?.takeIf { it > 0 } ?: return false
+        viewModelScope.launch {
+            repository.updateStatementLine(
+                existing,
+                NewStatementLine(description, checkNumber, amountMinor, currencyCode, occurredOn),
+            )
+        }
+        return true
+    }
+
+    fun deleteStatementLine(line: StatementLineEntity) {
+        viewModelScope.launch { repository.deleteStatementLine(line) }
+    }
+
+    fun setStatementLineAccepted(line: StatementLineEntity, accepted: Boolean) {
+        viewModelScope.launch { repository.setAccepted(line, accepted) }
+    }
+
+    fun loadCandidates(line: StatementLineEntity) {
+        val tripId = uiState.value.selectedTrip?.id ?: return
+        _candidateSelection.value = CandidateSelectionState(line.id, loading = true)
+        viewModelScope.launch {
+            val candidates = repository.rankCandidates(tripId, line)
+            if (_candidateSelection.value.lineId == line.id) {
+                _candidateSelection.value = CandidateSelectionState(line.id, candidates)
+            }
+        }
+    }
+
+    fun clearCandidateSelection() {
+        _candidateSelection.value = CandidateSelectionState()
+    }
+
+    fun assignReceipt(line: StatementLineEntity, receipt: ReceiptEntity) {
+        viewModelScope.launch {
+            repository.assignReceipt(line, receipt, manually = true)
+            clearCandidateSelection()
+        }
+    }
+
+    fun clearLineMatch(line: StatementLineEntity) {
+        viewModelScope.launch { repository.clearLineMatch(line) }
+    }
+
+    fun runReconciliation(reconciliation: ReconciliationWithLines) {
+        val tripId = uiState.value.selectedTrip?.id ?: return
+        viewModelScope.launch { repository.runAutomaticReconciliation(tripId, reconciliation) }
+    }
+
+    fun resetReconciliation(reconciliation: ReconciliationWithLines) {
+        viewModelScope.launch { repository.resetReconciliation(reconciliation) }
+    }
+
+    fun deleteReconciliation(reconciliationId: String) {
+        viewModelScope.launch { repository.deleteReconciliation(reconciliationId) }
     }
 
     companion object {
