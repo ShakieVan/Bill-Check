@@ -1309,7 +1309,7 @@ private fun ReceiptEditorImageSection(
         ) {
             Icon(Icons.Default.AutoAwesome, contentDescription = null)
             Spacer(Modifier.width(8.dp))
-            Text(stringResource(R.string.analyze_image_again))
+            Text(stringResource(R.string.analyze_image))
         }
     }
     HorizontalDivider(Modifier.padding(vertical = 4.dp))

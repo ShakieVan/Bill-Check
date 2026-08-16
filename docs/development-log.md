@@ -123,7 +123,7 @@
   Prüfansicht eindeutig bestätigt oder abgebrochen werden kann.
 - Editorzustand während Kamera, Photo Picker und Prüfansicht lebendig gehalten;
   noch nicht gespeicherte Feld- und Postenänderungen gehen nicht verloren.
-- Einstieg „Bild erneut auswerten“ für die spätere KI-/OCR-Pipeline ergänzt und
+- Neutralen Einstieg „Bild auswerten“ für die spätere KI-/OCR-Pipeline ergänzt und
   den noch ausstehenden Erkennungsbaustein transparent erläutert.
 - Hinzufügen, Rückkehr mit erhaltenem Textentwurf, erneute Prüfansicht,
   Entknüpfen und Wiederherstellung der Testdaten im Emulator durchgespielt.

@@ -46,7 +46,7 @@
     <string name="image_linked">Bild verknüpft</string>
     <string name="tap_to_review_image">Antippen zum Prüfen, Ersetzen oder Entfernen</string>
     <string name="no_image_linked">Noch kein Bild mit diesem Beleg verknüpft.</string>
-    <string name="analyze_image_again">Bild erneut auswerten</string>
+    <string name="analyze_image">Bild auswerten</string>
     <string name="image_analysis">Bildauswertung</string>
     <string name="image_analysis_coming_soon">Dieser Einstieg ist für die erneute KI- oder OCR-Auswertung vorbereitet. Die Erkennung selbst folgt in einem späteren Entwicklungsschritt.</string>
     <string name="image_unavailable">Bild nicht verfügbar</string>
