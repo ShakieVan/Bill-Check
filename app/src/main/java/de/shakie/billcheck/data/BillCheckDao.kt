@@ -5,6 +5,7 @@ import androidx.room.Delete
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import androidx.room.Transaction
 import androidx.room.Update
 import kotlinx.coroutines.flow.Flow
 
@@ -25,11 +26,24 @@ interface BillCheckDao {
     @Delete
     suspend fun deleteTrip(trip: TripEntity)
 
+    @Transaction
     @Query("SELECT * FROM receipts WHERE tripId = :tripId ORDER BY occurredAt DESC, createdAt DESC")
-    fun observeReceipts(tripId: String): Flow<List<ReceiptEntity>>
+    fun observeReceipts(tripId: String): Flow<List<ReceiptWithItems>>
 
     @Insert(onConflict = OnConflictStrategy.ABORT)
     suspend fun insertReceipt(receipt: ReceiptEntity)
+
+    @Insert(onConflict = OnConflictStrategy.ABORT)
+    suspend fun insertReceiptItems(items: List<ReceiptItemEntity>)
+
+    @Transaction
+    suspend fun insertReceiptWithItems(
+        receipt: ReceiptEntity,
+        items: List<ReceiptItemEntity>,
+    ) {
+        insertReceipt(receipt)
+        if (items.isNotEmpty()) insertReceiptItems(items)
+    }
 
     @Update
     suspend fun updateReceipt(receipt: ReceiptEntity)
@@ -43,4 +57,3 @@ interface BillCheckDao {
     @Query("DELETE FROM reconciliations WHERE id = :reconciliationId")
     suspend fun deleteReconciliation(reconciliationId: String)
 }
-

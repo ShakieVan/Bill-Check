@@ -9,6 +9,8 @@ Fehlschläge dauerhaft außerhalb einzelner Chats fest.
 - [`development-log.md`](development-log.md): chronologischer Arbeitsstand
 - [`decisions/android-and-data-foundation.md`](decisions/android-and-data-foundation.md):
   verbindliche Plattform- und Datenbasis
+- [`decisions/exchange-rate-provider.md`](decisions/exchange-rate-provider.md):
+  Online-Kursquelle, Tagescache und Offline-Fallback
 
 ## Ablage
 
@@ -23,4 +25,3 @@ Eine lokale Implementierungsentscheidung bleibt als kurzer Codekommentar im
 Code. Wissen, das mehrere Dateien oder spätere Arbeiten betrifft, wird als
 technische Notiz festgehalten. Eine bewusst gewählte und dauerhaft zu
 schützende Richtung wird als Entscheidung dokumentiert.
-

@@ -9,6 +9,13 @@
     <string name="trip_name">Trip name</string>
     <string name="foreign_currency">Foreign currency</string>
     <string name="exchange_rate">Rate: foreign currency for €1</string>
+    <string name="refresh_rate">Refresh exchange rate online</string>
+    <string name="exchange_rate_updated">Updated online: %1$s</string>
+    <string name="exchange_rate_cached">Cached online rate from %1$s</string>
+    <string name="rate_lookup_failed">Online rate unavailable. The manual value is retained.</string>
+    <string name="rate_attribution">Rates by ExchangeRate-API</string>
+    <string name="daily_exchange_rate">Use daily rate</string>
+    <string name="daily_exchange_rate_hint">Refresh online for each new receipt; offline uses the entered rate.</string>
     <string name="default_tip">Default tip</string>
     <string name="tip_currency">Tip currency</string>
     <string name="cancel">Cancel</string>
@@ -26,6 +33,17 @@
     <string name="location">Location / restaurant</string>
     <string name="check_number">Check number</string>
     <string name="amount_in_currency">Amount (%1$s)</string>
+    <string name="receipt_exchange_rate">1 EUR = %1$s %2$s</string>
+    <string name="receipt_items">Individual items</string>
+    <string name="item_number">Item %1$d</string>
+    <string name="item_name">Description</string>
+    <string name="item_amount">Amount (%1$s)</string>
+    <string name="add_item">Add item</string>
+    <string name="remove_item">Remove item</string>
+    <string name="more_receipt_items">+ %1$d more</string>
+    <string name="item_sum_used_as_total">The item total %1$s will be used as the receipt total.</string>
+    <string name="item_sum_matches">Item total matches: %1$s</string>
+    <string name="item_sum_differs">Item total %1$s · difference %2$s</string>
     <string name="add_default_tip">Add default tip</string>
     <string name="delete_receipt">Delete receipt</string>
     <string name="not_yet_available">Coming in the next development step.</string>

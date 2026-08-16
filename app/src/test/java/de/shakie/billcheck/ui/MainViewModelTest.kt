@@ -20,4 +20,39 @@ class MainViewModelTest {
     fun `blank input is rejected`() {
         assertNull(MainViewModel.parseMinor("  "))
     }
+
+    @Test
+    fun `item sum becomes receipt total when total is blank`() {
+        val input = MainViewModel.parseReceiptInput(
+            totalText = "",
+            drafts = listOf(
+                ReceiptItemDraft("Coffee", "120,50"),
+                ReceiptItemDraft("Water", "30,00"),
+            ),
+        )
+
+        assertEquals(15_050L, input?.totalMinor)
+        assertEquals(listOf("Coffee", "Water"), input?.items?.map { it.name })
+    }
+
+    @Test
+    fun `explicit total may differ from item sum`() {
+        val input = MainViewModel.parseReceiptInput(
+            totalText = "160,00",
+            drafts = listOf(ReceiptItemDraft("Food", "150,00")),
+        )
+
+        assertEquals(16_000L, input?.totalMinor)
+        assertEquals(15_000L, input?.items?.single()?.amountMinor)
+    }
+
+    @Test
+    fun `partially filled item is rejected`() {
+        assertNull(
+            MainViewModel.parseReceiptInput(
+                totalText = "100,00",
+                drafts = listOf(ReceiptItemDraft("Coffee", "")),
+            ),
+        )
+    }
 }
