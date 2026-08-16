@@ -24,6 +24,9 @@ Stand: 16.08.2026
 
 - Reisen haben einen Namen, eine unsichtbare Sortierposition, eine
   Fremdwährung, einen Standardwechselkurs sowie Standardtrinkgeld mit Währung.
+- Jede Reise kann über das Stift-Symbol in der Reiseliste bearbeitet werden.
+  Geänderte Währungs-, Kurs- und Trinkgeldvorgaben gelten für neue Belege;
+  bestehende Belege behalten ihre historischen Snapshots.
 - Die Reihenfolge ist per Drag-and-drop veränderbar. Sortierpositionen werden
   anschließend lückenlos neu vergeben.
 - Der erste Vorschlag lautet „Reise 1“.
@@ -95,6 +98,13 @@ Stand: 16.08.2026
 - Eine lokale OCR-Bausteinhilfe folgt nach dem stabilen Cloud- und
   Grundworkflow. Erkannte Textblöcke können dann durch Antippen oder Ziehen in
   Eingabefelder übernommen werden.
+
+## Darstellung
+
+- Beim ersten App-Start wird die aktuelle helle oder dunkle Systemdarstellung
+  als Anfangswert übernommen.
+- Danach ist Hell oder Dunkel ausdrücklich in den Einstellungen wählbar und
+  bleibt unabhängig von späteren Systemwechseln gespeichert.
 
 ## Sicherung und Export
 

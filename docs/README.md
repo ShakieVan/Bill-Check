@@ -13,6 +13,8 @@ Fehlschläge dauerhaft außerhalb einzelner Chats fest.
   Online-Kursquelle, Tagescache und Offline-Fallback
 - [`decisions/receipt-image-storage.md`](decisions/receipt-image-storage.md):
   Kamera, Photo Picker und getrennte Lebenszyklen von Galerie und App-Datensatz
+- [`technical-notes/editor-dialog-layout.md`](technical-notes/editor-dialog-layout.md):
+  tastaturfester, wiederverwendbarer Aufbau für Eingabedialoge
 
 ## Ablage
 

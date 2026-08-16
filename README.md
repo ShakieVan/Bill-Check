@@ -28,10 +28,11 @@ gespeicherte Belege und Übersichten vollständig nutzbar.
 - Room-Datenbank
 - App-ID `de.shakie.billcheck`
 
-Das erste lauffähige Fundament umfasst Reiseanlage, lokale Speicherung,
-manuelle Belegerfassung mit einzelnen Posten, automatische oder feste
-Wechselkurse, Löschen von Belegen und die festgelegte Rundungslogik. Kamera,
-KI-Erkennung und Rechnungsabgleich folgen iterativ.
+Das lauffähige Fundament umfasst Reiseanlage und -bearbeitung, lokale
+Speicherung, manuelle Belegerfassung mit editierbaren Einzelposten,
+automatische oder feste Wechselkurse, Kamera- und Galeriebelege, persistente
+Hell-/Dunkel-Darstellung sowie die festgelegte Rundungslogik. KI-Erkennung und
+Rechnungsabgleich folgen iterativ.
 
 ## Build
 

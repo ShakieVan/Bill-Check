@@ -98,3 +98,18 @@
 - Große Reise-Drop-down-Box aus der Übersicht entfernt. Reisen und „Neue
   Reise“ liegen nun im Burgermenü, der vorbereitete Einstellungseinstieg im
   Dreipunktmenü.
+
+## 16.08.2026 – Reisebearbeitung und Darstellung
+
+- Jede Reise im Burgermenü um ein klar zugängliches Stift-Symbol ergänzt.
+- Gemeinsamen Editor für neue und bestehende Reisen geschaffen; Name,
+  Fremdwährung, Offline-Kurs, Tageskurswahl und Trinkgeldvorgaben sind
+  bearbeitbar.
+- Historische Belegdaten bleiben bei geänderten Reisevorgaben unverändert.
+- Den Einstellungsplatzhalter durch eine persistente Hell-/Dunkel-Auswahl
+  ersetzt. Nur beim ersten Start dient die Systemdarstellung als Anfangswert.
+- Reise- und Belegeditor auf eine gemeinsame tastaturfeste Dialogbasis mit
+  festem Kopf, frei scrollbarer Feldfläche und festem Aktionsbereich
+  vereinheitlicht.
+- Reiseänderung, unveränderte Bestandsbelege, Scrollen bei sichtbarer
+  Bildschirmtastatur sowie beide Darstellungsmodi im Emulator geprüft.

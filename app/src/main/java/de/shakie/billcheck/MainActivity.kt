@@ -14,6 +14,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -35,6 +36,7 @@ import androidx.compose.material.icons.automirrored.filled.ReceiptLong
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.DeleteOutline
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.MoreVert
@@ -59,6 +61,7 @@ import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.NavigationDrawerItem
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -104,6 +107,7 @@ import de.shakie.billcheck.ui.ReceiptImageReview
 import de.shakie.billcheck.ui.ReceiptThumbnail
 import de.shakie.billcheck.ui.ExchangeRateLookupState
 import de.shakie.billcheck.ui.theme.BillCheckTheme
+import androidx.compose.foundation.isSystemInDarkTheme
 import java.math.BigDecimal
 import java.text.NumberFormat
 import java.time.Instant
@@ -119,8 +123,25 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
-            BillCheckTheme {
-                BillCheckApp()
+            val preferences = remember {
+                getSharedPreferences("bill_check_preferences", MODE_PRIVATE)
+            }
+            val initialSystemDarkTheme = isSystemInDarkTheme()
+            var darkTheme by rememberSaveable {
+                val savedDarkTheme = preferences.getBoolean("dark_theme", initialSystemDarkTheme)
+                if (!preferences.contains("dark_theme")) {
+                    preferences.edit().putBoolean("dark_theme", savedDarkTheme).apply()
+                }
+                mutableStateOf(savedDarkTheme)
+            }
+            BillCheckTheme(darkTheme = darkTheme) {
+                BillCheckApp(
+                    darkTheme = darkTheme,
+                    onDarkThemeChange = { useDarkTheme ->
+                        darkTheme = useDarkTheme
+                        preferences.edit().putBoolean("dark_theme", useDarkTheme).apply()
+                    },
+                )
             }
         }
     }
@@ -128,15 +149,21 @@ class MainActivity : ComponentActivity() {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun BillCheckApp(viewModel: MainViewModel = viewModel()) {
+private fun BillCheckApp(
+    darkTheme: Boolean,
+    onDarkThemeChange: (Boolean) -> Unit,
+    viewModel: MainViewModel = viewModel(),
+) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val exchangeRateLookup by viewModel.exchangeRateLookup.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val imageStorage = remember { ReceiptImageStorage(context) }
     var showCreateTrip by remember { mutableStateOf(false) }
+    var editingTrip by remember { mutableStateOf<TripEntity?>(null) }
     var showManualReceipt by remember { mutableStateOf(false) }
     var editingReceipt by remember { mutableStateOf<ReceiptWithItems?>(null) }
     var showAppMenu by remember { mutableStateOf(false) }
+    var showSettings by remember { mutableStateOf(false) }
     var pendingCameraUriString by rememberSaveable { mutableStateOf<String?>(null) }
     var pendingImageUriString by rememberSaveable { mutableStateOf<String?>(null) }
     var imageTargetReceiptId by rememberSaveable { mutableStateOf<String?>(null) }
@@ -146,7 +173,6 @@ private fun BillCheckApp(viewModel: MainViewModel = viewModel()) {
     val scope = rememberCoroutineScope()
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val cameraError = stringResource(R.string.camera_start_failed)
-    val comingSoon = stringResource(R.string.not_yet_available)
 
     val cameraLauncher = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { saved ->
         pendingCameraUri?.let { uri ->
@@ -207,6 +233,20 @@ private fun BillCheckApp(viewModel: MainViewModel = viewModel()) {
                     NavigationDrawerItem(
                         label = { Text(trip.name) },
                         selected = state.selectedTrip?.id == trip.id,
+                        badge = {
+                            IconButton(
+                                onClick = {
+                                    editingTrip = trip
+                                    scope.launch { drawerState.close() }
+                                },
+                            ) {
+                                Icon(
+                                    Icons.Default.Edit,
+                                    contentDescription = stringResource(R.string.edit_trip_named, trip.name),
+                                    tint = MaterialTheme.colorScheme.primary,
+                                )
+                            }
+                        },
                         onClick = {
                             viewModel.selectTrip(trip.id)
                             scope.launch { drawerState.close() }
@@ -260,7 +300,7 @@ private fun BillCheckApp(viewModel: MainViewModel = viewModel()) {
                                     text = { Text(stringResource(R.string.settings)) },
                                     onClick = {
                                         showAppMenu = false
-                                        scope.launch { snackbar.showSnackbar(comingSoon) }
+                                        showSettings = true
                                     },
                                 )
                             }
@@ -324,7 +364,7 @@ private fun BillCheckApp(viewModel: MainViewModel = viewModel()) {
     }
 
     if (showCreateTrip) {
-        CreateTripDialog(
+        TripEditorDialog(
             suggestedName = stringResource(R.string.trip_default_name),
             exchangeRateLookup = exchangeRateLookup,
             onLookupRate = viewModel::requestExchangeRate,
@@ -336,7 +376,45 @@ private fun BillCheckApp(viewModel: MainViewModel = viewModel()) {
                 viewModel.createTrip(name, currency, rate, useDailyRate, tipMinor, tipCurrency)
                 showCreateTrip = false
                 viewModel.clearExchangeRateLookup()
+                true
             },
+        )
+    }
+
+    editingTrip?.let { trip ->
+        TripEditorDialog(
+            existing = trip,
+            suggestedName = stringResource(R.string.trip_default_name),
+            exchangeRateLookup = exchangeRateLookup,
+            onLookupRate = viewModel::requestExchangeRate,
+            onDismiss = {
+                editingTrip = null
+                viewModel.clearExchangeRateLookup()
+            },
+            onSave = { name, currency, rate, useDailyRate, tipMinor, tipCurrency ->
+                viewModel.updateTrip(
+                    existing = trip,
+                    name = name,
+                    currencyCode = currency,
+                    exchangeRate = rate,
+                    useDailyRate = useDailyRate,
+                    defaultTipMinor = tipMinor,
+                    defaultTipCurrencyCode = tipCurrency,
+                ).also { saved ->
+                    if (saved) {
+                        editingTrip = null
+                        viewModel.clearExchangeRateLookup()
+                    }
+                }
+            },
+        )
+    }
+
+    if (showSettings) {
+        AppearanceSettingsDialog(
+            darkTheme = darkTheme,
+            onDarkThemeChange = onDarkThemeChange,
+            onDismiss = { showSettings = false },
         )
     }
 
@@ -382,6 +460,64 @@ private fun BillCheckApp(viewModel: MainViewModel = viewModel()) {
                 },
             )
         }
+    }
+}
+
+@Composable
+private fun AppearanceSettingsDialog(
+    darkTheme: Boolean,
+    onDarkThemeChange: (Boolean) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.settings)) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    stringResource(R.string.appearance),
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                ThemeChoiceRow(
+                    label = stringResource(R.string.light_mode),
+                    selected = !darkTheme,
+                    onClick = { onDarkThemeChange(false) },
+                )
+                ThemeChoiceRow(
+                    label = stringResource(R.string.dark_mode),
+                    selected = darkTheme,
+                    onClick = { onDarkThemeChange(true) },
+                )
+                Text(
+                    stringResource(R.string.initial_theme_hint),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.close)) }
+        },
+    )
+}
+
+@Composable
+private fun ThemeChoiceRow(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 8.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        RadioButton(selected = selected, onClick = onClick)
+        Text(label, modifier = Modifier.padding(start = 8.dp))
     }
 }
 
@@ -669,28 +805,39 @@ private fun ReceiptCard(
 }
 
 @Composable
-private fun CreateTripDialog(
+private fun TripEditorDialog(
+    existing: TripEntity? = null,
     suggestedName: String,
     exchangeRateLookup: ExchangeRateLookupState,
     onLookupRate: (String) -> Unit,
     onDismiss: () -> Unit,
-    onSave: (String, String, String, Boolean, Long, String) -> Unit,
+    onSave: (String, String, String, Boolean, Long, String) -> Boolean,
 ) {
-    var name by remember { mutableStateOf(suggestedName) }
-    var currency by remember { mutableStateOf("EGP") }
-    var rate by remember { mutableStateOf("55,5") }
-    var tip by remember { mutableStateOf("1,00") }
-    var tipCurrency by remember { mutableStateOf("EUR") }
-    var rateWasEdited by remember { mutableStateOf(false) }
-    var useDailyRate by remember { mutableStateOf(false) }
+    val stateKey = existing?.id
+    var name by remember(stateKey) { mutableStateOf(existing?.name ?: suggestedName) }
+    var currency by remember(stateKey) { mutableStateOf(existing?.foreignCurrencyCode ?: "EGP") }
+    var rate by remember(stateKey) { mutableStateOf(existing?.defaultExchangeRate ?: "55,5") }
+    var tip by remember(stateKey) {
+        mutableStateOf(existing?.defaultTipMinor?.let(::formatInputMinor) ?: "1,00")
+    }
+    var tipCurrency by remember(stateKey) {
+        mutableStateOf(existing?.defaultTipCurrencyCode ?: "EUR")
+    }
+    var rateWasEdited by remember(stateKey) { mutableStateOf(false) }
+    var useDailyRate by remember(stateKey) {
+        mutableStateOf(existing?.exchangeRateMode == "DAILY")
+    }
+    var previousCurrency by remember(stateKey) { mutableStateOf(currency) }
+    var invalidRate by remember(stateKey) { mutableStateOf(false) }
     val uriHandler = LocalUriHandler.current
 
     LaunchedEffect(currency) {
-        if (currency.length == 3) {
+        if (currency.length == 3 && (existing == null || currency != previousCurrency)) {
             rateWasEdited = false
             delay(500)
             onLookupRate(currency)
         }
+        previousCurrency = currency
     }
     LaunchedEffect(exchangeRateLookup) {
         val success = exchangeRateLookup as? ExchangeRateLookupState.Success
@@ -699,11 +846,21 @@ private fun CreateTripDialog(
         }
     }
 
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.create_trip)) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+    ScrollableEditorDialog(
+        title = stringResource(if (existing == null) R.string.create_trip else R.string.edit_trip),
+        onDismiss = onDismiss,
+        onSave = {
+            val saved = onSave(
+                name,
+                currency.ifBlank { "EGP" },
+                rate,
+                useDailyRate,
+                MainViewModel.parseMinor(tip) ?: 100,
+                tipCurrency.ifBlank { "EUR" },
+            )
+            invalidRate = !saved
+        },
+    ) {
                 OutlinedTextField(name, { name = it }, label = { Text(stringResource(R.string.trip_name)) })
                 OutlinedTextField(currency, { currency = it.uppercase().take(3) }, label = { Text(stringResource(R.string.foreign_currency)) })
                 OutlinedTextField(
@@ -711,10 +868,12 @@ private fun CreateTripDialog(
                     {
                         rate = it
                         rateWasEdited = true
+                        invalidRate = false
                     },
                     label = { Text(stringResource(R.string.exchange_rate)) },
                     placeholder = { Text(stringResource(R.string.rate_example)) },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    isError = invalidRate,
                     trailingIcon = {
                         if (exchangeRateLookup is ExchangeRateLookupState.Loading &&
                             exchangeRateLookup.target == currency
@@ -806,24 +965,7 @@ private fun CreateTripDialog(
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                 )
                 OutlinedTextField(tipCurrency, { tipCurrency = it.uppercase().take(3) }, label = { Text(stringResource(R.string.tip_currency)) })
-            }
-        },
-        confirmButton = {
-            TextButton(
-                onClick = {
-                    onSave(
-                        name,
-                        currency.ifBlank { "EGP" },
-                        rate,
-                        useDailyRate,
-                        MainViewModel.parseMinor(tip) ?: 100,
-                        tipCurrency.ifBlank { "EUR" },
-                    )
-                },
-            ) { Text(stringResource(R.string.save)) }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } },
-    )
+    }
 }
 
 @Composable
@@ -859,30 +1001,19 @@ private fun ReceiptEditorDialog(
     val itemSumMinor = items.mapNotNull { MainViewModel.parseMinor(it.amountText) }.sum()
     val receiptMinor = MainViewModel.parseMinor(amount)
 
-    Dialog(onDismissRequest = onDismiss) {
-        Surface(
-            modifier = Modifier
-                .fillMaxWidth()
-                .fillMaxHeight(0.92f)
-                .imePadding(),
-            shape = RoundedCornerShape(28.dp),
-            tonalElevation = 6.dp,
-        ) {
-            Column(
-                modifier = Modifier.fillMaxSize(),
-            ) {
-                Text(
-                    stringResource(if (existing == null) R.string.add_receipt else R.string.edit_receipt),
-                    modifier = Modifier.padding(24.dp, 22.dp, 24.dp, 14.dp),
-                    style = MaterialTheme.typography.headlineSmall,
-                )
-                Column(
-                    modifier = Modifier
-                        .weight(1f)
-                        .verticalScroll(rememberScrollState())
-                        .padding(horizontal = 24.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp),
-                ) {
+    ScrollableEditorDialog(
+        title = stringResource(if (existing == null) R.string.add_receipt else R.string.edit_receipt),
+        onDismiss = onDismiss,
+        onSave = {
+            invalid = !onSave(
+                location,
+                check,
+                amount,
+                addTip,
+                items.map { ReceiptItemDraft(it.name, it.amountText) },
+            )
+        },
+    ) {
                 OutlinedTextField(location, { location = it }, label = { Text(stringResource(R.string.location)) })
                 OutlinedTextField(check, { check = it }, label = { Text(stringResource(R.string.check_number)) })
                 OutlinedTextField(
@@ -1013,25 +1144,47 @@ private fun ReceiptEditorDialog(
                         )
                     }
                 }
-                    Spacer(Modifier.height(24.dp))
-                }
+                Spacer(Modifier.height(24.dp))
+    }
+}
+
+@Composable
+private fun ScrollableEditorDialog(
+    title: String,
+    onDismiss: () -> Unit,
+    onSave: () -> Unit,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    Dialog(onDismissRequest = onDismiss) {
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .fillMaxHeight(0.92f)
+                .imePadding(),
+            shape = RoundedCornerShape(28.dp),
+            tonalElevation = 6.dp,
+        ) {
+            Column(modifier = Modifier.fillMaxSize()) {
+                Text(
+                    title,
+                    modifier = Modifier.padding(24.dp, 22.dp, 24.dp, 14.dp),
+                    style = MaterialTheme.typography.headlineSmall,
+                )
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .verticalScroll(rememberScrollState())
+                        .padding(horizontal = 24.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                    content = content,
+                )
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(12.dp, 8.dp, 16.dp, 12.dp),
                     horizontalArrangement = Arrangement.End,
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
-                    TextButton(onClick = {
-                        invalid = !onSave(
-                            location,
-                            check,
-                            amount,
-                            addTip,
-                            items.map { ReceiptItemDraft(it.name, it.amountText) },
-                        )
-                    }) {
-                        Text(stringResource(R.string.save))
-                    }
+                    TextButton(onClick = onSave) { Text(stringResource(R.string.save)) }
                 }
             }
         }

@@ -39,6 +39,27 @@ class BillCheckRepository(database: BillCheckDatabase) {
         ).also { dao.insertTrip(it) }
     }
 
+    suspend fun updateTrip(
+        existing: TripEntity,
+        name: String,
+        currencyCode: String,
+        exchangeRate: String,
+        exchangeRateMode: String,
+        defaultTipMinor: Long,
+        defaultTipCurrencyCode: String,
+    ) {
+        dao.updateTrip(
+            existing.copy(
+                name = name.trim().ifBlank { existing.name },
+                foreignCurrencyCode = currencyCode,
+                defaultExchangeRate = exchangeRate,
+                exchangeRateMode = exchangeRateMode,
+                defaultTipMinor = defaultTipMinor,
+                defaultTipCurrencyCode = defaultTipCurrencyCode,
+            ),
+        )
+    }
+
     suspend fun addReceipt(
         trip: TripEntity,
         location: String,

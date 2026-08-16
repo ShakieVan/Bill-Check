@@ -94,6 +94,39 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun updateTrip(
+        existing: TripEntity,
+        name: String,
+        currencyCode: String,
+        exchangeRate: String,
+        useDailyRate: Boolean,
+        defaultTipMinor: Long,
+        defaultTipCurrencyCode: String,
+    ): Boolean {
+        val normalizedRate = normalizeDecimal(exchangeRate)
+            ?.toBigDecimalOrNull()
+            ?.takeIf { it > BigDecimal.ZERO }
+            ?.stripTrailingZeros()
+            ?.toPlainString()
+            ?: return false
+        val normalizedCurrency = currencyCode.trim().uppercase(Locale.ROOT)
+        val normalizedTipCurrency = defaultTipCurrencyCode.trim().uppercase(Locale.ROOT)
+        if (normalizedCurrency.length != 3 || normalizedTipCurrency.length != 3) return false
+
+        viewModelScope.launch {
+            repository.updateTrip(
+                existing = existing,
+                name = name,
+                currencyCode = normalizedCurrency,
+                exchangeRate = normalizedRate,
+                exchangeRateMode = if (useDailyRate) "DAILY" else "FIXED",
+                defaultTipMinor = defaultTipMinor,
+                defaultTipCurrencyCode = normalizedTipCurrency,
+            )
+        }
+        return true
+    }
+
     fun requestExchangeRate(currencyCode: String) {
         val target = currencyCode.trim().uppercase(Locale.ROOT)
         if (target.length != 3) return

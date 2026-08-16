@@ -6,6 +6,8 @@
     <string name="first_trip_title">Your first trip</string>
     <string name="first_trip_text">Create a trip to record receipts and keep track of your spending.</string>
     <string name="create_trip">Create trip</string>
+    <string name="edit_trip">Edit trip</string>
+    <string name="edit_trip_named">Edit %1$s</string>
     <string name="trip_name">Trip name</string>
     <string name="foreign_currency">Foreign currency</string>
     <string name="exchange_rate">Rate: foreign currency for €1</string>
@@ -49,6 +51,10 @@
     <string name="open_trip_menu">Open trip menu</string>
     <string name="open_app_menu">Open app menu</string>
     <string name="settings">Settings</string>
+    <string name="appearance">Appearance</string>
+    <string name="light_mode">Light</string>
+    <string name="dark_mode">Dark</string>
+    <string name="initial_theme_hint">The system appearance is used on first launch. Your selection remains saved afterwards.</string>
     <string name="location">Location / restaurant</string>
     <string name="check_number">Check number</string>
     <string name="amount_in_currency">Amount (%1$s)</string>
