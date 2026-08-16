@@ -164,3 +164,27 @@
 - Den kompletten Bedienweg im Android-16-Emulator mit Bestandsbelegen geprüft:
   Lauf und Zeile anlegen, Kandidatenranking, unsichere Zuordnung, Reset,
   Akzeptieren und bestätigtes Löschen.
+
+## 16.08.2026 – Gemini-Auswertung und lokale OCR
+
+- Providerunabhängige KI-Domänenschnittstelle und ersten Gemini-Adapter für
+  Belege sowie Zwischen-/Endrechnungen ergänzt.
+- Strukturierte JSON-Ausgabe für Ort, Checknummer, Gesamtbetrag, Datum,
+  Einzelposten beziehungsweise Rechnungszeilen erzwungen.
+- Originalbild bis zur Inline-Grenze erhalten; nur übergroße Bilder werden
+  hochwertig und begrenzt verkleinert.
+- API-Schlüssel per AES/GCM mit Android Keystore verschlüsselt und eine
+  Löschaktion in den Einstellungen eingebaut.
+- Verfügbare Gemini-Modelle samt Kontextgrenzen live abgefragt. Da die API kein
+  Restkontingent ausgibt, die offizielle AI-Studio-Nutzungsansicht verlinkt.
+- Ergebnisdialog bleibt bis „OK“ sichtbar; erkannte Daten landen nur als
+  kontrollierbare Formularwerte und werden nicht automatisch gespeichert.
+- Gebündelte ML-Kit-OCR als vollständig lokale Bausteinhilfe ergänzt. Zielfeld
+  und zu übernehmende Wörter/Beträge werden bewusst manuell gewählt.
+- Cloud-Durchstich mit genau einer Gemini-2.5-Flash-Auswertung eines privaten
+  Emulatorbilds verifiziert: Ort, Checknummer, Gesamtbetrag und Posten wurden
+  strukturiert übernommen; Teständerungen nicht gespeichert und Schlüssel
+  anschließend aus dem Emulator entfernt.
+- Dabei erkannt, dass ein allgemeines Ortsfeld zusätzlich Hotel und Stadt
+  enthielt. Prompt, Schema und Regressionstest verlangen nun ausschließlich
+  den konkreten Restaurant-/Bar-/Lounge-Namen.

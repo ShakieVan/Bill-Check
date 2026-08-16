@@ -4,7 +4,12 @@ import de.shakie.billcheck.domain.MoneyCalculator
 import de.shakie.billcheck.domain.RankedReceiptCandidate
 import de.shakie.billcheck.domain.ReconciliationMatcher
 import de.shakie.billcheck.domain.ReconciliationStatus
+import de.shakie.billcheck.domain.ExtractedStatement
+import java.time.LocalDate
+import java.time.ZoneId
+import java.time.format.DateTimeParseException
 import java.util.UUID
+import java.util.Locale
 
 data class NewReceiptItem(
     val name: String,
@@ -314,4 +319,45 @@ class BillCheckRepository(database: BillCheckDatabase) {
 
     suspend fun deleteReconciliation(reconciliationId: String) =
         dao.deleteReconciliation(reconciliationId)
+
+    suspend fun applyExtractedStatement(
+        reconciliation: ReconciliationEntity,
+        extracted: ExtractedStatement,
+        fallbackCurrencyCode: String,
+    ) {
+        if (extracted.title.isNotBlank()) {
+            dao.updateReconciliation(
+                reconciliation.id,
+                extracted.title,
+                reconciliation.statementImageUri,
+            )
+        }
+        val lines = extracted.lines.mapNotNull { line ->
+            val amountMinor = line.amountText.replace(',', '.').toBigDecimalOrNull()
+                ?.movePointRight(2)?.setScale(0, java.math.RoundingMode.HALF_UP)
+                ?.longValueExact()?.takeIf { it > 0 }
+                ?: return@mapNotNull null
+            StatementLineEntity(
+                id = UUID.randomUUID().toString(),
+                reconciliationId = reconciliation.id,
+                occurredOn = parseIsoDate(line.occurredOn),
+                description = line.description.trim(),
+                checkNumber = line.checkNumber.trim(),
+                amountMinor = amountMinor,
+                currencyCode = line.currencyCode.trim().uppercase(Locale.ROOT).takeIf { it.length == 3 }
+                    ?: fallbackCurrencyCode,
+                status = ReconciliationStatus.NOT_FOUND,
+                acceptedWithoutReceipt = false,
+            )
+        }
+        dao.replaceStatementLines(reconciliation.id, lines)
+    }
+
+    private fun parseIsoDate(value: String): Long? = try {
+        value.trim().takeIf(String::isNotEmpty)?.let {
+            LocalDate.parse(it).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
+        }
+    } catch (_: DateTimeParseException) {
+        null
+    }
 }

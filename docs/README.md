@@ -13,10 +13,16 @@ Fehlschläge dauerhaft außerhalb einzelner Chats fest.
   Online-Kursquelle, Tagescache und Offline-Fallback
 - [`decisions/receipt-image-storage.md`](decisions/receipt-image-storage.md):
   Kamera, Photo Picker und getrennte Lebenszyklen von Galerie und App-Datensatz
+- [`decisions/reconciliation-matching.md`](decisions/reconciliation-matching.md):
+  1:1-Zuordnung, Status und Lebenszyklus von Rechnungsabgleichen
+- [`decisions/ai-image-extraction.md`](decisions/ai-image-extraction.md):
+  Providergrenze, Schlüsselablage, Bildqualität und Ergebnisprüfung
 - [`technical-notes/editor-dialog-layout.md`](technical-notes/editor-dialog-layout.md):
   tastaturfester, wiederverwendbarer Aufbau für Eingabedialoge
 - [`technical-notes/emulator-test-images.md`](technical-notes/emulator-test-images.md):
   privates Bildmaterial sicher in den lokalen Emulator einspielen
+- [`technical-notes/offline-ocr-helper.md`](technical-notes/offline-ocr-helper.md):
+  lokale Texterkennung und manuell gesteuerte Textbausteine
 
 ## Ablage
 

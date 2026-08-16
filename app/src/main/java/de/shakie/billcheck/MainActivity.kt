@@ -27,6 +27,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -58,6 +60,8 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.AssistChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -97,6 +101,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.IntOffset
@@ -117,6 +122,9 @@ import de.shakie.billcheck.ui.ReceiptItemDraft
 import de.shakie.billcheck.ui.ReceiptImageReview
 import de.shakie.billcheck.ui.ReceiptThumbnail
 import de.shakie.billcheck.ui.ExchangeRateLookupState
+import de.shakie.billcheck.ui.AiExtractionState
+import de.shakie.billcheck.ui.LocalOcrState
+import de.shakie.billcheck.ui.GeminiModelsState
 import de.shakie.billcheck.ui.ReconciliationManagerDialog
 import de.shakie.billcheck.ui.theme.BillCheckTheme
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -170,6 +178,10 @@ private fun BillCheckApp(
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val exchangeRateLookup by viewModel.exchangeRateLookup.collectAsStateWithLifecycle()
     val candidateSelection by viewModel.candidateSelection.collectAsStateWithLifecycle()
+    val aiSettings by viewModel.aiSettings.collectAsStateWithLifecycle()
+    val aiExtraction by viewModel.aiExtraction.collectAsStateWithLifecycle()
+    val localOcr by viewModel.localOcr.collectAsStateWithLifecycle()
+    val geminiModels by viewModel.geminiModels.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val imageStorage = remember { ReceiptImageStorage(context) }
     var showCreateTrip by remember { mutableStateOf(false) }
@@ -178,7 +190,6 @@ private fun BillCheckApp(
     var editingReceipt by remember { mutableStateOf<ReceiptWithItems?>(null) }
     var showAppMenu by remember { mutableStateOf(false) }
     var showSettings by remember { mutableStateOf(false) }
-    var showAnalysisInfo by remember { mutableStateOf(false) }
     var showReconciliations by remember { mutableStateOf(false) }
     var pendingCameraUriString by rememberSaveable { mutableStateOf<String?>(null) }
     var pendingImageUriString by rememberSaveable { mutableStateOf<String?>(null) }
@@ -494,6 +505,11 @@ private fun BillCheckApp(
         AppearanceSettingsDialog(
             darkTheme = darkTheme,
             onDarkThemeChange = onDarkThemeChange,
+            aiSettings = aiSettings,
+            geminiModels = geminiModels,
+            onLoadGeminiModels = viewModel::loadGeminiModels,
+            onSaveAiSettings = viewModel::saveAiSettings,
+            onClearAiApiKey = viewModel::clearAiApiKey,
             onDismiss = { showSettings = false },
         )
     }
@@ -506,6 +522,8 @@ private fun BillCheckApp(
                 imageUri = draftReceiptImageUriString,
                 locationSuggestions = state.locationSuggestions,
                 itemNameSuggestions = state.itemNameSuggestions,
+                aiExtraction = aiExtraction,
+                localOcr = localOcr,
                 onTakePhoto = {
                     imageTargetReceiptId = null
                     imageTargetHadLinkedImage = false
@@ -526,10 +544,17 @@ private fun BillCheckApp(
                     imageTargetHadLinkedImage = false
                     pendingImageUriString = draftReceiptImageUriString
                 },
-                onAnalyzeImage = { showAnalysisInfo = true },
+                onAnalyzeImage = {
+                    draftReceiptImageUriString?.let(viewModel::analyzeReceipt)
+                },
+                onAnalyzeLocally = {
+                    draftReceiptImageUriString?.let(viewModel::analyzeLocally)
+                },
+                onClearLocalOcr = viewModel::clearLocalOcr,
                 onDismiss = {
                     showManualReceipt = false
                     draftReceiptImageUriString = null
+                    viewModel.clearLocalOcr()
                 },
                 onSave = { location, check, amount, tip, itemDrafts ->
                     viewModel.addReceipt(
@@ -561,6 +586,8 @@ private fun BillCheckApp(
                 imageUri = existing.receipt.imageUri,
                 locationSuggestions = state.locationSuggestions,
                 itemNameSuggestions = state.itemNameSuggestions,
+                aiExtraction = aiExtraction,
+                localOcr = localOcr,
                 onTakePhoto = {
                     imageTargetReceiptId = existing.receipt.id
                     imageTargetHadLinkedImage = existing.receipt.imageUri != null
@@ -581,8 +608,17 @@ private fun BillCheckApp(
                     imageTargetHadLinkedImage = true
                     pendingImageUriString = existing.receipt.imageUri
                 },
-                onAnalyzeImage = { showAnalysisInfo = true },
-                onDismiss = { editingReceipt = null },
+                onAnalyzeImage = {
+                    existing.receipt.imageUri?.let(viewModel::analyzeReceipt)
+                },
+                onAnalyzeLocally = {
+                    existing.receipt.imageUri?.let(viewModel::analyzeLocally)
+                },
+                onClearLocalOcr = viewModel::clearLocalOcr,
+                onDismiss = {
+                    editingReceipt = null
+                    viewModel.clearLocalOcr()
+                },
                 onSave = { location, check, amount, tip, itemDrafts ->
                     viewModel.updateReceipt(
                         existing = existing,
@@ -599,17 +635,72 @@ private fun BillCheckApp(
         }
     }
 
-    if (showAnalysisInfo) {
-        AlertDialog(
-            onDismissRequest = { showAnalysisInfo = false },
+    when (val extraction = aiExtraction) {
+        is AiExtractionState.Loading -> AlertDialog(
+            onDismissRequest = {},
             title = { Text(stringResource(R.string.image_analysis)) },
-            text = { Text(stringResource(R.string.image_analysis_coming_soon)) },
+            text = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    CircularProgressIndicator(Modifier.size(28.dp), strokeWidth = 3.dp)
+                    Spacer(Modifier.width(12.dp))
+                    Text(stringResource(R.string.ai_analyzing))
+                }
+            },
+            confirmButton = {},
+        )
+        AiExtractionState.MissingApiKey -> AlertDialog(
+            onDismissRequest = viewModel::clearAiExtraction,
+            title = { Text(stringResource(R.string.ai_recognition)) },
+            text = { Text(stringResource(R.string.ai_missing_key)) },
+            dismissButton = {
+                TextButton(onClick = viewModel::clearAiExtraction) { Text(stringResource(R.string.cancel)) }
+            },
             confirmButton = {
-                TextButton(onClick = { showAnalysisInfo = false }) {
-                    Text(stringResource(R.string.close))
+                TextButton(onClick = {
+                    viewModel.clearAiExtraction()
+                    showSettings = true
+                }) { Text(stringResource(R.string.open_settings)) }
+            },
+        )
+        is AiExtractionState.Error -> AlertDialog(
+            onDismissRequest = viewModel::clearAiExtraction,
+            title = { Text(stringResource(R.string.ai_failed)) },
+            text = { Text(stringResource(R.string.ai_failed_detail, extraction.message)) },
+            confirmButton = {
+                TextButton(onClick = viewModel::clearAiExtraction) { Text(stringResource(R.string.ok)) }
+            },
+        )
+        is AiExtractionState.ReceiptSuccess -> AlertDialog(
+            onDismissRequest = {},
+            title = { Text(stringResource(R.string.image_analysis)) },
+            text = { Text(stringResource(R.string.ai_result_ready)) },
+            confirmButton = {
+                TextButton(onClick = viewModel::clearAiExtraction) { Text(stringResource(R.string.ok)) }
+            },
+        )
+        is AiExtractionState.StatementSuccess -> AlertDialog(
+            onDismissRequest = {},
+            title = { Text(stringResource(R.string.image_analysis)) },
+            text = {
+                Text(
+                    stringResource(
+                        R.string.statement_ai_result,
+                        extraction.statement.lines.size,
+                    ),
+                )
+            },
+            dismissButton = {
+                TextButton(onClick = viewModel::clearAiExtraction) {
+                    Text(stringResource(R.string.cancel))
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = viewModel::applyExtractedStatement) {
+                    Text(stringResource(R.string.apply_result))
                 }
             },
         )
+        AiExtractionState.Idle -> Unit
     }
 
     state.selectedTrip?.let { trip ->
@@ -654,6 +745,11 @@ private fun BillCheckApp(
                     showReconciliations = false
                     chooseImage()
                 },
+                onAnalyzeImage = { reconciliation ->
+                    reconciliation.reconciliation.statementImageUri?.let { imageUri ->
+                        viewModel.analyzeStatement(reconciliation.reconciliation.id, imageUri)
+                    }
+                },
             )
         }
     }
@@ -663,13 +759,31 @@ private fun BillCheckApp(
 private fun AppearanceSettingsDialog(
     darkTheme: Boolean,
     onDarkThemeChange: (Boolean) -> Unit,
+    aiSettings: de.shakie.billcheck.data.AiSettings,
+    geminiModels: GeminiModelsState,
+    onLoadGeminiModels: () -> Unit,
+    onSaveAiSettings: (String?, String) -> Unit,
+    onClearAiApiKey: () -> Unit,
     onDismiss: () -> Unit,
 ) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.settings)) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    var apiKey by remember { mutableStateOf("") }
+    var model by remember(aiSettings.model) { mutableStateOf(aiSettings.model) }
+    val uriHandler = LocalUriHandler.current
+    Dialog(onDismissRequest = onDismiss) {
+        Surface(
+            modifier = Modifier.fillMaxWidth().fillMaxHeight(0.88f).imePadding(),
+            shape = RoundedCornerShape(28.dp),
+        ) {
+            Column(Modifier.fillMaxSize()) {
+                Text(
+                    stringResource(R.string.settings),
+                    style = MaterialTheme.typography.headlineSmall,
+                    modifier = Modifier.padding(24.dp, 22.dp, 24.dp, 14.dp),
+                )
+                Column(
+                    modifier = Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 24.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
                 Text(
                     stringResource(R.string.appearance),
                     style = MaterialTheme.typography.titleSmall,
@@ -690,12 +804,130 @@ private fun AppearanceSettingsDialog(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+                HorizontalDivider(Modifier.padding(vertical = 12.dp))
+                Text(
+                    stringResource(R.string.ai_recognition),
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                OutlinedTextField(
+                    value = stringResource(R.string.gemini),
+                    onValueChange = {},
+                    readOnly = true,
+                    label = { Text(stringResource(R.string.ai_provider)) },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                OutlinedButton(
+                    onClick = onLoadGeminiModels,
+                    enabled = geminiModels !is GeminiModelsState.Loading,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    if (geminiModels is GeminiModelsState.Loading) {
+                        CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
+                        Spacer(Modifier.width(8.dp))
+                        Text(stringResource(R.string.models_loading))
+                    } else {
+                        Icon(Icons.Default.Refresh, contentDescription = null)
+                        Spacer(Modifier.width(8.dp))
+                        Text(stringResource(R.string.load_models))
+                    }
+                }
+                when (geminiModels) {
+                    GeminiModelsState.MissingApiKey -> Text(
+                        stringResource(R.string.models_need_key),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.tertiary,
+                    )
+                    is GeminiModelsState.Error -> Text(
+                        stringResource(R.string.models_failed, geminiModels.message),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                    is GeminiModelsState.Success -> geminiModels.models.forEach { available ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp))
+                                .clickable { model = available.id }.padding(vertical = 2.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            RadioButton(selected = model == available.id, onClick = { model = available.id })
+                            Column {
+                                Text(available.displayName)
+                                Text(
+                                    stringResource(
+                                        R.string.model_context,
+                                        formatTokenLimit(available.inputTokenLimit),
+                                        formatTokenLimit(available.outputTokenLimit),
+                                    ),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        }
+                    }
+                    else -> Unit
+                }
+                if (aiSettings.hasApiKey) {
+                    Text(
+                        stringResource(R.string.api_key_saved),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                }
+                OutlinedTextField(
+                    value = apiKey,
+                    onValueChange = { apiKey = it },
+                    label = { Text(stringResource(R.string.gemini_api_key)) },
+                    placeholder = { Text(stringResource(R.string.api_key_placeholder)) },
+                    visualTransformation = PasswordVisualTransformation(),
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                OutlinedTextField(
+                    value = model,
+                    onValueChange = { model = it },
+                    label = { Text(stringResource(R.string.gemini_model)) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                if (aiSettings.hasApiKey) {
+                    TextButton(onClick = {
+                        onClearAiApiKey()
+                        apiKey = ""
+                    }) {
+                        Text(stringResource(R.string.remove_api_key), color = MaterialTheme.colorScheme.error)
+                    }
+                }
+                Text(
+                    stringResource(R.string.ai_settings_hint),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Text(
+                    stringResource(R.string.quota_not_available),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                TextButton(
+                    onClick = { uriHandler.openUri("https://aistudio.google.com/rate-limit") },
+                    contentPadding = PaddingValues(0.dp),
+                ) {
+                    Text(stringResource(R.string.open_quota_dashboard))
+                }
+                Spacer(Modifier.height(24.dp))
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(12.dp, 8.dp, 16.dp, 12.dp),
+                    horizontalArrangement = Arrangement.End,
+                ) {
+                    TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
+                    TextButton(onClick = {
+                        onSaveAiSettings(apiKey.takeIf(String::isNotBlank), model)
+                        onDismiss()
+                    }) { Text(stringResource(R.string.save)) }
+                }
             }
-        },
-        confirmButton = {
-            TextButton(onClick = onDismiss) { Text(stringResource(R.string.close)) }
-        },
-    )
+        }
+    }
 }
 
 @Composable
@@ -1252,11 +1484,15 @@ private fun ReceiptEditorDialog(
     imageUri: String? = null,
     locationSuggestions: List<String> = emptyList(),
     itemNameSuggestions: List<String> = emptyList(),
+    aiExtraction: AiExtractionState = AiExtractionState.Idle,
+    localOcr: LocalOcrState = LocalOcrState.Idle,
     onTakePhoto: () -> Unit,
     onChooseImage: () -> Unit,
     onBrowseFolders: () -> Unit,
     onOpenImage: () -> Unit,
     onAnalyzeImage: () -> Unit,
+    onAnalyzeLocally: () -> Unit,
+    onClearLocalOcr: () -> Unit,
     onDismiss: () -> Unit,
     onSave: (String, String, String, Boolean, List<ReceiptItemDraft>) -> Boolean,
 ) {
@@ -1283,8 +1519,26 @@ private fun ReceiptEditorDialog(
         .ifEmpty { listOf(EditableReceiptItem(id = 0)) }
     var nextItemId by remember(stateKey) { mutableStateOf(initialItems.size.toLong()) }
     var items by remember(stateKey) { mutableStateOf(initialItems) }
+    var ocrTarget by remember(stateKey) { mutableStateOf("LOCATION") }
     val itemSumMinor = items.mapNotNull { MainViewModel.parseMinor(it.amountText) }.sum()
     val receiptMinor = MainViewModel.parseMinor(amount)
+
+    LaunchedEffect(aiExtraction) {
+        val extracted = (aiExtraction as? AiExtractionState.ReceiptSuccess)
+            ?.takeIf { it.imageUri == imageUri }
+            ?.receipt
+            ?: return@LaunchedEffect
+        location = extracted.location
+        check = extracted.checkNumber
+        amount = extracted.totalAmountText
+        if (extracted.items.isNotEmpty()) {
+            items = extracted.items.mapIndexed { index, item ->
+                EditableReceiptItem(index.toLong(), item.name, item.amountText)
+            }
+            nextItemId = items.size.toLong()
+        }
+        invalid = false
+    }
 
     if (!visible) return
 
@@ -1308,6 +1562,30 @@ private fun ReceiptEditorDialog(
                     onBrowseFolders = onBrowseFolders,
                     onOpenImage = onOpenImage,
                     onAnalyzeImage = onAnalyzeImage,
+                    onAnalyzeLocally = onAnalyzeLocally,
+                )
+                LocalOcrHelper(
+                    state = localOcr,
+                    imageUri = imageUri,
+                    target = ocrTarget,
+                    itemCount = items.size,
+                    onTargetChange = { ocrTarget = it },
+                    onToken = { token ->
+                        when {
+                            ocrTarget == "LOCATION" -> location = appendToken(location, token)
+                            ocrTarget == "CHECK" -> check = appendToken(check, token)
+                            ocrTarget == "AMOUNT" -> amount = normalizeOcrAmount(token)
+                            ocrTarget.startsWith("ITEM_") -> {
+                                val index = ocrTarget.removePrefix("ITEM_").toIntOrNull()
+                                if (index != null && index in items.indices) {
+                                    items = items.toMutableList().also {
+                                        it[index] = it[index].copy(name = appendToken(it[index].name, token))
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    onClose = onClearLocalOcr,
                 )
                 HistoryTextField(
                     value = location,
@@ -1456,6 +1734,7 @@ private fun ReceiptEditorImageSection(
     onBrowseFolders: () -> Unit,
     onOpenImage: () -> Unit,
     onAnalyzeImage: () -> Unit,
+    onAnalyzeLocally: () -> Unit,
 ) {
     Text(
         stringResource(R.string.receipt_image),
@@ -1524,8 +1803,96 @@ private fun ReceiptEditorImageSection(
             Spacer(Modifier.width(8.dp))
             Text(stringResource(R.string.analyze_image))
         }
+        OutlinedButton(
+            onClick = onAnalyzeLocally,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Icon(Icons.Default.AutoAwesome, contentDescription = null)
+            Spacer(Modifier.width(8.dp))
+            Text(stringResource(R.string.local_text_help))
+        }
     }
     HorizontalDivider(Modifier.padding(vertical = 4.dp))
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun LocalOcrHelper(
+    state: LocalOcrState,
+    imageUri: String?,
+    target: String,
+    itemCount: Int,
+    onTargetChange: (String) -> Unit,
+    onToken: (String) -> Unit,
+    onClose: () -> Unit,
+) {
+    when (state) {
+        is LocalOcrState.Loading -> if (state.imageUri == imageUri) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp)
+                Spacer(Modifier.width(8.dp))
+                Text(stringResource(R.string.local_ocr_running))
+            }
+        }
+        is LocalOcrState.Error -> if (state.imageUri == imageUri) {
+            Text(
+                stringResource(R.string.local_ocr_failed, state.message),
+                color = MaterialTheme.colorScheme.error,
+                style = MaterialTheme.typography.bodySmall,
+            )
+        }
+        is LocalOcrState.Success -> if (state.imageUri == imageUri) {
+            Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)) {
+                Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(stringResource(R.string.recognized_text_blocks), fontWeight = FontWeight.SemiBold)
+                    if (state.tokens.isEmpty()) {
+                        Text(stringResource(R.string.local_ocr_empty))
+                    } else {
+                        Text(stringResource(R.string.ocr_target), style = MaterialTheme.typography.labelMedium)
+                        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            OcrTargetChip("LOCATION", stringResource(R.string.ocr_target_location), target, onTargetChange)
+                            OcrTargetChip("CHECK", stringResource(R.string.ocr_target_check), target, onTargetChange)
+                            OcrTargetChip("AMOUNT", stringResource(R.string.ocr_target_amount), target, onTargetChange)
+                            repeat(itemCount) { index ->
+                                OcrTargetChip(
+                                    "ITEM_$index",
+                                    stringResource(R.string.ocr_target_item, index + 1),
+                                    target,
+                                    onTargetChange,
+                                )
+                            }
+                        }
+                        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            state.tokens.forEach { token ->
+                                AssistChip(
+                                    onClick = { onToken(token.text) },
+                                    label = { Text(token.text) },
+                                )
+                            }
+                        }
+                    }
+                    TextButton(onClick = onClose, modifier = Modifier.align(Alignment.End)) {
+                        Text(stringResource(R.string.clear_ocr_blocks))
+                    }
+                }
+            }
+        }
+        LocalOcrState.Idle -> Unit
+    }
+}
+
+@Composable
+private fun OcrTargetChip(
+    key: String,
+    label: String,
+    selected: String,
+    onSelect: (String) -> Unit,
+) {
+    FilterChip(
+        selected = selected == key,
+        onClick = { onSelect(key) },
+        label = { Text(label) },
+    )
 }
 
 @Composable
@@ -1642,3 +2009,24 @@ private fun formatRateDate(epochMillis: Long): String = DateTimeFormatter
     .ofPattern("dd.MM.yyyy, HH:mm", Locale.getDefault())
     .withZone(ZoneId.systemDefault())
     .format(Instant.ofEpochMilli(epochMillis))
+
+private fun appendToken(existing: String, token: String): String =
+    listOf(existing.trim(), token.trim()).filter(String::isNotEmpty).joinToString(" ")
+
+private fun normalizeOcrAmount(token: String): String {
+    val candidate = token.filter { it.isDigit() || it == ',' || it == '.' }
+    if (candidate.isEmpty()) return token
+    val lastComma = candidate.lastIndexOf(',')
+    val lastDot = candidate.lastIndexOf('.')
+    val decimalIndex = maxOf(lastComma, lastDot)
+    if (decimalIndex < 0) return candidate
+    val whole = candidate.substring(0, decimalIndex).filter(Char::isDigit).ifBlank { "0" }
+    val decimals = candidate.substring(decimalIndex + 1).filter(Char::isDigit)
+    return if (decimals.length in 1..2) "$whole.$decimals" else candidate.filter(Char::isDigit)
+}
+
+private fun formatTokenLimit(value: Int): String = when {
+    value >= 1_000_000 -> "${value / 1_000_000}M"
+    value >= 1_000 -> "${value / 1_000}k"
+    else -> value.toString()
+}

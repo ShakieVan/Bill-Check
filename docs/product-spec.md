@@ -68,7 +68,8 @@ Stand: 16.08.2026
   Belege erreichbar. Noch nicht gespeicherte Felder und Posten bleiben beim
   Wechsel zur Bildprüfung erhalten.
 - Ein verknüpftes Bild bietet im Editor den neutralen Einstieg „Bild
-  auswerten“. Die dahinterliegende KI-/OCR-Auswertung folgt separat.
+  auswerten“. Das Cloud-Ergebnis wird erst nach einem stehenbleibenden
+  Ergebnisdialog in das weiterhin editierbare Formular übernommen.
 
 ## Belegposten
 
@@ -108,9 +109,16 @@ Stand: 16.08.2026
 - Alle gespeicherten Daten und die manuelle Eingabe funktionieren offline.
 - Gemini ist der erste Cloud-Anbieter; die Architektur bleibt für OpenAI und
   weitere Anbieter offen.
-- Eine lokale OCR-Bausteinhilfe folgt nach dem stabilen Cloud- und
-  Grundworkflow. Erkannte Textblöcke können dann durch Antippen oder Ziehen in
-  Eingabefelder übernommen werden.
+- API-Schlüssel werden mit Android Keystore verschlüsselt und können in den
+  Einstellungen wieder entfernt werden.
+- Verfügbare Gemini-Modelle und Kontextgrenzen sind abfragbar. Da Gemini kein
+  Restkontingent über den API-Schlüssel liefert, führt ein Link zur
+  Rate-Limit-/Nutzungsansicht in Google AI Studio.
+- Bei Belegen enthält „Ort/Restaurant“ nur den konkreten Bewirtungsort, nicht
+  Hotelname, Stadt oder Adresse.
+- Die lokale OCR-Bausteinhilfe erkennt Text offline. Nach Wahl eines Zielfelds
+  können einzelne Wörter oder Beträge per Tipp kontrolliert übernommen und bei
+  Textfeldern aneinandergefügt werden.
 
 ## Darstellung
 

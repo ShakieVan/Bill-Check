@@ -99,6 +99,7 @@ fun ReconciliationManagerDialog(
     onDelete: (String) -> Unit,
     onOpenImage: (ReconciliationWithLines) -> Unit,
     onChooseImage: (ReconciliationWithLines) -> Unit,
+    onAnalyzeImage: (ReconciliationWithLines) -> Unit,
 ) {
     var selectedId by remember(initialSelectedId) { mutableStateOf(initialSelectedId) }
     var showCreate by remember { mutableStateOf(false) }
@@ -138,6 +139,7 @@ fun ReconciliationManagerDialog(
                     onDelete = { deleteTarget = selected },
                     onOpenImage = { onOpenImage(selected) },
                     onChooseImage = { onChooseImage(selected) },
+                    onAnalyzeImage = { onAnalyzeImage(selected) },
                     onRemoveImage = {
                         onUpdateHeader(
                             selected.reconciliation.id,
@@ -283,6 +285,7 @@ private fun ReconciliationDetails(
     onDelete: () -> Unit,
     onOpenImage: () -> Unit,
     onChooseImage: () -> Unit,
+    onAnalyzeImage: () -> Unit,
     onRemoveImage: () -> Unit,
 ) {
     Column(Modifier.fillMaxSize()) {
@@ -311,6 +314,7 @@ private fun ReconciliationDetails(
                     onOpen = onOpenImage,
                     onChoose = onChooseImage,
                     onRemove = onRemoveImage,
+                    onAnalyze = onAnalyzeImage,
                 )
             }
             item {
@@ -566,6 +570,7 @@ private fun StatementImageActions(
     onOpen: () -> Unit,
     onChoose: () -> Unit,
     onRemove: () -> Unit,
+    onAnalyze: () -> Unit,
 ) {
     Card {
         Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -575,6 +580,11 @@ private fun StatementImageActions(
                     Icon(Icons.Default.Image, contentDescription = null)
                     Spacer(Modifier.width(6.dp))
                     Text(stringResource(R.string.review_image_title))
+                }
+                Button(onClick = onAnalyze, modifier = Modifier.fillMaxWidth()) {
+                    Icon(Icons.Default.AutoAwesome, contentDescription = null)
+                    Spacer(Modifier.width(6.dp))
+                    Text(stringResource(R.string.analyze_image))
                 }
                 TextButton(onClick = onRemove, modifier = Modifier.fillMaxWidth()) {
                     Text(stringResource(R.string.remove_statement_image), color = MaterialTheme.colorScheme.error)

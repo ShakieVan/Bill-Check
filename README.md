@@ -31,8 +31,10 @@ gespeicherte Belege und Übersichten vollständig nutzbar.
 Das lauffähige Fundament umfasst Reiseanlage und -bearbeitung, lokale
 Speicherung, manuelle Belegerfassung mit editierbaren Einzelposten,
 automatische oder feste Wechselkurse, Kamera- und Galeriebelege, persistente
-Hell-/Dunkel-Darstellung sowie die festgelegte Rundungslogik. KI-Erkennung und
-Rechnungsabgleich folgen iterativ.
+Hell-/Dunkel-Darstellung sowie die festgelegte Rundungslogik. Zwischen- und
+Endrechnungen können automatisch oder manuell 1:1 abgeglichen werden. Für
+Bilddaten stehen eine bestätigungspflichtige Gemini-Auswertung und eine
+vollständig lokale OCR-Bausteinhilfe bereit.
 
 ## Build
 

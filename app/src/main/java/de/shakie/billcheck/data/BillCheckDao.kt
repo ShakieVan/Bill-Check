@@ -112,6 +112,21 @@ interface BillCheckDao {
     @Insert(onConflict = OnConflictStrategy.ABORT)
     suspend fun insertStatementLine(line: StatementLineEntity)
 
+    @Insert(onConflict = OnConflictStrategy.ABORT)
+    suspend fun insertStatementLines(lines: List<StatementLineEntity>)
+
+    @Query("DELETE FROM statement_lines WHERE reconciliationId = :reconciliationId")
+    suspend fun deleteStatementLines(reconciliationId: String)
+
+    @Transaction
+    suspend fun replaceStatementLines(
+        reconciliationId: String,
+        lines: List<StatementLineEntity>,
+    ) {
+        deleteStatementLines(reconciliationId)
+        if (lines.isNotEmpty()) insertStatementLines(lines)
+    }
+
     @Update
     suspend fun updateStatementLine(line: StatementLineEntity)
 
