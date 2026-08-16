@@ -260,3 +260,16 @@
 - Bisher im Datenmodell bereits vorbereitete Reiseoption zum Vorauswählen des
   Standard-Trinkgelds vollständig in Anlage und Bearbeitung verdrahtet. Der
   vorgeschlagene Betrag bleibt 1 EUR, die Vorauswahl bleibt standardmäßig aus.
+- Historische Beleg-Snapshots gehärtet: Eine spätere Änderung der
+  Reisevorgaben überschreibt beim Editieren weder vorhandenes Trinkgeld noch
+  dessen Währung; Editor und erneute Bildauswertung verwenden die damalige
+  Belegwährung. Die drei Umschaltfälle sind als Regressionstests festgehalten.
+- Den auf `product-spec.md` bezogenen Abschlussnachweis als eigene Audit-Matrix
+  dokumentiert.
+- Auf Wunsch des Projekteigentümers GPL Version 3 als `GPL-3.0-only`
+  festgelegt und den kanonischen Lizenztext hinzugefügt. Private Testbilder
+  bleiben ausdrücklich außerhalb des öffentlichen Lizenz-Repositories.
+- Abschließenden lokalen Lauf mit 26 fehlerfreien Unit-Tests, erfolgreichem
+  Android-Lint und minifiziertem Release-Build ausgeführt. Die signierte APK
+  anschließend im Android-16-Emulator installiert, gestartet und ohne
+  `AndroidRuntime`-Absturz kontrolliert.

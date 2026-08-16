@@ -6,6 +6,8 @@ Fehlschläge dauerhaft außerhalb einzelner Chats fest.
 ## Einstieg
 
 - [`product-spec.md`](product-spec.md): fachlicher Zielzustand
+- [`completion-audit-v0.1.0.md`](completion-audit-v0.1.0.md): Nachweis des
+  umgesetzten Zielzustands für Version 0.1.0
 - [`development-log.md`](development-log.md): chronologischer Arbeitsstand
 - [`decisions/android-and-data-foundation.md`](decisions/android-and-data-foundation.md):
   verbindliche Plattform- und Datenbasis
@@ -23,6 +25,8 @@ Fehlschläge dauerhaft außerhalb einzelner Chats fest.
   Reiseübersicht und direkte Erfassungsaktionen auf dem Homescreen
 - [`decisions/self-update-flow.md`](decisions/self-update-flow.md):
   nutzergesteuerte GitHub-Updates mit Digestprüfung und Systeminstaller
+- [`decisions/open-source-license.md`](decisions/open-source-license.md):
+  Veröffentlichung unter GPL-3.0-only und Trennung privater Testdaten
 - [`technical-notes/editor-dialog-layout.md`](technical-notes/editor-dialog-layout.md):
   tastaturfester, wiederverwendbarer Aufbau für Eingabedialoge
 - [`technical-notes/emulator-test-images.md`](technical-notes/emulator-test-images.md):

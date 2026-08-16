@@ -364,7 +364,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun analyzeReceipt(imageUri: String) {
+    fun analyzeReceipt(imageUri: String, expectedCurrencyCode: String? = null) {
         val trip = uiState.value.selectedTrip ?: return
         val settings = aiSettingsStore.read()
         val key = aiSettingsStore.apiKey()
@@ -378,7 +378,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 aiExtractionProvider.extract(
                     imageUri = Uri.parse(imageUri),
                     documentType = AiDocumentType.RECEIPT,
-                    expectedCurrencyCode = trip.foreignCurrencyCode,
+                    expectedCurrencyCode = expectedCurrencyCode ?: trip.foreignCurrencyCode,
                     apiKey = key,
                     model = settings.model,
                 ) as AiExtractionResult.Receipt

@@ -68,5 +68,5 @@ als fachliche Referenz und wird nicht in die Android-App eingebettet.
 
 ## Lizenz
 
-Eine Open-Source-Lizenz wird vor dem ersten öffentlichen Release bewusst
-festgelegt. Bis dahin gelten die gesetzlichen Urheberrechte.
+Bill Check ist unter der GNU General Public License v3.0 veröffentlicht
+(`GPL-3.0-only`). Der vollständige Lizenztext steht in [`LICENSE`](LICENSE).

@@ -5,6 +5,7 @@ import de.shakie.billcheck.domain.RankedReceiptCandidate
 import de.shakie.billcheck.domain.ReconciliationMatcher
 import de.shakie.billcheck.domain.ReconciliationStatus
 import de.shakie.billcheck.domain.ExtractedStatement
+import de.shakie.billcheck.domain.ReceiptSnapshotRules
 import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeParseException
@@ -150,7 +151,13 @@ class BillCheckRepository(database: BillCheckDatabase) {
         addDefaultTip: Boolean,
         items: List<NewReceiptItem>,
     ) {
-        val tipMinor = if (addDefaultTip) trip.defaultTipMinor else 0
+        val tip = ReceiptSnapshotRules.tipForEdit(
+            existingTipMinor = existing.tipMinor,
+            existingTipCurrencyCode = existing.tipCurrencyCode,
+            currentDefaultTipMinor = trip.defaultTipMinor,
+            currentDefaultTipCurrencyCode = trip.defaultTipCurrencyCode,
+            selected = addDefaultTip,
+        )
         val receipt = existing.copy(
             location = location.trim(),
             checkNumber = checkNumber.trim(),
@@ -158,11 +165,11 @@ class BillCheckRepository(database: BillCheckDatabase) {
             exactEuroCents = MoneyCalculator.calculateExactEuroCents(
                 foreignAmountMinor = foreignAmountMinor,
                 exchangeRate = existing.exchangeRate,
-                tipMinor = tipMinor,
-                tipCurrencyCode = trip.defaultTipCurrencyCode,
+                tipMinor = tip.minor,
+                tipCurrencyCode = tip.currencyCode,
             ),
-            tipMinor = tipMinor,
-            tipCurrencyCode = trip.defaultTipCurrencyCode,
+            tipMinor = tip.minor,
+            tipCurrencyCode = tip.currencyCode,
         )
         val receiptItems = items.mapIndexed { index, item ->
             ReceiptItemEntity(

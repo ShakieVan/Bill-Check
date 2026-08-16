@@ -733,7 +733,7 @@ private fun BillCheckApp(
                     pendingImageUriString = draftReceiptImageUriString
                 },
                 onAnalyzeImage = {
-                    draftReceiptImageUriString?.let(viewModel::analyzeReceipt)
+                    draftReceiptImageUriString?.let { viewModel.analyzeReceipt(it) }
                 },
                 onAnalyzeLocally = {
                     draftReceiptImageUriString?.let(viewModel::analyzeLocally)
@@ -797,7 +797,9 @@ private fun BillCheckApp(
                     pendingImageUriString = existing.receipt.imageUri
                 },
                 onAnalyzeImage = {
-                    existing.receipt.imageUri?.let(viewModel::analyzeReceipt)
+                    existing.receipt.imageUri?.let {
+                        viewModel.analyzeReceipt(it, existing.receipt.foreignCurrencyCode)
+                    }
                 },
                 onAnalyzeLocally = {
                     existing.receipt.imageUri?.let(viewModel::analyzeLocally)
@@ -950,7 +952,7 @@ private fun ExportDataDialog(
     onExport: (ExportFormat, Set<String>) -> Unit,
 ) {
     var format by remember { mutableStateOf(ExportFormat.BILL_CHECK) }
-    var selectedIds by remember(trips) { mutableStateOf(trips.mapTo(mutableSetOf()) { it.id }) }
+    var selectedIds by remember(trips) { mutableStateOf(trips.map { it.id }.toSet()) }
     TransferSelectionDialog(
         title = stringResource(R.string.export_data),
         confirmLabel = stringResource(R.string.export_action),
@@ -1014,7 +1016,7 @@ private fun ImportTripsDialog(
     onImport: (Set<String>) -> Unit,
 ) {
     var selectedIds by remember(preview) {
-        mutableStateOf(preview.trips.mapTo(mutableSetOf()) { it.sourceId })
+        mutableStateOf(preview.trips.map { it.sourceId }.toSet())
     }
     TransferSelectionDialog(
         title = stringResource(R.string.import_data),
@@ -1891,6 +1893,10 @@ private fun ReceiptEditorDialog(
     onSave: (String, String, String, Boolean, List<ReceiptItemDraft>) -> Boolean,
 ) {
     val stateKey = existing?.receipt?.id
+    val receiptCurrencyCode = existing?.receipt?.foreignCurrencyCode ?: trip.foreignCurrencyCode
+    val existingTip = existing?.receipt?.takeIf { it.tipMinor > 0 }
+    val tipPreviewMinor = existingTip?.tipMinor ?: trip.defaultTipMinor
+    val tipPreviewCurrencyCode = existingTip?.tipCurrencyCode ?: trip.defaultTipCurrencyCode
     var location by remember(stateKey) { mutableStateOf(existing?.receipt?.location.orEmpty()) }
     var check by remember(stateKey) { mutableStateOf(existing?.receipt?.checkNumber.orEmpty()) }
     var amount by remember(stateKey) {
@@ -1994,7 +2000,7 @@ private fun ReceiptEditorDialog(
                         amount = it
                         invalid = false
                     },
-                    label = { Text(stringResource(R.string.amount_in_currency, trip.foreignCurrencyCode)) },
+                    label = { Text(stringResource(R.string.amount_in_currency, receiptCurrencyCode)) },
                     placeholder = { Text(stringResource(R.string.amount_example)) },
                     isError = invalid,
                     supportingText = if (invalid) {
@@ -2056,7 +2062,7 @@ private fun ReceiptEditorDialog(
                                     Text(
                                         stringResource(
                                             R.string.item_amount,
-                                            trip.foreignCurrencyCode,
+                                            receiptCurrencyCode,
                                         ),
                                     )
                                 },
@@ -2082,18 +2088,18 @@ private fun ReceiptEditorDialog(
                         text = when {
                             receiptMinor == null -> stringResource(
                                 R.string.item_sum_used_as_total,
-                                formatMinor(itemSumMinor, trip.foreignCurrencyCode),
+                                formatMinor(itemSumMinor, receiptCurrencyCode),
                             )
                             difference == 0L -> stringResource(
                                 R.string.item_sum_matches,
-                                formatMinor(itemSumMinor, trip.foreignCurrencyCode),
+                                formatMinor(itemSumMinor, receiptCurrencyCode),
                             )
                             else -> stringResource(
                                 R.string.item_sum_differs,
-                                formatMinor(itemSumMinor, trip.foreignCurrencyCode),
+                                formatMinor(itemSumMinor, receiptCurrencyCode),
                                 formatMinor(
                                     kotlin.math.abs(requireNotNull(difference)),
-                                    trip.foreignCurrencyCode,
+                                    receiptCurrencyCode,
                                 ),
                             )
                         },
@@ -2110,7 +2116,7 @@ private fun ReceiptEditorDialog(
                     Column {
                         Text(stringResource(R.string.add_default_tip))
                         Text(
-                            formatMinor(trip.defaultTipMinor, trip.defaultTipCurrencyCode),
+                            formatMinor(tipPreviewMinor, tipPreviewCurrencyCode),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
