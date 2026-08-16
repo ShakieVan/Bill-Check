@@ -314,3 +314,16 @@
   „Bill Check Debug“. Ihre getrennte App-ID schützt die Daten der regulären
   Installation; auf persönlichen Testgeräten wird nach Abschluss wieder nur
   die signierte Release-App belassen.
+
+## 16.08.2026 – Einheitliche Bilddetailansicht
+
+- Jede tatsächlich dargestellte Belegabbildung öffnet beim Antippen dieselbe
+  bildschirmfüllende Ansicht mit Pinch-, Schwenk- und Doppeltipp-Gesten.
+- Die Miniatur in der Belegliste führt nicht mehr in die Bildverwaltung. Der
+  restliche Kartenbereich öffnet weiterhin den Belegeditor; nur dort werden
+  Bilder ersetzt oder entknüpft.
+- Das große Bild in „Bild prüfen“ ist ebenfalls antippbar. Der Hilfetext weist
+  in Deutsch und Englisch auf die Vergrößerung hin.
+- Alle drei Einstiege mit der signierten Release-App auf dem Galaxy S24 Ultra
+  geprüft: Belegliste, Belegeditor und Bildprüfung öffnen die Detailansicht und
+  kehren beim Schließen in ihren jeweiligen Ausgangszustand zurück.

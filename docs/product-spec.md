@@ -61,9 +61,11 @@ Stand: 16.08.2026
   startet nach Möglichkeit in `DCIM/Bill Check`, weil der Google-Photo-Picker
   lokale Ordner nicht verlässlich als Alben darstellt.
 - Jede Aufnahme und Auswahl wird vor dem Anlegen des Eintrags groß angezeigt
-  und ausdrücklich bestätigt.
+  und ausdrücklich bestätigt. Ein Tipp auf das Bild öffnet auch dort die
+  bildschirmfüllende, zoombare Detailansicht.
 - Verknüpfte Bilder werden in der Belegliste als Miniatur angezeigt und können
-  dort ersetzt oder vom Eintrag gelöst werden.
+  dort per Tipp bildschirmfüllend geprüft werden. Ersetzen und Lösen erfolgen
+  ausschließlich über den Belegeditor.
 - Im Belegeditor öffnet ein Tipp auf die Miniatur eine bildschirmfüllende
   Ansicht mit Pinch-Zoom, Verschieben und Doppeltipp-Zoom. Ein eigener
   „Bearbeiten“-Button trennt diese Prüfung klar von Ersetzen und Entknüpfen.

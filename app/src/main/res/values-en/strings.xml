@@ -38,7 +38,7 @@
     <string name="choose_image">Choose image</string>
     <string name="browse_folders">Browse folders</string>
     <string name="review_image_title">Review image</string>
-    <string name="review_image_hint">Is the complete receipt sharp and readable? The image is linked to an entry only after you confirm it.</string>
+    <string name="review_image_hint">Is the complete receipt sharp and readable? Tap the image to enlarge it. It is linked to an entry only after you confirm.</string>
     <string name="take_another_photo">Retake</string>
     <string name="choose_another_image">Other image</string>
     <string name="use_image">Use image</string>

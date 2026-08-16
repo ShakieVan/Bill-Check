@@ -235,6 +235,7 @@ private fun BillCheckApp(
     var pendingCameraUriString by rememberSaveable { mutableStateOf<String?>(null) }
     var pendingImageUriString by rememberSaveable { mutableStateOf<String?>(null) }
     var draftReceiptImageUriString by rememberSaveable { mutableStateOf<String?>(null) }
+    var fullscreenImageUriString by rememberSaveable { mutableStateOf<String?>(null) }
     var imageTargetReceiptId by rememberSaveable { mutableStateOf<String?>(null) }
     var imageTargetHadLinkedImage by rememberSaveable { mutableStateOf(false) }
     var imageTargetReconciliationId by rememberSaveable { mutableStateOf<String?>(null) }
@@ -567,11 +568,7 @@ private fun BillCheckApp(
                     imageTargetHadLinkedImage = false
                     browseFolders()
                 },
-                onOpenReceiptImage = { receipt ->
-                    imageTargetReceiptId = receipt.id
-                    imageTargetHadLinkedImage = true
-                    pendingImageUriString = receipt.imageUri
-                },
+                onOpenReceiptImage = { fullscreenImageUriString = it },
                 onEditReceipt = { editingReceipt = it },
                 onDeleteReceipt = viewModel::deleteReceipt,
                 onOpenReconciliations = { showReconciliations = true },
@@ -946,6 +943,13 @@ private fun BillCheckApp(
                 },
             )
         }
+    }
+
+    fullscreenImageUriString?.let { imageUri ->
+        FullscreenReceiptImage(
+            imageUri = imageUri,
+            onDismiss = { fullscreenImageUriString = null },
+        )
     }
 }
 
@@ -1435,7 +1439,7 @@ private fun Dashboard(
     onCamera: () -> Unit,
     onGallery: () -> Unit,
     onBrowseFolders: () -> Unit,
-    onOpenReceiptImage: (ReceiptEntity) -> Unit,
+    onOpenReceiptImage: (String) -> Unit,
     onEditReceipt: (ReceiptWithItems) -> Unit,
     onDeleteReceipt: (ReceiptEntity) -> Unit,
     onOpenReconciliations: () -> Unit,
@@ -1591,7 +1595,7 @@ private fun ReceiptActions(
 private fun ReceiptCard(
     receiptWithItems: ReceiptWithItems,
     onDelete: (ReceiptEntity) -> Unit,
-    onOpenImage: (ReceiptEntity) -> Unit,
+    onOpenImage: (String) -> Unit,
     onEdit: (ReceiptWithItems) -> Unit,
 ) {
     val receipt = receiptWithItems.receipt
@@ -1610,7 +1614,7 @@ private fun ReceiptCard(
                     imageUri = imageUri,
                     modifier = Modifier
                         .size(72.dp)
-                        .clickable { onOpenImage(receipt) },
+                        .clickable { onOpenImage(imageUri) },
                 )
                 Spacer(Modifier.width(12.dp))
             }

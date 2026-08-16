@@ -4,6 +4,7 @@ import android.graphics.ImageDecoder
 import android.net.Uri
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.rememberTransformableState
 import androidx.compose.foundation.gestures.transformable
@@ -77,6 +78,7 @@ fun ReceiptImageReview(
     onClose: () -> Unit,
     onUnlink: (() -> Unit)? = null,
 ) {
+    var showFullscreenImage by remember(imageUri) { mutableStateOf(false) }
     Column(
         modifier = modifier.fillMaxSize().padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -98,7 +100,8 @@ fun ReceiptImageReview(
                 .fillMaxWidth()
                 .weight(1f)
                 .clip(RoundedCornerShape(20.dp))
-                .background(MaterialTheme.colorScheme.surfaceVariant),
+                .background(MaterialTheme.colorScheme.surfaceVariant)
+                .clickable { showFullscreenImage = true },
         )
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             FilledTonalButton(onClick = onTakeAnother, modifier = Modifier.weight(1f)) {
@@ -135,6 +138,12 @@ fun ReceiptImageReview(
             Spacer(Modifier.width(8.dp))
             Text(stringResource(if (onUnlink == null) R.string.close_image_review else R.string.close))
         }
+    }
+    if (showFullscreenImage) {
+        FullscreenReceiptImage(
+            imageUri = imageUri.toString(),
+            onDismiss = { showFullscreenImage = false },
+        )
     }
 }
 

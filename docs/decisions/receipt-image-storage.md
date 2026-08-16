@@ -17,9 +17,12 @@ keine Kopie.
 ## Lebenszyklen
 
 - Nach Aufnahme oder Auswahl erscheint immer zuerst eine bildschirmfüllende
-  Prüfansicht. Erst „Bild verwenden“ verknüpft das Bild mit einem neuen Eintrag.
-- Ein verknüpftes Bild lässt sich über seine Miniatur erneut öffnen, ersetzen
-  oder vom Eintrag lösen.
+  Prüfansicht. Ein Tipp auf das dort gezeigte Bild öffnet die zoombare
+  Detailansicht. Erst „Bild verwenden“ verknüpft das Bild mit einem neuen
+  Eintrag.
+- Ein verknüpftes Bild lässt sich über jede sichtbare Belegminiatur in der
+  gemeinsamen zoombaren Detailansicht öffnen. Ersetzen oder vom Eintrag lösen
+  lässt es sich bewusst nur im Belegeditor.
 - Der Belegeditor bietet unabhängig vom aktuellen Bildstatus Kamera und Photo
   Picker an. Sein Formularzustand bleibt während der externen Auswahl und der
   anschließenden Prüfansicht im Speicher.

@@ -38,7 +38,7 @@
     <string name="choose_image">Bild wählen</string>
     <string name="browse_folders">Ordner durchsuchen</string>
     <string name="review_image_title">Bild prüfen</string>
-    <string name="review_image_hint">Ist der Beleg vollständig und gut lesbar? Das Bild wird erst nach Deiner Bestätigung mit einem Eintrag verknüpft.</string>
+    <string name="review_image_hint">Ist der Beleg vollständig und gut lesbar? Zum Vergrößern das Bild antippen. Es wird erst nach Deiner Bestätigung mit einem Eintrag verknüpft.</string>
     <string name="take_another_photo">Neu aufnehmen</string>
     <string name="choose_another_image">Anderes Bild</string>
     <string name="use_image">Bild verwenden</string>
