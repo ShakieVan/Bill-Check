@@ -22,6 +22,7 @@ import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Image
+import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilledTonalButton
@@ -56,6 +57,7 @@ fun ReceiptImageReview(
     modifier: Modifier = Modifier,
     onTakeAnother: () -> Unit,
     onChooseAnother: () -> Unit,
+    onBrowseFolders: () -> Unit,
     onUseImage: () -> Unit,
     onClose: () -> Unit,
     onUnlink: (() -> Unit)? = null,
@@ -94,6 +96,11 @@ fun ReceiptImageReview(
                 Spacer(Modifier.width(6.dp))
                 Text(stringResource(R.string.choose_another_image))
             }
+        }
+        TextButton(onClick = onBrowseFolders, modifier = Modifier.fillMaxWidth()) {
+            Icon(Icons.Default.FolderOpen, contentDescription = null)
+            Spacer(Modifier.width(6.dp))
+            Text(stringResource(R.string.browse_folders))
         }
         Button(onClick = onUseImage, modifier = Modifier.fillMaxWidth().height(54.dp)) {
             Icon(Icons.Default.Check, contentDescription = null)

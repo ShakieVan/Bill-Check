@@ -29,6 +29,8 @@ Stand: 16.08.2026
   bestehende Belege behalten ihre historischen Snapshots.
 - Die Reihenfolge ist per Drag-and-drop veränderbar. Sortierpositionen werden
   anschließend lückenlos neu vergeben.
+- Der Drag-Griff ist vom Stift für die Reisebearbeitung getrennt, damit
+  Auswählen, Bearbeiten und Sortieren nicht miteinander kollidieren.
 - Der erste Vorschlag lautet „Reise 1“.
 
 ## Geld und Rundung
@@ -55,6 +57,9 @@ Stand: 16.08.2026
 - App-Löschen trennt standardmäßig nur die Verknüpfung und lässt das
   Galerieoriginal bestehen.
 - Galerieimporte werden nicht dupliziert.
+- Neben dem Android Photo Picker steht eine Ordnerauswahl zur Verfügung. Sie
+  startet nach Möglichkeit in `DCIM/Bill Check`, weil der Google-Photo-Picker
+  lokale Ordner nicht verlässlich als Alben darstellt.
 - Jede Aufnahme und Auswahl wird vor dem Anlegen des Eintrags groß angezeigt
   und ausdrücklich bestätigt.
 - Verknüpfte Bilder werden in der Belegliste als Miniatur angezeigt und können
@@ -79,6 +84,9 @@ Stand: 16.08.2026
 - Der Belegeditor besitzt einen festen Kopf und Aktionsbereich; nur sein Inhalt
   scrollt und bleibt auch bei geöffneter Bildschirmtastatur vollständig
   erreichbar.
+- Für Ort/Restaurant und Postenbezeichnungen zeigt ein Verlaufssymbol die
+  zuletzt in derselben Reise verwendeten eindeutigen Texte. Betragsfelder und
+  Checknummern erhalten bewusst keine solchen Vorschläge.
 
 ## Abgleich
 

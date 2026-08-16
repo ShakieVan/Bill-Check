@@ -15,6 +15,10 @@ class BillCheckRepository(database: BillCheckDatabase) {
 
     fun receipts(tripId: String) = dao.observeReceipts(tripId)
 
+    fun locationSuggestions(tripId: String) = dao.observeLocationSuggestions(tripId)
+
+    fun itemNameSuggestions(tripId: String) = dao.observeItemNameSuggestions(tripId)
+
     suspend fun createTrip(
         name: String,
         currencyCode: String,
@@ -59,6 +63,9 @@ class BillCheckRepository(database: BillCheckDatabase) {
             ),
         )
     }
+
+    suspend fun reorderTrips(orderedTripIds: List<String>) =
+        dao.replaceTripOrder(orderedTripIds)
 
     suspend fun addReceipt(
         trip: TripEntity,

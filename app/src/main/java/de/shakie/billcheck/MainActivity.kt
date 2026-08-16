@@ -10,6 +10,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -26,6 +27,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -38,6 +40,9 @@ import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.FolderOpen
+import androidx.compose.material.icons.filled.DragHandle
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.MoreVert
@@ -88,11 +93,15 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.zIndex
 import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -103,6 +112,7 @@ import de.shakie.billcheck.data.TripEntity
 import de.shakie.billcheck.domain.MoneyCalculator
 import de.shakie.billcheck.ui.MainUiState
 import de.shakie.billcheck.ui.MainViewModel
+import de.shakie.billcheck.ui.OpenImageDocumentContract
 import de.shakie.billcheck.ui.ReceiptItemDraft
 import de.shakie.billcheck.ui.ReceiptImageReview
 import de.shakie.billcheck.ui.ReceiptThumbnail
@@ -118,6 +128,7 @@ import java.util.Currency
 import java.util.Locale
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
+import kotlin.math.roundToInt
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -195,6 +206,12 @@ private fun BillCheckApp(
             pendingImageUriString = it.toString()
         }
     }
+    val documentLauncher = rememberLauncherForActivityResult(OpenImageDocumentContract()) { uri ->
+        uri?.let {
+            imageStorage.persistPickedImageAccess(it)
+            pendingImageUriString = it.toString()
+        }
+    }
     val takePhoto = {
         runCatching { imageStorage.createCameraImage() }
             .onSuccess { uri ->
@@ -208,6 +225,9 @@ private fun BillCheckApp(
         galleryLauncher.launch(
             PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly),
         )
+    }
+    val browseFolders = {
+        documentLauncher.launch(OpenImageDocumentContract.BILL_CHECK_FOLDER)
     }
 
     ModalNavigationDrawer(
@@ -234,28 +254,18 @@ private fun BillCheckApp(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 state.trips.forEach { trip ->
-                    NavigationDrawerItem(
-                        label = { Text(trip.name) },
+                    TripDrawerItem(
+                        trip = trip,
                         selected = state.selectedTrip?.id == trip.id,
-                        badge = {
-                            IconButton(
-                                onClick = {
-                                    editingTrip = trip
-                                    scope.launch { drawerState.close() }
-                                },
-                            ) {
-                                Icon(
-                                    Icons.Default.Edit,
-                                    contentDescription = stringResource(R.string.edit_trip_named, trip.name),
-                                    tint = MaterialTheme.colorScheme.primary,
-                                )
-                            }
-                        },
-                        onClick = {
+                        onSelect = {
                             viewModel.selectTrip(trip.id)
                             scope.launch { drawerState.close() }
                         },
-                        modifier = Modifier.padding(horizontal = 12.dp),
+                        onEdit = {
+                            editingTrip = trip
+                            scope.launch { drawerState.close() }
+                        },
+                        onMove = { positions -> viewModel.moveTrip(trip.id, positions) },
                     )
                 }
                 NavigationDrawerItem(
@@ -319,6 +329,7 @@ private fun BillCheckApp(
                 modifier = Modifier.padding(padding),
                 onTakeAnother = takePhoto,
                 onChooseAnother = chooseImage,
+                onBrowseFolders = browseFolders,
                 onUseImage = {
                     imageTargetReceiptId?.let { receiptId ->
                         viewModel.updateReceiptImage(receiptId, requireNotNull(pendingImageUriString))
@@ -372,6 +383,11 @@ private fun BillCheckApp(
                     imageTargetReceiptId = null
                     imageTargetHadLinkedImage = false
                     chooseImage()
+                },
+                onBrowseFolders = {
+                    imageTargetReceiptId = null
+                    imageTargetHadLinkedImage = false
+                    browseFolders()
                 },
                 onOpenReceiptImage = { receipt ->
                     imageTargetReceiptId = receipt.id
@@ -446,6 +462,8 @@ private fun BillCheckApp(
                 trip = trip,
                 visible = pendingImageUri == null,
                 imageUri = draftReceiptImageUriString,
+                locationSuggestions = state.locationSuggestions,
+                itemNameSuggestions = state.itemNameSuggestions,
                 onTakePhoto = {
                     imageTargetReceiptId = null
                     imageTargetHadLinkedImage = false
@@ -455,6 +473,11 @@ private fun BillCheckApp(
                     imageTargetReceiptId = null
                     imageTargetHadLinkedImage = false
                     chooseImage()
+                },
+                onBrowseFolders = {
+                    imageTargetReceiptId = null
+                    imageTargetHadLinkedImage = false
+                    browseFolders()
                 },
                 onOpenImage = {
                     imageTargetReceiptId = null
@@ -494,6 +517,8 @@ private fun BillCheckApp(
                 existing = existing,
                 visible = pendingImageUri == null,
                 imageUri = existing.receipt.imageUri,
+                locationSuggestions = state.locationSuggestions,
+                itemNameSuggestions = state.itemNameSuggestions,
                 onTakePhoto = {
                     imageTargetReceiptId = existing.receipt.id
                     imageTargetHadLinkedImage = existing.receipt.imageUri != null
@@ -503,6 +528,11 @@ private fun BillCheckApp(
                     imageTargetReceiptId = existing.receipt.id
                     imageTargetHadLinkedImage = existing.receipt.imageUri != null
                     chooseImage()
+                },
+                onBrowseFolders = {
+                    imageTargetReceiptId = existing.receipt.id
+                    imageTargetHadLinkedImage = existing.receipt.imageUri != null
+                    browseFolders()
                 },
                 onOpenImage = {
                     imageTargetReceiptId = existing.receipt.id
@@ -600,6 +630,67 @@ private fun ThemeChoiceRow(
 }
 
 @Composable
+private fun TripDrawerItem(
+    trip: TripEntity,
+    selected: Boolean,
+    onSelect: () -> Unit,
+    onEdit: () -> Unit,
+    onMove: (Int) -> Unit,
+) {
+    val density = LocalDensity.current
+    val rowHeightPx = with(density) { 64.dp.toPx() }
+    var dragOffsetY by remember(trip.id) { mutableStateOf(0f) }
+    var dragging by remember(trip.id) { mutableStateOf(false) }
+
+    NavigationDrawerItem(
+        label = { Text(trip.name) },
+        selected = selected,
+        icon = {
+            Icon(
+                Icons.Default.DragHandle,
+                contentDescription = stringResource(R.string.reorder_trip_named, trip.name),
+                modifier = Modifier
+                    .size(40.dp)
+                    .padding(8.dp)
+                    .pointerInput(trip.id) {
+                        detectDragGesturesAfterLongPress(
+                            onDragStart = { dragging = true },
+                            onDragCancel = {
+                                dragOffsetY = 0f
+                                dragging = false
+                            },
+                            onDragEnd = {
+                                val positions = (dragOffsetY / rowHeightPx).roundToInt()
+                                dragOffsetY = 0f
+                                dragging = false
+                                onMove(positions)
+                            },
+                            onDrag = { change, amount ->
+                                change.consume()
+                                dragOffsetY += amount.y
+                            },
+                        )
+                    },
+            )
+        },
+        badge = {
+            IconButton(onClick = onEdit) {
+                Icon(
+                    Icons.Default.Edit,
+                    contentDescription = stringResource(R.string.edit_trip_named, trip.name),
+                    tint = MaterialTheme.colorScheme.primary,
+                )
+            }
+        },
+        onClick = onSelect,
+        modifier = Modifier
+            .padding(horizontal = 12.dp)
+            .offset { IntOffset(0, dragOffsetY.roundToInt()) }
+            .zIndex(if (dragging) 1f else 0f),
+    )
+}
+
+@Composable
 private fun EmptyTrips(modifier: Modifier, onCreate: () -> Unit) {
     Column(
         modifier = modifier.fillMaxSize().padding(32.dp),
@@ -642,6 +733,7 @@ private fun Dashboard(
     onManualReceipt: () -> Unit,
     onCamera: () -> Unit,
     onGallery: () -> Unit,
+    onBrowseFolders: () -> Unit,
     onOpenReceiptImage: (ReceiptEntity) -> Unit,
     onEditReceipt: (ReceiptWithItems) -> Unit,
     onDeleteReceipt: (ReceiptEntity) -> Unit,
@@ -655,7 +747,7 @@ private fun Dashboard(
             Summary(state)
         }
         item {
-            ReceiptActions(onCamera, onGallery, onManualReceipt)
+            ReceiptActions(onCamera, onGallery, onBrowseFolders, onManualReceipt)
         }
         item {
             Row(
@@ -754,7 +846,12 @@ private fun SmallSummary(label: String, value: String, modifier: Modifier = Modi
 }
 
 @Composable
-private fun ReceiptActions(onCamera: () -> Unit, onGallery: () -> Unit, onManual: () -> Unit) {
+private fun ReceiptActions(
+    onCamera: () -> Unit,
+    onGallery: () -> Unit,
+    onBrowseFolders: () -> Unit,
+    onManual: () -> Unit,
+) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Button(onClick = onCamera, modifier = Modifier.fillMaxWidth().height(54.dp)) {
             Icon(Icons.Default.CameraAlt, contentDescription = null)
@@ -772,6 +869,11 @@ private fun ReceiptActions(onCamera: () -> Unit, onGallery: () -> Unit, onManual
                 Spacer(Modifier.width(6.dp))
                 Text(stringResource(R.string.manual_entry))
             }
+        }
+        TextButton(onClick = onBrowseFolders, modifier = Modifier.fillMaxWidth()) {
+            Icon(Icons.Default.FolderOpen, contentDescription = null)
+            Spacer(Modifier.width(6.dp))
+            Text(stringResource(R.string.browse_folders))
         }
     }
 }
@@ -1052,8 +1154,11 @@ private fun ReceiptEditorDialog(
     existing: ReceiptWithItems? = null,
     visible: Boolean = true,
     imageUri: String? = null,
+    locationSuggestions: List<String> = emptyList(),
+    itemNameSuggestions: List<String> = emptyList(),
     onTakePhoto: () -> Unit,
     onChooseImage: () -> Unit,
+    onBrowseFolders: () -> Unit,
     onOpenImage: () -> Unit,
     onAnalyzeImage: () -> Unit,
     onDismiss: () -> Unit,
@@ -1104,10 +1209,16 @@ private fun ReceiptEditorDialog(
                     imageUri = imageUri,
                     onTakePhoto = onTakePhoto,
                     onChooseImage = onChooseImage,
+                    onBrowseFolders = onBrowseFolders,
                     onOpenImage = onOpenImage,
                     onAnalyzeImage = onAnalyzeImage,
                 )
-                OutlinedTextField(location, { location = it }, label = { Text(stringResource(R.string.location)) })
+                HistoryTextField(
+                    value = location,
+                    onValueChange = { location = it },
+                    label = stringResource(R.string.location),
+                    suggestions = locationSuggestions,
+                )
                 OutlinedTextField(check, { check = it }, label = { Text(stringResource(R.string.check_number)) })
                 OutlinedTextField(
                     amount,
@@ -1154,15 +1265,15 @@ private fun ReceiptEditorDialog(
                                     )
                                 }
                             }
-                            OutlinedTextField(
+                            HistoryTextField(
                                 value = item.name,
                                 onValueChange = { value ->
                                     items = items.toMutableList().also {
                                         it[index] = item.copy(name = value)
                                     }
                                 },
-                                label = { Text(stringResource(R.string.item_name)) },
-                                singleLine = true,
+                                label = stringResource(R.string.item_name),
+                                suggestions = itemNameSuggestions,
                                 modifier = Modifier.fillMaxWidth(),
                             )
                             OutlinedTextField(
@@ -1246,6 +1357,7 @@ private fun ReceiptEditorImageSection(
     imageUri: String?,
     onTakePhoto: () -> Unit,
     onChooseImage: () -> Unit,
+    onBrowseFolders: () -> Unit,
     onOpenImage: () -> Unit,
     onAnalyzeImage: () -> Unit,
 ) {
@@ -1302,6 +1414,11 @@ private fun ReceiptEditorImageSection(
             Text(stringResource(R.string.choose_image))
         }
     }
+    TextButton(onClick = onBrowseFolders, modifier = Modifier.fillMaxWidth()) {
+        Icon(Icons.Default.FolderOpen, contentDescription = null)
+        Spacer(Modifier.width(6.dp))
+        Text(stringResource(R.string.browse_folders))
+    }
     if (imageUri != null) {
         FilledTonalButton(
             onClick = onAnalyzeImage,
@@ -1313,6 +1430,50 @@ private fun ReceiptEditorImageSection(
         }
     }
     HorizontalDivider(Modifier.padding(vertical = 4.dp))
+}
+
+@Composable
+private fun HistoryTextField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    label: String,
+    suggestions: List<String>,
+    modifier: Modifier = Modifier,
+) {
+    var expanded by remember { mutableStateOf(false) }
+    Box(modifier = modifier.fillMaxWidth()) {
+        OutlinedTextField(
+            value = value,
+            onValueChange = onValueChange,
+            label = { Text(label) },
+            singleLine = true,
+            trailingIcon = if (suggestions.isNotEmpty()) {
+                {
+                    IconButton(onClick = { expanded = true }) {
+                        Icon(
+                            Icons.Default.History,
+                            contentDescription = stringResource(R.string.show_previous_values, label),
+                        )
+                    }
+                }
+            } else null,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false },
+        ) {
+            suggestions.forEach { suggestion ->
+                DropdownMenuItem(
+                    text = { Text(suggestion) },
+                    onClick = {
+                        onValueChange(suggestion)
+                        expanded = false
+                    },
+                )
+            }
+        }
+    }
 }
 
 @Composable

@@ -127,3 +127,19 @@
   den noch ausstehenden Erkennungsbaustein transparent erläutert.
 - Hinzufügen, Rückkehr mit erhaltenem Textentwurf, erneute Prüfansicht,
   Entknüpfen und Wiederherstellung der Testdaten im Emulator durchgespielt.
+
+## 16.08.2026 – Ordnerzugang, Reisesortierung und Textverlauf
+
+- Ergänzend zum Photo Picker einen System-Dateidialog eingebaut, der nach
+  Möglichkeit direkt in `DCIM/Bill Check` startet.
+- Die 25 privaten Beispielbilder tatsächlich per ADB in diesen Emulatorordner
+  kopiert und einzeln indexiert; der Dateidialog zeigt den Ordner und seine
+  Bilder nun unmittelbar an.
+- Reisen mit eigenem Drag-Griff versehen und die neue Reihenfolge atomar sowie
+  lückenlos in Room speicherbar gemacht.
+- Zuletzt verwendete eindeutige Orts- und Postenbezeichnungen pro Reise als
+  reaktive Room-Abfragen ergänzt.
+- Verlaufssymbol und Auswahlmenü ausschließlich an den beiden gewünschten
+  Textfeldern eingebaut; Betrag und Checknummer bleiben unverändert.
+- Ordnerauswahl bis zur Bildprüfansicht sowie beide Vorschlagsmenüs im
+  Android-16-Emulator geprüft.

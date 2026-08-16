@@ -26,9 +26,44 @@ interface BillCheckDao {
     @Delete
     suspend fun deleteTrip(trip: TripEntity)
 
+    @Query("UPDATE trips SET sortPosition = sortPosition + 1000000")
+    suspend fun shiftTripPositionsForReorder()
+
+    @Query("UPDATE trips SET sortPosition = :position WHERE id = :tripId")
+    suspend fun updateTripPosition(tripId: String, position: Int)
+
+    @Transaction
+    suspend fun replaceTripOrder(tripIds: List<String>) {
+        shiftTripPositionsForReorder()
+        tripIds.forEachIndexed { index, tripId -> updateTripPosition(tripId, index) }
+    }
+
     @Transaction
     @Query("SELECT * FROM receipts WHERE tripId = :tripId ORDER BY occurredAt DESC, createdAt DESC")
     fun observeReceipts(tripId: String): Flow<List<ReceiptWithItems>>
+
+    @Query(
+        """
+        SELECT location FROM receipts
+        WHERE tripId = :tripId AND TRIM(location) != ''
+        GROUP BY location COLLATE NOCASE
+        ORDER BY MAX(createdAt) DESC
+        LIMIT 30
+        """,
+    )
+    fun observeLocationSuggestions(tripId: String): Flow<List<String>>
+
+    @Query(
+        """
+        SELECT receipt_items.name FROM receipt_items
+        INNER JOIN receipts ON receipts.id = receipt_items.receiptId
+        WHERE receipts.tripId = :tripId AND TRIM(receipt_items.name) != ''
+        GROUP BY receipt_items.name COLLATE NOCASE
+        ORDER BY MAX(receipts.createdAt) DESC
+        LIMIT 50
+        """,
+    )
+    fun observeItemNameSuggestions(tripId: String): Flow<List<String>>
 
     @Insert(onConflict = OnConflictStrategy.ABORT)
     suspend fun insertReceipt(receipt: ReceiptEntity)

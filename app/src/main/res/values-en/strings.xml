@@ -8,6 +8,7 @@
     <string name="create_trip">Create trip</string>
     <string name="edit_trip">Edit trip</string>
     <string name="edit_trip_named">Edit %1$s</string>
+    <string name="reorder_trip_named">Hold and drag %1$s to reorder</string>
     <string name="trip_name">Trip name</string>
     <string name="foreign_currency">Foreign currency</string>
     <string name="exchange_rate">Rate: foreign currency for €1</string>
@@ -33,6 +34,7 @@
     <string name="add_receipt">Add receipt</string>
     <string name="take_photo">Photo</string>
     <string name="choose_image">Choose image</string>
+    <string name="browse_folders">Browse folders</string>
     <string name="review_image_title">Review image</string>
     <string name="review_image_hint">Is the complete receipt sharp and readable? The image is linked to an entry only after you confirm it.</string>
     <string name="take_another_photo">Retake</string>
@@ -68,6 +70,7 @@
     <string name="receipt_items">Individual items</string>
     <string name="item_number">Item %1$d</string>
     <string name="item_name">Description</string>
+    <string name="show_previous_values">Show previous values for %1$s</string>
     <string name="item_amount">Amount (%1$s)</string>
     <string name="add_item">Add item</string>
     <string name="remove_item">Remove item</string>

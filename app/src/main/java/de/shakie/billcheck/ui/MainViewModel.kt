@@ -30,6 +30,13 @@ data class MainUiState(
     val receipts: List<ReceiptWithItems> = emptyList(),
     val exactEuroCents: Long = 0,
     val roundedEuro: Long = 0,
+    val locationSuggestions: List<String> = emptyList(),
+    val itemNameSuggestions: List<String> = emptyList(),
+)
+
+private data class ReceiptTextSuggestions(
+    val locations: List<String> = emptyList(),
+    val itemNames: List<String> = emptyList(),
 )
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -55,13 +62,29 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         trip?.let { repository.receipts(it.id) } ?: flowOf(emptyList())
     }
 
-    val uiState = combine(trips, selectedTrip, receipts) { currentTrips, currentTrip, currentReceipts ->
+    private val textSuggestions = selectedTrip.flatMapLatest { trip ->
+        trip?.let {
+            combine(
+                repository.locationSuggestions(it.id),
+                repository.itemNameSuggestions(it.id),
+            ) { locations, itemNames -> ReceiptTextSuggestions(locations, itemNames) }
+        } ?: flowOf(ReceiptTextSuggestions())
+    }
+
+    val uiState = combine(
+        trips,
+        selectedTrip,
+        receipts,
+        textSuggestions,
+    ) { currentTrips, currentTrip, currentReceipts, suggestions ->
         MainUiState(
             trips = currentTrips,
             selectedTrip = currentTrip,
             receipts = currentReceipts,
             exactEuroCents = MoneyCalculator.exactTripEuroCents(currentReceipts.map { it.receipt }),
             roundedEuro = MoneyCalculator.roundedUpTripEuro(currentReceipts.map { it.receipt }),
+            locationSuggestions = suggestions.locations,
+            itemNameSuggestions = suggestions.itemNames,
         )
     }.stateIn(
         viewModelScope,
@@ -92,6 +115,18 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             )
             selectedTripId.value = trip.id
         }
+    }
+
+    fun moveTrip(tripId: String, positions: Int) {
+        if (positions == 0) return
+        val orderedTrips = uiState.value.trips.toMutableList()
+        val fromIndex = orderedTrips.indexOfFirst { it.id == tripId }
+        if (fromIndex < 0) return
+        val toIndex = (fromIndex + positions).coerceIn(0, orderedTrips.lastIndex)
+        if (fromIndex == toIndex) return
+        val moved = orderedTrips.removeAt(fromIndex)
+        orderedTrips.add(toIndex, moved)
+        viewModelScope.launch { repository.reorderTrips(orderedTrips.map { it.id }) }
     }
 
     fun updateTrip(
