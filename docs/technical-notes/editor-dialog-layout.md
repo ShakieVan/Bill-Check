@@ -25,3 +25,12 @@ Kurze Hinweis-, Auswahl- oder Bestätigungsdialoge ohne Texteingaben dürfen
 weiterhin `AlertDialog` verwenden. Neue Formulare sollen dagegen die
 gemeinsame Editor-Komponente erweitern, statt eine eigene Dialogstruktur zu
 duplizieren.
+
+## Cursor bei ergänzten Texten
+
+Textfelder mit Verlauf verwalten neben dem Inhalt auch ihre Auswahl als
+`TextFieldValue`. Wird ihr Wert von außen ergänzt, etwa durch die lokale
+Texthilfe oder einen Verlaufseintrag, springt die Auswahl ans neue Textende.
+Compose scrollt die einzeilige Eingabe dadurch bis zum neuen Ende. Eine vom
+Menschen gesetzte Auswahl bleibt bei gewöhnlicher Tastatureingabe dagegen
+unverändert.

@@ -121,7 +121,9 @@ Stand: 16.08.2026
   Hotelname, Stadt oder Adresse.
 - Die lokale OCR-Bausteinhilfe erkennt Text offline. Nach Wahl eines Zielfelds
   können einzelne Wörter oder Beträge per Tipp kontrolliert übernommen und bei
-  Textfeldern aneinandergefügt werden.
+  Textfeldern aneinandergefügt werden. Nach einer solchen Ergänzung stehen
+  sichtbarer Ausschnitt und Cursor am neuen Textende; eine normale manuelle
+  Cursorposition wird bei der Tastatureingabe nicht überschrieben.
 
 ## Darstellung
 

@@ -290,3 +290,17 @@
 - Belegminiatur und Bildverwaltung getrennt: Miniatur öffnet nun eine
   bildschirmfüllende Ansicht mit 1–5-fachem Pinch-Zoom, Verschieben und
   Doppeltipp; „Bearbeiten“ führt weiterhin zu Ersetzen und Entknüpfen.
+
+## 16.08.2026 – Cursorführung bei langen Texten
+
+- Einen privaten Gerätescreenshot vom Galaxy S24 Ultra außerhalb des
+  Repositorys ausgewertet. Die vollständige Ortsangabe reichte rechts über
+  den sichtbaren Ausschnitt hinaus, während der Cursor am alten Einfügepunkt
+  stehen blieb.
+- Verlaufstextfelder auf explizite Text- und Auswahlverwaltung umgestellt.
+  Ergänzungen aus lokaler Texthilfe und Verlauf setzen den Cursor nun an das
+  neue Ende und scrollen die einzeilige Eingabe automatisch dorthin.
+- Auf dem S24 Ultra mit geöffneter Tastatur gegengeprüft: Cursor zunächst
+  absichtlich mitten im langen Text platziert, OCR-Baustein ergänzt und
+  anschließend Cursor sowie sichtbaren Ausschnitt am neuen Textende geprüft.
+  Der veränderte Testbeleg wurde verworfen.
