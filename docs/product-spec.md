@@ -86,7 +86,9 @@ Stand: 16.08.2026
   Differenz sichtbar, das Speichern bleibt wegen Gebühren und Rabatten
   möglich.
 - Ein gespeicherter Beleg kann durch Antippen einschließlich Ort,
-  Checknummer, Gesamtbetrag, Trinkgeldwahl und Einzelposten bearbeitet werden.
+  Checknummer, Belegdatum, Gesamtbetrag, Trinkgeldwahl und Einzelposten
+  bearbeitet werden. Das Datum aus einer Bilderkennung bleibt ein sichtbarer,
+  korrigierbarer Vorschlag.
 - Der Belegeditor besitzt einen festen Kopf und Aktionsbereich; nur sein Inhalt
   scrollt und bleibt auch bei geöffneter Bildschirmtastatur vollständig
   erreichbar.
@@ -97,13 +99,38 @@ Stand: 16.08.2026
 ## Abgleich
 
 - Jede Zwischen- oder Endrechnung erzeugt einen unabhängigen Abgleichslauf.
-- Bereits erfolgreich abgeglichene Belege werden bei späteren Läufen
-  standardmäßig nicht erneut berücksichtigt.
+- Jeder Lauf berücksichtigt und zeigt alle Belege der Reise, auch wenn ihr
+  Datum auffällig ist oder sie in einem anderen Lauf bereits zugeordnet wurden.
 - Statusfarben: grün korrekt, gelb unsicher, orange Betragsabweichung, rot
   nicht gefunden.
-- Eine Rechnungszeile und ein Beleg werden 1:1 zugeordnet.
-- Manuelle Zuordnung zeigt gerankte Kandidaten nach Checknummer, Betrag, Datum
-  und Ort.
+- Eine Rechnungszeile und ein Beleg werden innerhalb eines Laufs 1:1
+  zugeordnet. Zwischen unabhängigen Zwischen- und Endrechnungen darf derselbe
+  Beleg erneut geprüft werden.
+- Automatischer und manueller Abgleich verwenden einen gewichteten,
+  Levenshtein-basierten Trefferwert aus Checknummer, Betrag, Datum und Ort.
+  Führende Nullen und eine vorangestellte Kassen-ID verhindern die Zuordnung
+  nicht; automatische Treffer verlangen weiterhin centgenauen Betrag,
+  passende Währung und einen eindeutigen Abstand zum nächsten Kandidaten.
+- Die KI transkribiert das Rechnungsbild unabhängig von den gespeicherten
+  Belegen und liefert Einzelzeilen, Roh- und normalisierte Datumswerte sowie
+  die gedruckte Rechnungskontrollsumme. Schon eine ungültige KI-Zeile blockiert
+  die gesamte atomare Übernahme; vorhandene Daten bleiben erhalten.
+- Oberhalb der Einträge stehen vier lokale Kennzahlen-Kacheln für
+  Rechnungssumme, Summe der zugeordneten Belege, nicht zugeordnete Belege und
+  offene Rechnungsposten. Darunter folgt ein kurzes lokales Fazit: Bei bis zu
+  drei Auffälligkeiten nennt es Ort, Datum und Checknummer konkret; größere
+  Fehlerbilder werden bewusst zusammengefasst. Darunter werden
+  erkannte Rechnungszeilen und sämtliche Belege gemeinsam chronologisch
+  dargestellt. Die erkannte Zeilensumme wird lokal mit der gedruckten
+  Kontrollsumme verglichen. Nur eine tatsächliche Abweichung wird im Kurzfazit
+  erwähnt; eine fehlende zusätzliche Kontrollsumme wird nicht mit einer
+  fehlenden Rechnungssumme verwechselt.
+- Nach dem lokalen Abgleich kann die Cloud-KI aus den bereits geprüften Fakten
+  eine gespeicherte, verständliche Zusammenfassung formulieren. Sie ist in der
+  kompakten Übersicht optional aufklappbar. Ohne API-Key bleiben das lokale
+  Kurzfazit und sämtliche Einträge vollständig nutzbar.
+- Die Bezeichnung einer Rechnung ist in Übersicht und Detailkopf ausdrücklich
+  gekennzeichnet und im Detail bearbeitbar.
 - Fremde oder absichtlich nicht protokollierte Posten können als
   „bekannt/akzeptiert“ markiert werden.
 - Zuordnungen können zurückgesetzt, der Lauf neu ausgewertet oder der gesamte

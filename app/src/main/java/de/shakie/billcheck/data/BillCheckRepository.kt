@@ -6,9 +6,9 @@ import de.shakie.billcheck.domain.ReconciliationMatcher
 import de.shakie.billcheck.domain.ReconciliationStatus
 import de.shakie.billcheck.domain.ExtractedStatement
 import de.shakie.billcheck.domain.ReceiptSnapshotRules
-import java.time.LocalDate
-import java.time.ZoneId
-import java.time.format.DateTimeParseException
+import de.shakie.billcheck.domain.StatementExtractionValidator
+import de.shakie.billcheck.domain.VerifiedReconciliationEntry
+import de.shakie.billcheck.domain.VerifiedReconciliationReport
 import java.util.UUID
 import java.util.Locale
 
@@ -138,9 +138,19 @@ class BillCheckRepository(database: BillCheckDatabase) {
             receipt = receipt,
             items = receiptItems,
         )
+        dao.clearTripAnalyses(trip.id)
     }
 
-    suspend fun deleteReceipt(receipt: ReceiptEntity) = dao.deleteReceipt(receipt)
+    suspend fun deleteReceipt(receipt: ReceiptEntity) {
+        val affectedLines = dao.getStatementLinesForReceipt(receipt.id)
+        dao.deleteReceipt(receipt)
+        affectedLines.forEach { line ->
+            dao.updateStatementLine(
+                line.copy(status = ReconciliationStatus.NOT_FOUND, acceptedWithoutReceipt = false),
+            )
+        }
+        dao.clearTripAnalyses(receipt.tripId)
+    }
 
     suspend fun updateReceipt(
         trip: TripEntity,
@@ -148,6 +158,7 @@ class BillCheckRepository(database: BillCheckDatabase) {
         location: String,
         checkNumber: String,
         foreignAmountMinor: Long,
+        occurredAt: Long,
         addDefaultTip: Boolean,
         items: List<NewReceiptItem>,
     ) {
@@ -159,6 +170,7 @@ class BillCheckRepository(database: BillCheckDatabase) {
             selected = addDefaultTip,
         )
         val receipt = existing.copy(
+            occurredAt = occurredAt,
             location = location.trim(),
             checkNumber = checkNumber.trim(),
             foreignAmountMinor = foreignAmountMinor,
@@ -182,6 +194,10 @@ class BillCheckRepository(database: BillCheckDatabase) {
             )
         }
         dao.updateReceiptWithItems(receipt, receiptItems)
+        dao.getStatementLinesForReceipt(receipt.id).forEach { line ->
+            dao.updateStatementLine(line.copy(status = ReconciliationMatcher.suggestedStatus(line, receipt)))
+        }
+        dao.clearTripAnalyses(trip.id)
     }
 
     suspend fun updateReceiptImage(receiptId: String, imageUri: String?) =
@@ -206,7 +222,19 @@ class BillCheckRepository(database: BillCheckDatabase) {
         reconciliationId: String,
         title: String,
         imageUri: String?,
-    ) = dao.updateReconciliation(reconciliationId, title.trim().ifBlank { "Rechnung" }, imageUri)
+    ) {
+        val existing = checkNotNull(dao.getReconciliation(reconciliationId)).reconciliation
+        val imageChanged = existing.statementImageUri != imageUri
+        dao.updateReconciliationEntity(
+            existing.copy(
+                title = title.trim().ifBlank { "Rechnung" },
+                statementImageUri = imageUri,
+                declaredTotalMinor = if (imageChanged) null else existing.declaredTotalMinor,
+                declaredTotalCurrencyCode = if (imageChanged) null else existing.declaredTotalCurrencyCode,
+            ),
+        )
+        dao.clearReconciliationAnalysis(reconciliationId)
+    }
 
     suspend fun addStatementLine(
         reconciliationId: String,
@@ -225,6 +253,7 @@ class BillCheckRepository(database: BillCheckDatabase) {
                 acceptedWithoutReceipt = false,
             ),
         )
+        dao.clearReconciliationAnalysis(reconciliationId)
     }
 
     suspend fun updateStatementLine(
@@ -241,11 +270,20 @@ class BillCheckRepository(database: BillCheckDatabase) {
                 currencyCode = input.currencyCode,
                 status = ReconciliationStatus.NOT_FOUND,
                 acceptedWithoutReceipt = false,
+                aiSuggestedReceiptId = null,
+                aiConfidence = null,
+                aiReason = null,
+                sourceDateText = null,
+                dateAmbiguous = false,
             ),
         )
+        dao.clearReconciliationAnalysis(existing.reconciliationId)
     }
 
-    suspend fun deleteStatementLine(line: StatementLineEntity) = dao.deleteStatementLine(line)
+    suspend fun deleteStatementLine(line: StatementLineEntity) {
+        dao.deleteStatementLine(line)
+        dao.clearReconciliationAnalysis(line.reconciliationId)
+    }
 
     suspend fun setAccepted(line: StatementLineEntity, accepted: Boolean) {
         dao.deleteStatementLineMatch(line.id)
@@ -255,13 +293,15 @@ class BillCheckRepository(database: BillCheckDatabase) {
                 status = if (accepted) ReconciliationStatus.ACCEPTED else ReconciliationStatus.NOT_FOUND,
             ),
         )
+        dao.clearReconciliationAnalysis(line.reconciliationId)
     }
 
     suspend fun rankCandidates(
         tripId: String,
         line: StatementLineEntity,
     ): List<RankedReceiptCandidate> {
-        val usedReceiptIds = dao.getTripMatches(tripId).mapTo(mutableSetOf()) { it.receiptId }
+        val usedReceiptIds = dao.getReconciliationMatches(line.reconciliationId)
+            .mapTo(mutableSetOf()) { it.receiptId }
         return ReconciliationMatcher.rank(
             line,
             dao.getReceipts(tripId).filterNot { it.id in usedReceiptIds },
@@ -269,13 +309,17 @@ class BillCheckRepository(database: BillCheckDatabase) {
     }
 
     suspend fun assignReceipt(line: StatementLineEntity, receipt: ReceiptEntity, manually: Boolean) {
-        dao.replaceReceiptMatch(ReceiptMatchEntity(line.id, receipt.id, manually))
+        dao.replaceReceiptMatch(
+            ReceiptMatchEntity(line.id, receipt.id, manually),
+            reconciliationId = line.reconciliationId,
+        )
         dao.updateStatementLine(
             line.copy(
                 status = ReconciliationMatcher.suggestedStatus(line, receipt),
                 acceptedWithoutReceipt = false,
             ),
         )
+        dao.clearReconciliationAnalysis(line.reconciliationId)
     }
 
     suspend fun clearLineMatch(line: StatementLineEntity) {
@@ -283,36 +327,58 @@ class BillCheckRepository(database: BillCheckDatabase) {
         dao.updateStatementLine(
             line.copy(status = ReconciliationStatus.NOT_FOUND, acceptedWithoutReceipt = false),
         )
+        dao.clearReconciliationAnalysis(line.reconciliationId)
     }
 
     suspend fun runAutomaticReconciliation(
         tripId: String,
         reconciliation: ReconciliationWithLines,
-    ) {
+    ): VerifiedReconciliationReport {
+        dao.clearReconciliationAnalysis(reconciliation.reconciliation.id)
         dao.resetMatches(reconciliation.reconciliation.id)
-        val usedElsewhere = dao.getTripMatches(tripId).mapTo(mutableSetOf()) { it.receiptId }
-        val available = dao.getReceipts(tripId).filterNot { it.id in usedElsewhere }.toMutableList()
-        reconciliation.lines.sortedBy { it.line.occurredOn ?: Long.MAX_VALUE }.forEach { related ->
-            val line = related.line
-            if (line.acceptedWithoutReceipt) return@forEach
-            val ranked = ReconciliationMatcher.rank(line, available)
-            val strong = ranked.firstOrNull()?.receipt?.takeIf {
-                ReconciliationMatcher.isStrongAutomaticMatch(line, it)
+        val available = dao.getReceipts(tripId).toMutableList()
+        val remainingLines = reconciliation.lines.map { it.line }
+            .filterNot { it.acceptedWithoutReceipt }
+            .toMutableList()
+        while (remainingLines.isNotEmpty() && available.isNotEmpty()) {
+            val proposals = remainingLines.mapNotNull { line ->
+                val ranked = ReconciliationMatcher.rank(line, available)
+                val receipt = ReconciliationMatcher.selectAutomaticMatch(line, ranked) ?: return@mapNotNull null
+                AutomaticProposal(
+                    line = line,
+                    receipt = receipt,
+                    exactCheck = ReconciliationMatcher.normalizeCheckNumber(line.checkNumber) ==
+                        ReconciliationMatcher.normalizeCheckNumber(receipt.checkNumber),
+                    score = ranked.first().score,
+                    margin = ranked.first().score - (ranked.getOrNull(1)?.score ?: 0),
+                )
             }
-            if (strong != null) {
-                assignReceipt(line, strong, manually = false)
-                available.removeAll { it.id == strong.id }
-            } else {
-                val status = ranked.firstOrNull()?.receipt?.let {
-                    ReconciliationMatcher.suggestedStatus(line, it)
-                }?.takeIf { it == ReconciliationStatus.AMOUNT_MISMATCH }
-                    ?: ReconciliationStatus.NOT_FOUND
-                dao.updateStatementLine(line.copy(status = status, acceptedWithoutReceipt = false))
-            }
+            val selected = proposals.sortedWith(
+                compareByDescending<AutomaticProposal> { it.exactCheck }
+                    .thenByDescending { it.margin }
+                    .thenByDescending { it.score },
+            ).firstOrNull() ?: break
+            assignReceipt(selected.line, selected.receipt, manually = false)
+            remainingLines.removeAll { it.id == selected.line.id }
+            available.removeAll { it.id == selected.receipt.id }
         }
+        remainingLines.forEach { line ->
+            val status = ReconciliationMatcher.rank(line, available).firstOrNull()?.receipt?.let {
+                ReconciliationMatcher.suggestedStatus(line, it)
+            }?.takeIf {
+                it in setOf(
+                    ReconciliationStatus.AMOUNT_MISMATCH,
+                    ReconciliationStatus.CURRENCY_MISMATCH,
+                    ReconciliationStatus.DATE_MISMATCH,
+                )
+            } ?: ReconciliationStatus.NOT_FOUND
+            dao.updateStatementLine(line.copy(status = status, acceptedWithoutReceipt = false))
+        }
+        return buildVerifiedReport(tripId, reconciliation.reconciliation.id)
     }
 
     suspend fun resetReconciliation(reconciliation: ReconciliationWithLines) {
+        dao.clearReconciliationAnalysis(reconciliation.reconciliation.id)
         dao.resetMatches(reconciliation.reconciliation.id)
         reconciliation.lines.forEach { related ->
             dao.updateStatementLine(
@@ -335,39 +401,120 @@ class BillCheckRepository(database: BillCheckDatabase) {
         extracted: ExtractedStatement,
         fallbackCurrencyCode: String,
     ) {
-        if (extracted.title.isNotBlank()) {
-            dao.updateReconciliation(
-                reconciliation.id,
-                extracted.title,
-                reconciliation.statementImageUri,
-            )
-        }
-        val lines = extracted.lines.mapNotNull { line ->
-            val amountMinor = line.amountText.replace(',', '.').toBigDecimalOrNull()
-                ?.movePointRight(2)?.setScale(0, java.math.RoundingMode.HALF_UP)
-                ?.longValueExact()?.takeIf { it > 0 }
-                ?: return@mapNotNull null
+        val validated = StatementExtractionValidator.validate(extracted, fallbackCurrencyCode)
+        val lines = validated.lines.map { line ->
             StatementLineEntity(
                 id = UUID.randomUUID().toString(),
                 reconciliationId = reconciliation.id,
-                occurredOn = parseIsoDate(line.occurredOn),
-                description = line.description.trim(),
-                checkNumber = line.checkNumber.trim(),
-                amountMinor = amountMinor,
-                currencyCode = line.currencyCode.trim().uppercase(Locale.ROOT).takeIf { it.length == 3 }
-                    ?: fallbackCurrencyCode,
+                occurredOn = line.occurredOn,
+                description = line.description,
+                checkNumber = line.checkNumber,
+                amountMinor = line.amountMinor,
+                currencyCode = line.currencyCode,
                 status = ReconciliationStatus.NOT_FOUND,
                 acceptedWithoutReceipt = false,
+                sourceDateText = line.sourceDateText,
+                dateAmbiguous = line.dateAmbiguous,
             )
         }
-        dao.replaceStatementLines(reconciliation.id, lines)
+        dao.applyExtractedStatement(
+            reconciliation = reconciliation.copy(
+                title = validated.title.ifBlank { reconciliation.title },
+                analysisSummary = null,
+                analysisUpdatedAt = null,
+                declaredTotalMinor = validated.declaredTotalMinor,
+                declaredTotalCurrencyCode = validated.declaredTotalCurrencyCode,
+            ),
+            lines = lines,
+        )
     }
 
-    private fun parseIsoDate(value: String): Long? = try {
-        value.trim().takeIf(String::isNotEmpty)?.let {
-            LocalDate.parse(it).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
-        }
-    } catch (_: DateTimeParseException) {
-        null
+    suspend fun storeReconciliationSummary(reconciliationId: String, summary: String) {
+        dao.updateReconciliationAnalysis(
+            reconciliationId,
+            summary.trim().take(4_000).takeIf(String::isNotEmpty),
+            System.currentTimeMillis(),
+        )
     }
+
+    private suspend fun buildVerifiedReport(
+        tripId: String,
+        reconciliationId: String,
+    ): VerifiedReconciliationReport {
+        val reconciliation = checkNotNull(dao.getReconciliation(reconciliationId))
+        val receipts = dao.getReceipts(tripId)
+        val receiptById = receipts.associateBy { it.id }
+        val audit = de.shakie.billcheck.domain.ReconciliationAuditor.audit(reconciliation, receipts)
+        val entries = reconciliation.lines.map { related ->
+            val line = related.line
+            val receipt = related.matches.singleOrNull()?.receiptId?.let(receiptById::get)
+            VerifiedReconciliationEntry(
+                kind = when {
+                    line.acceptedWithoutReceipt -> VerifiedReconciliationReport.KIND_ACCEPTED
+                    receipt != null -> VerifiedReconciliationReport.KIND_MATCHED
+                    else -> VerifiedReconciliationReport.KIND_STATEMENT_ONLY
+                },
+                occurredAt = line.occurredOn ?: receipt?.occurredAt,
+                description = line.description,
+                statementCheckNumber = line.checkNumber.takeIf(String::isNotBlank),
+                receiptCheckNumber = receipt?.checkNumber,
+                statementAmountMinor = line.amountMinor,
+                receiptAmountMinor = receipt?.foreignAmountMinor,
+                currencyCode = line.currencyCode,
+                status = when {
+                    line.acceptedWithoutReceipt -> ReconciliationStatus.ACCEPTED
+                    receipt != null -> ReconciliationMatcher.suggestedStatus(line, receipt)
+                    else -> line.status
+                },
+            )
+        }.toMutableList()
+        val currentMatchedReceiptIds = reconciliation.lines.flatMap { it.matches }
+            .mapTo(mutableSetOf()) { it.receiptId }
+        receipts.filterNot { it.id in currentMatchedReceiptIds }.forEach { receipt ->
+            entries += VerifiedReconciliationEntry(
+                kind = VerifiedReconciliationReport.KIND_RECEIPT_ONLY,
+                occurredAt = receipt.occurredAt,
+                description = receipt.location,
+                statementCheckNumber = null,
+                receiptCheckNumber = receipt.checkNumber,
+                statementAmountMinor = null,
+                receiptAmountMinor = receipt.foreignAmountMinor,
+                currencyCode = receipt.foreignCurrencyCode,
+                status = ReconciliationStatus.NOT_FOUND,
+            )
+        }
+        return VerifiedReconciliationReport(
+            reconciliationId = reconciliationId,
+            title = reconciliation.reconciliation.title,
+            languageCode = Locale.getDefault().language,
+            entries = entries.sortedWith(
+                compareBy<VerifiedReconciliationEntry> { it.occurredAt ?: Long.MAX_VALUE }
+                    .thenBy { it.description },
+            ),
+            recognizedLineCount = audit.recognizedLineCount,
+            declaredTotalMinor = audit.declaredTotalMinor?.toString(),
+            declaredTotalCurrencyCode = audit.declaredTotalCurrencyCode,
+            declaredTotalDifferenceMinor = audit.declaredTotalDifferenceMinor?.toString(),
+            totalCheck = audit.totalCheck.name,
+            auditWarnings = buildList {
+                if (audit.ambiguousDateCount > 0) add("AMBIGUOUS_DATES=${audit.ambiguousDateCount}")
+                if (audit.receiptsOutsideRecognizedDateRangeCount > 0) {
+                    add("RECEIPTS_OUTSIDE_RECOGNIZED_DATE_RANGE=${audit.receiptsOutsideRecognizedDateRangeCount}")
+                }
+                if (audit.duplicateStatementLineCount > 0) {
+                    add("POSSIBLE_DUPLICATE_STATEMENT_LINES=${audit.duplicateStatementLineCount}")
+                }
+                if (audit.duplicateReceiptCount > 0) add("POSSIBLE_DUPLICATE_RECEIPTS=${audit.duplicateReceiptCount}")
+                if (audit.nonPositiveAmountCount > 0) add("NON_POSITIVE_AMOUNTS=${audit.nonPositiveAmountCount}")
+            },
+        )
+    }
+
+    private data class AutomaticProposal(
+        val line: StatementLineEntity,
+        val receipt: ReceiptEntity,
+        val exactCheck: Boolean,
+        val score: Int,
+        val margin: Int,
+    )
 }

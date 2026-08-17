@@ -114,6 +114,12 @@ object BackupJsonCodec {
         putNullable("statementImageEntry", value.statementImageEntry)
         putNullable("statementImageMimeType", value.statementImageMimeType)
         put("createdAt", value.createdAt)
+        putNullable("analysisSummary", value.analysisSummary)
+        if (value.analysisUpdatedAt == null) put("analysisUpdatedAt", JSONObject.NULL)
+        else put("analysisUpdatedAt", value.analysisUpdatedAt)
+        if (value.declaredTotalMinor == null) put("declaredTotalMinor", JSONObject.NULL)
+        else put("declaredTotalMinor", value.declaredTotalMinor)
+        putNullable("declaredTotalCurrencyCode", value.declaredTotalCurrencyCode)
         put("lines", JSONArray().apply { value.lines.forEach { put(encodeLine(it)) } })
     }
 
@@ -124,6 +130,15 @@ object BackupJsonCodec {
         statementImageMimeType = value.nullableString("statementImageMimeType"),
         createdAt = value.getLong("createdAt"),
         lines = value.getJSONArray("lines").objects(::decodeLine),
+        analysisSummary = value.nullableString("analysisSummary"),
+        analysisUpdatedAt = if (!value.has("analysisUpdatedAt") || value.isNull("analysisUpdatedAt")) {
+            null
+        } else {
+            value.getLong("analysisUpdatedAt")
+        },
+        declaredTotalMinor = if (!value.has("declaredTotalMinor") || value.isNull("declaredTotalMinor")) null
+            else value.getLong("declaredTotalMinor"),
+        declaredTotalCurrencyCode = value.nullableString("declaredTotalCurrencyCode"),
     )
 
     private fun encodeLine(value: TransferStatementLine) = JSONObject().apply {
@@ -137,6 +152,11 @@ object BackupJsonCodec {
         put("acceptedWithoutReceipt", value.acceptedWithoutReceipt)
         putNullable("matchedReceiptId", value.matchedReceiptId)
         put("matchedManually", value.matchedManually)
+        putNullable("aiSuggestedReceiptId", value.aiSuggestedReceiptId)
+        if (value.aiConfidence == null) put("aiConfidence", JSONObject.NULL) else put("aiConfidence", value.aiConfidence)
+        putNullable("aiReason", value.aiReason)
+        putNullable("sourceDateText", value.sourceDateText)
+        put("dateAmbiguous", value.dateAmbiguous)
     }
 
     private fun decodeLine(value: JSONObject) = TransferStatementLine(
@@ -150,6 +170,12 @@ object BackupJsonCodec {
         acceptedWithoutReceipt = value.optBoolean("acceptedWithoutReceipt"),
         matchedReceiptId = value.nullableString("matchedReceiptId"),
         matchedManually = value.optBoolean("matchedManually"),
+        aiSuggestedReceiptId = value.nullableString("aiSuggestedReceiptId"),
+        aiConfidence = if (!value.has("aiConfidence") || value.isNull("aiConfidence")) null
+            else value.getInt("aiConfidence"),
+        aiReason = value.nullableString("aiReason"),
+        sourceDateText = value.nullableString("sourceDateText"),
+        dateAmbiguous = value.optBoolean("dateAmbiguous"),
     )
 }
 

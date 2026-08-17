@@ -25,7 +25,7 @@ class CsvTransferCodecTest {
                         TransferReceipt(
                             id = "receipt-1",
                             occurredAt = 200,
-                            location = "Beach \"West\"; Bar",
+                            location = "=HYPERLINK(\"https://invalid.example\")",
                             checkNumber = "0602",
                             foreignAmountMinor = 93996,
                             foreignCurrencyCode = "EGP",
@@ -47,6 +47,10 @@ class CsvTransferCodecTest {
                             statementImageEntry = null,
                             statementImageMimeType = null,
                             createdAt = 300,
+                            analysisSummary = "One discrepancy remains.",
+                            analysisUpdatedAt = 400,
+                            declaredTotalMinor = 93_996,
+                            declaredTotalCurrencyCode = "EGP",
                             lines = listOf(
                                 TransferStatementLine(
                                     id = "line-1",
@@ -59,6 +63,11 @@ class CsvTransferCodecTest {
                                     acceptedWithoutReceipt = false,
                                     matchedReceiptId = "receipt-1",
                                     matchedManually = true,
+                                    aiSuggestedReceiptId = "receipt-1",
+                                    aiConfidence = 96,
+                                    aiReason = "Same check and amount",
+                                    sourceDateText = "28.12.24",
+                                    dateAmbiguous = true,
                                 ),
                             ),
                         ),
@@ -72,9 +81,18 @@ class CsvTransferCodecTest {
 
         assertTrue(encoded.startsWith("\uFEFF\"Bill Check\""))
         assertEquals("Utopia; Test", decoded.trips.single().name)
-        assertEquals("Beach \"West\"; Bar", decoded.trips.single().receipts.single().location)
+        assertTrue(encoded.contains("'=HYPERLINK"))
+        assertEquals("=HYPERLINK(\"https://invalid.example\")", decoded.trips.single().receipts.single().location)
         assertEquals("55.6", decoded.trips.single().receipts.single().exchangeRate)
         assertEquals("receipt-1", decoded.trips.single().reconciliations.single().lines.single().matchedReceiptId)
         assertTrue(decoded.trips.single().reconciliations.single().lines.single().matchedManually)
+        assertEquals("One discrepancy remains.", decoded.trips.single().reconciliations.single().analysisSummary)
+        assertEquals(400L, decoded.trips.single().reconciliations.single().analysisUpdatedAt)
+        assertEquals(96, decoded.trips.single().reconciliations.single().lines.single().aiConfidence)
+        assertEquals("Same check and amount", decoded.trips.single().reconciliations.single().lines.single().aiReason)
+        assertEquals(93_996L, decoded.trips.single().reconciliations.single().declaredTotalMinor)
+        assertEquals("EGP", decoded.trips.single().reconciliations.single().declaredTotalCurrencyCode)
+        assertEquals("28.12.24", decoded.trips.single().reconciliations.single().lines.single().sourceDateText)
+        assertTrue(decoded.trips.single().reconciliations.single().lines.single().dateAmbiguous)
     }
 }

@@ -130,6 +130,10 @@ class DataTransferManager(
                         },
                         statementImageMimeType = reconciliation.statementImageUri?.let(::mimeType),
                         createdAt = reconciliation.createdAt,
+                        analysisSummary = reconciliation.analysisSummary,
+                        analysisUpdatedAt = reconciliation.analysisUpdatedAt,
+                        declaredTotalMinor = reconciliation.declaredTotalMinor,
+                        declaredTotalCurrencyCode = reconciliation.declaredTotalCurrencyCode,
                         lines = related.lines.map { lineWithMatches ->
                             val line = lineWithMatches.line
                             val match = lineWithMatches.matches.firstOrNull()
@@ -144,6 +148,11 @@ class DataTransferManager(
                                 acceptedWithoutReceipt = line.acceptedWithoutReceipt,
                                 matchedReceiptId = match?.receiptId,
                                 matchedManually = match?.matchedManually ?: false,
+                                aiSuggestedReceiptId = line.aiSuggestedReceiptId,
+                                aiConfidence = line.aiConfidence,
+                                aiReason = line.aiReason,
+                                sourceDateText = line.sourceDateText,
+                                dateAmbiguous = line.dateAmbiguous,
                             )
                         },
                         statementImageSourceUri = reconciliation.statementImageUri,
@@ -263,6 +272,7 @@ class DataTransferManager(
     }
 
     private suspend fun insertAsNewTrip(source: TransferTrip, imageUris: Map<String, String>): String {
+        TransferValidator.validate(source)
         val tripId = UUID.randomUUID().toString()
         val receiptIds = source.receipts.associate { it.id to UUID.randomUUID().toString() }
         val reconciliationIds = source.reconciliations.associate { it.id to UUID.randomUUID().toString() }
@@ -319,6 +329,10 @@ class DataTransferManager(
                 title = reconciliation.title,
                 statementImageUri = reconciliation.statementImageEntry?.let(imageUris::get),
                 createdAt = reconciliation.createdAt,
+                analysisSummary = reconciliation.analysisSummary,
+                analysisUpdatedAt = reconciliation.analysisUpdatedAt,
+                declaredTotalMinor = reconciliation.declaredTotalMinor,
+                declaredTotalCurrencyCode = reconciliation.declaredTotalCurrencyCode,
             )
         }
         val lines = source.reconciliations.flatMap { reconciliation ->
@@ -333,6 +347,11 @@ class DataTransferManager(
                     currencyCode = line.currencyCode,
                     status = sanitizeStatus(line.status),
                     acceptedWithoutReceipt = line.acceptedWithoutReceipt,
+                    aiSuggestedReceiptId = line.aiSuggestedReceiptId?.let(receiptIds::get),
+                    aiConfidence = line.aiConfidence?.coerceIn(0, 100),
+                    aiReason = line.aiReason,
+                    sourceDateText = line.sourceDateText,
+                    dateAmbiguous = line.dateAmbiguous,
                 )
             }
         }
@@ -361,6 +380,8 @@ class DataTransferManager(
             ReconciliationStatus.CORRECT,
             ReconciliationStatus.UNCERTAIN,
             ReconciliationStatus.AMOUNT_MISMATCH,
+            ReconciliationStatus.CURRENCY_MISMATCH,
+            ReconciliationStatus.DATE_MISMATCH,
             ReconciliationStatus.NOT_FOUND,
             ReconciliationStatus.ACCEPTED,
         )
@@ -408,6 +429,11 @@ class DataTransferManager(
             add("")
             trip.reconciliations.forEach { reconciliation ->
                 add("STATEMENT: ${reconciliation.title}")
+                reconciliation.analysisSummary?.takeIf(String::isNotBlank)?.let { summary ->
+                    add("AI SUMMARY:")
+                    summary.lineSequence().forEach { add(it) }
+                    add("")
+                }
                 add("Status       Date       Check        Amount       Description")
                 reconciliation.lines.forEach { line ->
                     add(

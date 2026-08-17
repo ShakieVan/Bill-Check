@@ -327,3 +327,110 @@
 - Alle drei Einstiege mit der signierten Release-App auf dem Galaxy S24 Ultra
   geprüft: Belegliste, Belegeditor und Bildprüfung öffnen die Detailansicht und
   kehren beim Schließen in ihren jeweiligen Ausgangszustand zurück.
+
+## 17.08.2026 – Unscharfer Rechnungsabgleich
+
+- Rechnungsbezeichnungen in Übersicht und Detailkopf ausdrücklich beschriftet
+  und im Detail bearbeitbar gemacht.
+- Den bisherigen Rangwert durch einen Prozentwert aus Checknummer, Betrag,
+  Datum und Ort ersetzt. Checknummern und Ortsangaben tolerieren mit
+  Levenshtein-Ähnlichkeit Schreibfehler und Abkürzungen.
+- Vorangestellte Kassen-IDs werden über eine starke Endübereinstimmung der
+  eigentlichen, von führenden Nullen bereinigten Checknummer abgefangen.
+- Automatische Fuzzy-Zuordnungen an exakten Betrag, gleiche Währung, mindestens
+  75 Punkte und einen Abstand von 10 Punkten zum nächsten Kandidaten gebunden.
+  Präfix-, Tippfehler-, Fremd-ID- und Mehrdeutigkeitsfälle per JVM-Test
+  abgesichert.
+- Den realen Fall `0015512` auf der Rechnung gegen `5512` auf dem Beleg mit
+  den privaten Originalbildern im Android-16-Emulator vollständig geprüft.
+  Dabei fiel auf, dass das erkannte Belegdatum zwar geliefert, aber im Editor
+  bisher weder angezeigt noch gespeichert wurde. Der Belegeditor enthält nun
+  ein editierbares, streng validiertes Datum und übernimmt den KI-Vorschlag.
+- Der reale Fall wird auch ohne vorhandenes Belegdatum mit 78 Punkten erkannt:
+  starke Checknummer-Endung, centgenauer Betrag und ähnlicher Restaurantname.
+  Exakter Betrag, gleiche Währung und der Eindeutigkeitsabstand bleiben dabei
+  zwingende Schutzbedingungen.
+
+## 17.08.2026 – Hybride Rechnungsprüfung
+
+- Den im HTML-Prototyp vorhandenen freien KI-Analysetext mit der strukturierten
+  Android-Rechnungsprüfung zusammengeführt, ohne Gemini zum verbindlichen
+  Abgleichssystem zu machen.
+- Gemini erhält Rechnungsbild und noch verfügbare Belege mit stabilen IDs und
+  liefert je Rechnungszeile optional Beleg-ID, Konfidenz und Begründung.
+  Unbekannte IDs, bereits verwendete Belege sowie abweichende Beträge oder
+  Währungen werden vor dem Speichern lokal verworfen.
+- Verbindliche Zuordnung und Vollständigkeit bleiben beim deterministischen
+  Matcher. Rechnungszeilen ohne Beleg und freie Belege ohne Rechnungszeile
+  erscheinen in einer lokal sortierten gemeinsamen Chronologie.
+- Die lokale Diskrepanzübersicht mit Anzahlen und centgenauen Summen steht
+  oberhalb der Einträge. Anschließend darf
+  Gemini nur aus den bereits geprüften Fakten eine verständliche Zusammenfassung
+  formulieren; sie wird am Abgleich gespeichert und nach Änderungen verworfen.
+- Room-Schema 3→4 sowie Vollbackup, CSV und PDF um KI-Vorschläge und die
+  gespeicherte Zusammenfassung erweitert.
+
+## 17.08.2026 – Schonungslose Vollständigkeits- und Fallenprüfung
+
+- Den gravierenden Bedeutungsfehler behoben, bei dem eine einzige erkannte und
+  zugeordnete Rechnungszeile als „0 Rechnungszeilen ohne Beleg“ eine vollständige
+  Rechnung suggerieren konnte. Gedruckte Kontrollsumme und Währung werden nun
+  in Room 5 persistiert und lokal gegen die Summe aller erkannten Zeilen geprüft.
+- Die echte Utopia-Endrechnung mit Gemini 3.6 Flash ohne Belegkontext geprüft:
+  exakt 11 Zeilen, 7.404,20 EGP Kontrollsumme und sämtliche Checknummern wurden
+  korrekt transkribiert. `0015512` wurde lokal dem Beleg `5512` zugeordnet; die
+  übrigen zehn Rechnungszeilen bleiben ausdrücklich ohne Beleg sichtbar.
+- Einen zweiten, synthetischen Gemini-Fallenlauf mit doppelter Zeile,
+  mehrdeutigem Datum, negativer Gutschrift, Tausendertrennzeichen und sichtbarer
+  Prompt-Injection ausgeführt. Das Modell behielt beide Duplikate, markierte alle
+  Datumswerte als mehrdeutig, normalisierte `1,044.40`, ignorierte die Anweisung
+  im Dokument und trennte die Gutschrift von den drei positiven Belastungen.
+- Belege werden in jedem Abgleich vollständig einbezogen, auch außerhalb des
+  erkannten Datumsbereichs oder nach Zuordnung in einer anderen Rechnung. Die
+  1:1-Sperre gilt nun pro Abgleich; Migration 4→5 wurde auf API 36 mit echten
+  Fremdschlüsseln und zwei Zuordnungen desselben Belegs geprüft.
+- Ungültige KI-Antworten werden vor jeder Datenbankmutation vollständig
+  abgelehnt. CSV-/Backup-Import blockiert nicht positive Beträge, ungültige
+  Währungen, doppelte IDs und doppelte Zuordnungen innerhalb eines Laufs.
+  CSV-Textwerte erhalten zusätzlich einen Schutz vor Tabellen-Formelinjektion.
+- Adversariale JVM-, Room-, Repository-End-to-End- und Compose-Tests ergänzt:
+  Utopia-Teil- und Vollrechnung, Duplikate, negative/Null-/Extremwerte,
+  Überlauf, Währungs- und Datumsabweichung, mehrdeutige/ungültige Kalenderdaten,
+  alphanumerische IDs und Belege außerhalb des erkannten Datumsbereichs.
+
+### Kurze Checknummern mit Kassenpräfix
+
+- Den auf dem Telefon sichtbaren Grenzfall `0050783` gegen Beleg `783`
+  reproduziert. Die bisherige Mindestlänge von vier übereinstimmenden
+  Endziffern gab der ID nur 24 von 40 Punkten und verhinderte dadurch trotz
+  identischem Betrag, Datum und Ort die Zuordnung.
+- Dreistellige Endnummern werden nun nur bei exaktem Betrag, gleicher Währung,
+  exaktem Datum und ausreichend ähnlichem Restaurant automatisch als korrekt
+  verbunden. Ein- und zweistellige Endnummern benötigen dieselben starken
+  Stützmerkmale sowie höhere Ortsähnlichkeit und bleiben als unsicher markiert.
+- Gleich gute Konkurrenten verhindern weiterhin jede Automatik. JVM-Tests
+  decken `783 ↔ 0050783`, `1 ↔ 0050001`, fehlenden Ortskontext und
+  Mehrdeutigkeit ab; ein API-36-End-to-End-Test prüft den vollständigen
+  Repository- und Room-Weg für den echten `783`-Fall.
+- Zugeordnete Rechnungszeilen zeigen den aktuellen Übereinstimmungswert als
+  beschrifteten Balken. Seine Länge entspricht 0–100 Prozent; der gefüllte
+  Teil verwendet eine einheitliche, kontinuierlich von Rot über Gelb nach Grün
+  wechselnde Farbe. Der Wert wird aus den aktuellen Daten neu berechnet und
+  nicht als möglicherweise veraltete Momentaufnahme gespeichert.
+
+### Kompakte Abgleichszusammenfassung
+
+- Die dichte technische Textwand durch vier Kacheln ersetzt: Rechnungssumme,
+  Summe tatsächlich zugeordneter Belege, offene Belege und offene
+  Rechnungsposten.
+- Den widersprüchlichen Hinweis „keine Rechnungssumme erkannt“ entfernt. Die
+  Rechnungssumme bezeichnet nun klar die Summe der erkannten Zeilen; nur eine
+  echte Abweichung zu einer zusätzlich gedruckten Kontrollsumme erscheint als
+  kurzer Hinweis.
+- Ein lokales Kurzfazit ergänzt: Bis zu drei Auffälligkeiten werden mit Ort,
+  Datum und Checknummer beschrieben. Ab vier Auffälligkeiten oder bei nahezu
+  vollständig fehlgeschlagenem Abgleich werden nur Muster und Mengen genannt.
+- Die optionale KI-Zusammenfassung bleibt erreichbar, ist jedoch standardmäßig
+  eingeklappt. Ihr Prompt verlangt zwei bis vier Sätze, konkrete Details nur
+  bei höchstens drei Diskrepanzen und keine technische Warnung bei fehlender
+  Kontrollsumme.

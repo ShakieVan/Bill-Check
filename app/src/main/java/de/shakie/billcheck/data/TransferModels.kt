@@ -56,6 +56,10 @@ data class TransferReconciliation(
     val createdAt: Long,
     val lines: List<TransferStatementLine>,
     val statementImageSourceUri: String? = null,
+    val analysisSummary: String? = null,
+    val analysisUpdatedAt: Long? = null,
+    val declaredTotalMinor: Long? = null,
+    val declaredTotalCurrencyCode: String? = null,
 )
 
 data class TransferStatementLine(
@@ -69,6 +73,11 @@ data class TransferStatementLine(
     val acceptedWithoutReceipt: Boolean,
     val matchedReceiptId: String?,
     val matchedManually: Boolean,
+    val aiSuggestedReceiptId: String? = null,
+    val aiConfidence: Int? = null,
+    val aiReason: String? = null,
+    val sourceDateText: String? = null,
+    val dateAmbiguous: Boolean = false,
 )
 
 data class ImportTripPreview(

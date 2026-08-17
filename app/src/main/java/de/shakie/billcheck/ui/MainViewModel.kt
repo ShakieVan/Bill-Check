@@ -30,6 +30,10 @@ import de.shakie.billcheck.update.UpdateCheckStatus
 import de.shakie.billcheck.update.UpdateRelease
 import java.math.BigDecimal
 import java.math.RoundingMode
+import java.time.LocalDate
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+import java.time.format.ResolverStyle
 import java.util.Locale
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -112,6 +116,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val aiSettings = _aiSettings.asStateFlow()
     private val _aiExtraction = MutableStateFlow<AiExtractionState>(AiExtractionState.Idle)
     val aiExtraction = _aiExtraction.asStateFlow()
+    private val _reconciliationAnalysis = MutableStateFlow<ReconciliationAnalysisState>(ReconciliationAnalysisState.Idle)
+    val reconciliationAnalysis = _reconciliationAnalysis.asStateFlow()
     private val _localOcr = MutableStateFlow<LocalOcrState>(LocalOcrState.Idle)
     val localOcr = _localOcr.asStateFlow()
     private val _geminiModels = MutableStateFlow<GeminiModelsState>(GeminiModelsState.Idle)
@@ -279,12 +285,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         location: String,
         checkNumber: String,
         foreignAmountText: String,
+        occurredOnText: String,
         addDefaultTip: Boolean,
         itemDrafts: List<ReceiptItemDraft>,
         imageUri: String? = null,
     ): Boolean {
         val trip = uiState.value.selectedTrip ?: return false
         val input = parseReceiptInput(foreignAmountText, itemDrafts) ?: return false
+        val occurredAt = parseReceiptDate(occurredOnText) ?: return false
         viewModelScope.launch {
             val receiptRate = if (trip.exchangeRateMode == "DAILY") {
                 runCatching {
@@ -302,6 +310,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 items = input.items,
                 exchangeRate = receiptRate,
                 imageUri = imageUri,
+                occurredAt = occurredAt,
             )
         }
         return true
@@ -316,11 +325,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         location: String,
         checkNumber: String,
         foreignAmountText: String,
+        occurredOnText: String,
         addDefaultTip: Boolean,
         itemDrafts: List<ReceiptItemDraft>,
     ): Boolean {
         val trip = uiState.value.selectedTrip ?: return false
         val input = parseReceiptInput(foreignAmountText, itemDrafts) ?: return false
+        val occurredAt = parseReceiptDate(occurredOnText) ?: return false
         viewModelScope.launch {
             repository.updateReceipt(
                 trip = trip,
@@ -328,6 +339,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 location = location,
                 checkNumber = checkNumber,
                 foreignAmountMinor = input.totalMinor,
+                occurredAt = occurredAt,
                 addDefaultTip = addDefaultTip,
                 items = input.items,
             )
@@ -434,12 +446,20 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             it.reconciliation.id == extraction.reconciliationId
         }?.reconciliation ?: return
         viewModelScope.launch {
-            repository.applyExtractedStatement(
-                reconciliation,
-                extraction.statement,
-                trip.foreignCurrencyCode,
-            )
-            _aiExtraction.value = AiExtractionState.Idle
+            runCatching {
+                repository.applyExtractedStatement(
+                    reconciliation,
+                    extraction.statement,
+                    trip.foreignCurrencyCode,
+                )
+            }.onSuccess {
+                _aiExtraction.value = AiExtractionState.Idle
+            }.onFailure { error ->
+                _aiExtraction.value = AiExtractionState.Error(
+                    extraction.imageUri,
+                    error.message?.take(1_000).orEmpty(),
+                )
+            }
         }
     }
 
@@ -673,7 +693,31 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun runReconciliation(reconciliation: ReconciliationWithLines) {
         val tripId = uiState.value.selectedTrip?.id ?: return
-        viewModelScope.launch { repository.runAutomaticReconciliation(tripId, reconciliation) }
+        _reconciliationAnalysis.value = ReconciliationAnalysisState.Running(
+            reconciliation.reconciliation.id,
+        )
+        viewModelScope.launch {
+            runCatching {
+                val report = repository.runAutomaticReconciliation(tripId, reconciliation)
+                val key = aiSettingsStore.apiKey()
+                if (!key.isNullOrBlank()) {
+                    val settings = aiSettingsStore.read()
+                    val summary = aiExtractionProvider.summarizeReconciliation(
+                        report = report,
+                        apiKey = key,
+                        model = settings.model,
+                    )
+                    repository.storeReconciliationSummary(report.reconciliationId, summary)
+                }
+            }.onSuccess {
+                _reconciliationAnalysis.value = ReconciliationAnalysisState.Idle
+            }.onFailure { error ->
+                _reconciliationAnalysis.value = ReconciliationAnalysisState.Error(
+                    reconciliation.reconciliation.id,
+                    error.message?.take(300).orEmpty(),
+                )
+            }
+        }
     }
 
     fun resetReconciliation(reconciliation: ReconciliationWithLines) {
@@ -708,9 +752,24 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 }
             }
             val totalMinor = parseMinor(totalText)
-                ?: items.takeIf { it.isNotEmpty() }?.sumOf { it.amountMinor }
+                ?: items.takeIf { it.isNotEmpty() }?.let { parsedItems ->
+                    runCatching {
+                        parsedItems.fold(0L) { total, item -> Math.addExact(total, item.amountMinor) }
+                    }.getOrNull()
+                }
                 ?: return null
             return ParsedReceiptInput(totalMinor, items).takeIf { it.totalMinor > 0 }
+        }
+
+        fun parseReceiptDate(value: String): Long? {
+            val trimmed = value.trim()
+            val date = sequenceOf(
+                DateTimeFormatter.ofPattern("dd.MM.uuuu").withResolverStyle(ResolverStyle.STRICT),
+                DateTimeFormatter.ISO_LOCAL_DATE,
+            ).mapNotNull { formatter ->
+                runCatching { LocalDate.parse(trimmed, formatter) }.getOrNull()
+            }.firstOrNull() ?: return null
+            return date.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
         }
 
         private fun normalizeDecimal(value: String): String? = value
@@ -749,6 +808,12 @@ sealed interface AiExtractionState {
         val statement: ExtractedStatement,
     ) : AiExtractionState
     data class Error(val imageUri: String, val message: String) : AiExtractionState
+}
+
+sealed interface ReconciliationAnalysisState {
+    data object Idle : ReconciliationAnalysisState
+    data class Running(val reconciliationId: String) : ReconciliationAnalysisState
+    data class Error(val reconciliationId: String, val message: String) : ReconciliationAnalysisState
 }
 
 sealed interface LocalOcrState {

@@ -3,6 +3,8 @@ package de.shakie.billcheck.ui
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
+import java.time.Instant
+import java.time.ZoneId
 
 class MainViewModelTest {
     @Test
@@ -54,5 +56,25 @@ class MainViewModelTest {
                 drafts = listOf(ReceiptItemDraft("Coffee", "")),
             ),
         )
+    }
+
+    @Test
+    fun `receipt date accepts localized and extracted ISO formats`() {
+        val localized = MainViewModel.parseReceiptDate("26.12.2024")
+        val extracted = MainViewModel.parseReceiptDate("2024-12-26")
+
+        assertEquals(localized, extracted)
+        assertEquals(
+            "2024-12-26",
+            Instant.ofEpochMilli(requireNotNull(localized))
+                .atZone(ZoneId.systemDefault())
+                .toLocalDate()
+                .toString(),
+        )
+    }
+
+    @Test
+    fun `invalid receipt date is rejected`() {
+        assertNull(MainViewModel.parseReceiptDate("31.02.2024"))
     }
 }

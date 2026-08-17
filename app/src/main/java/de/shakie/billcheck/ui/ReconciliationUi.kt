@@ -5,6 +5,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -19,6 +20,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -55,6 +57,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -66,13 +69,23 @@ import de.shakie.billcheck.data.ReceiptEntity
 import de.shakie.billcheck.data.ReceiptWithItems
 import de.shakie.billcheck.data.ReconciliationWithLines
 import de.shakie.billcheck.data.StatementLineEntity
+import de.shakie.billcheck.data.StatementLineWithMatches
 import de.shakie.billcheck.domain.ReconciliationStatus
+import de.shakie.billcheck.domain.ReconciliationAuditor
+import de.shakie.billcheck.domain.ReconciliationCoverage
+import de.shakie.billcheck.domain.ReconciliationMatcher
+import de.shakie.billcheck.domain.ReconciliationNarrativeFacts
+import de.shakie.billcheck.domain.ReconciliationNarrativeIssueKind
+import de.shakie.billcheck.domain.ReconciliationNarrator
+import java.math.BigDecimal
+import java.math.BigInteger
 import java.text.NumberFormat
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.time.format.DateTimeParseException
+import java.time.format.ResolverStyle
 import java.util.Currency
 import java.util.Locale
 
@@ -83,6 +96,7 @@ fun ReconciliationManagerDialog(
     receipts: List<ReceiptWithItems>,
     defaultCurrencyCode: String,
     candidateSelection: CandidateSelectionState,
+    analysisState: ReconciliationAnalysisState,
     onDismiss: () -> Unit,
     onCreate: (String) -> Unit,
     onUpdateHeader: (String, String, String?) -> Unit,
@@ -103,6 +117,7 @@ fun ReconciliationManagerDialog(
 ) {
     var selectedId by remember(initialSelectedId) { mutableStateOf(initialSelectedId) }
     var showCreate by remember { mutableStateOf(false) }
+    var editingTitle by remember { mutableStateOf(false) }
     var editingLine by remember { mutableStateOf<StatementLineEntity?>(null) }
     var addingLine by remember { mutableStateOf(false) }
     var deleteTarget by remember { mutableStateOf<ReconciliationWithLines?>(null) }
@@ -127,7 +142,9 @@ fun ReconciliationManagerDialog(
                 ReconciliationDetails(
                     reconciliation = selected,
                     receipts = receipts,
+                    analysisState = analysisState,
                     onBack = { selectedId = null },
+                    onEditTitle = { editingTitle = true },
                     onAddLine = { addingLine = true },
                     onEditLine = { editingLine = it },
                     onDeleteLine = onDeleteLine,
@@ -154,10 +171,26 @@ fun ReconciliationManagerDialog(
 
     if (showCreate) {
         TitleEditorDialog(
+            dialogTitle = R.string.new_reconciliation,
             onDismiss = { showCreate = false },
             onSave = {
                 onCreate(it)
                 showCreate = false
+            },
+        )
+    }
+    if (editingTitle && selected != null) {
+        TitleEditorDialog(
+            initialTitle = selected.reconciliation.title,
+            dialogTitle = R.string.edit_reconciliation_title,
+            onDismiss = { editingTitle = false },
+            onSave = { title ->
+                onUpdateHeader(
+                    selected.reconciliation.id,
+                    title,
+                    selected.reconciliation.statementImageUri,
+                )
+                editingTitle = false
             },
         )
     }
@@ -253,6 +286,11 @@ private fun ReconciliationOverview(
                             Icon(Icons.Default.CheckCircle, contentDescription = null)
                             Spacer(Modifier.width(12.dp))
                             Column(Modifier.weight(1f)) {
+                                Text(
+                                    stringResource(R.string.reconciliation_title),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
                                 Text(reconciliation.reconciliation.title, fontWeight = FontWeight.SemiBold)
                                 Text(
                                     "${reconciliation.lines.size} ${stringResource(R.string.statement_lines)}",
@@ -273,7 +311,9 @@ private fun ReconciliationOverview(
 private fun ReconciliationDetails(
     reconciliation: ReconciliationWithLines,
     receipts: List<ReceiptWithItems>,
+    analysisState: ReconciliationAnalysisState,
     onBack: () -> Unit,
+    onEditTitle: () -> Unit,
     onAddLine: () -> Unit,
     onEditLine: (StatementLineEntity) -> Unit,
     onDeleteLine: (StatementLineEntity) -> Unit,
@@ -288,6 +328,22 @@ private fun ReconciliationDetails(
     onAnalyzeImage: () -> Unit,
     onRemoveImage: () -> Unit,
 ) {
+    val receiptById = receipts.associateBy { it.receipt.id }
+    val currentMatchedReceiptIds = reconciliation.lines
+        .flatMap { it.matches }
+        .mapTo(mutableSetOf()) { it.receiptId }
+    val receiptOnly = receipts.filterNot { it.receipt.id in currentMatchedReceiptIds }
+    val receiptsForStatement = receipts.map { it.receipt }
+    val timeline = buildList<ReconciliationTimelineEntry> {
+        reconciliation.lines.forEach { related ->
+            val matchedReceipt = related.matches.singleOrNull()?.receiptId?.let(receiptById::get)?.receipt
+            add(ReconciliationTimelineEntry.Statement(related, matchedReceipt))
+        }
+        receiptOnly.forEach { add(ReconciliationTimelineEntry.ReceiptOnly(it.receipt)) }
+    }.sortedWith(
+        compareBy<ReconciliationTimelineEntry> { it.occurredAt ?: Long.MAX_VALUE }
+            .thenBy { it.key },
+    )
     Column(Modifier.fillMaxSize()) {
         Row(
             Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 10.dp),
@@ -296,12 +352,21 @@ private fun ReconciliationDetails(
             IconButton(onClick = onBack) {
                 Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.back_to_reconciliations))
             }
-            Text(
-                reconciliation.reconciliation.title,
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.weight(1f),
-            )
+            Column(Modifier.weight(1f)) {
+                Text(
+                    stringResource(R.string.reconciliation_title),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Text(
+                    reconciliation.reconciliation.title,
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                )
+            }
+            IconButton(onClick = onEditTitle) {
+                Icon(Icons.Default.Edit, contentDescription = stringResource(R.string.edit_reconciliation_title))
+            }
         }
         HorizontalDivider()
         LazyColumn(
@@ -319,8 +384,14 @@ private fun ReconciliationDetails(
             }
             item {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(onClick = onRun, modifier = Modifier.weight(1f)) {
-                        Icon(Icons.Default.AutoAwesome, contentDescription = null)
+                    val running = analysisState is ReconciliationAnalysisState.Running &&
+                        analysisState.reconciliationId == reconciliation.reconciliation.id
+                    Button(onClick = onRun, enabled = !running, modifier = Modifier.weight(1f)) {
+                        if (running) {
+                            CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                        } else {
+                            Icon(Icons.Default.AutoAwesome, contentDescription = null)
+                        }
                         Spacer(Modifier.width(6.dp))
                         Text(stringResource(R.string.run_reconciliation))
                     }
@@ -330,9 +401,16 @@ private fun ReconciliationDetails(
                 }
             }
             item {
+                ReconciliationSummaryCard(
+                    reconciliation = reconciliation,
+                    receiptsForStatement = receiptsForStatement,
+                    analysisState = analysisState,
+                )
+            }
+            item {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        stringResource(R.string.statement_lines),
+                        stringResource(R.string.chronological_reconciliation),
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
                         modifier = Modifier.weight(1f),
@@ -343,21 +421,26 @@ private fun ReconciliationDetails(
                     }
                 }
             }
-            if (reconciliation.lines.isEmpty()) {
-                item { Text(stringResource(R.string.no_statement_lines), color = MaterialTheme.colorScheme.onSurfaceVariant) }
+            if (timeline.isEmpty()) {
+                item { Text(stringResource(R.string.no_reconciliation_entries), color = MaterialTheme.colorScheme.onSurfaceVariant) }
             } else {
-                items(reconciliation.lines, key = { it.line.id }) { related ->
-                    val match = related.matches.singleOrNull()
-                    val matchedReceipt = receipts.firstOrNull { it.receipt.id == match?.receiptId }?.receipt
-                    StatementLineCard(
-                        line = related.line,
-                        matchedReceipt = matchedReceipt,
-                        onEdit = { onEditLine(related.line) },
-                        onDelete = { onDeleteLine(related.line) },
-                        onAccept = { onAcceptLine(related.line, it) },
-                        onAssign = { onLoadCandidates(related.line) },
-                        onClearMatch = { onClearLineMatch(related.line) },
-                    )
+                items(timeline, key = { it.key }) { entry ->
+                    when (entry) {
+                        is ReconciliationTimelineEntry.Statement -> {
+                            val line = entry.related.line
+                            StatementLineCard(
+                                line = line,
+                                matchedReceipt = entry.matchedReceipt,
+                                suggestedReceipt = line.aiSuggestedReceiptId?.let(receiptById::get)?.receipt,
+                                onEdit = { onEditLine(line) },
+                                onDelete = { onDeleteLine(line) },
+                                onAccept = { onAcceptLine(line, it) },
+                                onAssign = { onLoadCandidates(line) },
+                                onClearMatch = { onClearLineMatch(line) },
+                            )
+                        }
+                        is ReconciliationTimelineEntry.ReceiptOnly -> ReceiptOnlyCard(entry.receipt)
+                    }
                 }
             }
             item {
@@ -372,10 +455,270 @@ private fun ReconciliationDetails(
     }
 }
 
+private sealed interface ReconciliationTimelineEntry {
+    val occurredAt: Long?
+    val key: String
+
+    data class Statement(
+        val related: StatementLineWithMatches,
+        val matchedReceipt: ReceiptEntity?,
+    ) : ReconciliationTimelineEntry {
+        override val occurredAt: Long? = related.line.occurredOn ?: matchedReceipt?.occurredAt
+        override val key: String = "line:${related.line.id}"
+    }
+
+    data class ReceiptOnly(val receipt: ReceiptEntity) : ReconciliationTimelineEntry {
+        override val occurredAt: Long = receipt.occurredAt
+        override val key: String = "receipt:${receipt.id}"
+    }
+}
+
+@Composable
+private fun ReconciliationSummaryCard(
+    reconciliation: ReconciliationWithLines,
+    receiptsForStatement: List<ReceiptEntity>,
+    analysisState: ReconciliationAnalysisState,
+) {
+    val audit = ReconciliationAuditor.audit(reconciliation, receiptsForStatement)
+    val narrativeFacts = ReconciliationNarrator.facts(reconciliation, receiptsForStatement)
+    val statementTotalText = formatSummaryTotals(audit.statementTotals)
+        ?: stringResource(R.string.summary_no_amount)
+    val matchedReceiptTotalText = formatSummaryTotals(audit.matchedReceiptTotals)
+        ?: stringResource(R.string.summary_no_amount)
+    Card(
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
+        shape = RoundedCornerShape(18.dp),
+    ) {
+        Column(
+            Modifier.fillMaxWidth().padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Default.AutoAwesome, contentDescription = null)
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    stringResource(R.string.reconciliation_summary),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                )
+            }
+            Row(
+                modifier = Modifier.height(IntrinsicSize.Min),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                SummaryMetricTile(
+                    title = stringResource(R.string.summary_statement_total),
+                    value = statementTotalText,
+                    modifier = Modifier.weight(1f),
+                )
+                SummaryMetricTile(
+                    title = stringResource(R.string.summary_matched_receipt_total),
+                    value = matchedReceiptTotalText,
+                    modifier = Modifier.weight(1f),
+                )
+            }
+            Row(
+                modifier = Modifier.height(IntrinsicSize.Min),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                SummaryMetricTile(
+                    title = stringResource(R.string.summary_unmatched_receipts),
+                    value = audit.receiptsWithoutRecognizedLineCount.toString(),
+                    modifier = Modifier.weight(1f),
+                )
+                SummaryMetricTile(
+                    title = stringResource(R.string.summary_unmatched_statement_lines),
+                    value = audit.recognizedLinesWithoutReceiptCount.toString(),
+                    modifier = Modifier.weight(1f),
+                )
+            }
+            Spacer(Modifier.height(4.dp))
+            Text(stringResource(R.string.summary_short_conclusion), fontWeight = FontWeight.SemiBold)
+            Text(reconciliationNarrative(narrativeFacts))
+            AiSummaryDisclosure(
+                reconciliationId = reconciliation.reconciliation.id,
+                summary = reconciliation.reconciliation.analysisSummary,
+                analysisState = analysisState,
+            )
+        }
+    }
+}
+
+@Composable
+private fun SummaryMetricTile(
+    title: String,
+    value: String,
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        modifier = modifier.fillMaxHeight(),
+        shape = RoundedCornerShape(14.dp),
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.72f),
+    ) {
+        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(
+                title,
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Text(value, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+        }
+    }
+}
+
+private fun formatSummaryTotals(totals: Map<String, BigInteger>): String? = totals
+    .toSortedMap()
+    .entries
+    .takeIf { it.isNotEmpty() }
+    ?.joinToString(" · ") { (currency, amount) -> formatBigMinor(amount, currency) }
+
+@Composable
+private fun reconciliationNarrative(facts: ReconciliationNarrativeFacts): String {
+    val sentences = mutableListOf(
+        when (facts.coverage) {
+            ReconciliationCoverage.EMPTY -> stringResource(R.string.narrative_empty)
+            ReconciliationCoverage.NONE -> stringResource(R.string.narrative_none)
+            ReconciliationCoverage.FEW -> stringResource(R.string.narrative_few)
+            ReconciliationCoverage.SOME -> stringResource(
+                R.string.narrative_some,
+                facts.matchedLineCount,
+                facts.recognizedLineCount,
+            )
+            ReconciliationCoverage.MOST -> stringResource(R.string.narrative_most)
+            ReconciliationCoverage.ALL -> stringResource(R.string.narrative_all)
+        },
+    )
+    if (facts.issues.size in 1..3) {
+        facts.issues.forEach { issue ->
+            val label = when {
+                issue.checkNumber.isBlank() -> issue.description
+                issue.description.isBlank() -> "#${issue.checkNumber}"
+                else -> stringResource(R.string.narrative_entry_label, issue.description, issue.checkNumber)
+            }
+            val date = issue.occurredAt?.let(::formatDate)
+            sentences += when (issue.kind) {
+                ReconciliationNarrativeIssueKind.STATEMENT_WITHOUT_RECEIPT -> if (date == null) {
+                    stringResource(R.string.narrative_statement_open_without_date, label)
+                } else {
+                    stringResource(R.string.narrative_statement_open, label, date)
+                }
+                ReconciliationNarrativeIssueKind.RECEIPT_WITHOUT_STATEMENT -> if (date == null) {
+                    stringResource(R.string.narrative_receipt_open_without_date, label)
+                } else {
+                    stringResource(R.string.narrative_receipt_open, label, date)
+                }
+                ReconciliationNarrativeIssueKind.RECEIPT_OUTSIDE_DATE_RANGE -> if (date == null) {
+                    stringResource(R.string.narrative_receipt_outside_without_date, label)
+                } else {
+                    stringResource(R.string.narrative_receipt_outside, label, date)
+                }
+                ReconciliationNarrativeIssueKind.QUESTIONABLE_MATCH -> if (date == null) {
+                    stringResource(R.string.narrative_questionable_without_date, label)
+                } else {
+                    stringResource(R.string.narrative_questionable, label, date)
+                }
+            }
+        }
+    } else if (facts.issues.size > 3) {
+        val openParts = buildList {
+            if (facts.openStatementCount > 0) add(
+                pluralStringResource(
+                    R.plurals.narrative_open_statement_count,
+                    facts.openStatementCount,
+                    facts.openStatementCount,
+                ),
+            )
+            if (facts.unmatchedReceiptCount > 0) add(
+                pluralStringResource(
+                    R.plurals.narrative_open_receipt_count,
+                    facts.unmatchedReceiptCount,
+                    facts.unmatchedReceiptCount,
+                ),
+            )
+            if (facts.questionableMatchCount > 0) add(
+                pluralStringResource(
+                    R.plurals.narrative_questionable_match_count,
+                    facts.questionableMatchCount,
+                    facts.questionableMatchCount,
+                ),
+            )
+        }
+        if (openParts.isNotEmpty()) {
+            sentences += stringResource(R.string.narrative_open_aggregate, openParts.joinToString(" ${stringResource(R.string.and)} "))
+        }
+    }
+    if (facts.totalMismatch) sentences += stringResource(R.string.narrative_total_mismatch)
+    if (facts.dataWarningCount > 0) {
+        sentences += pluralStringResource(
+            R.plurals.narrative_data_warning_count,
+            facts.dataWarningCount,
+            facts.dataWarningCount,
+        )
+    }
+    return sentences.joinToString(" ")
+}
+
+@Composable
+private fun AiSummaryDisclosure(
+    reconciliationId: String,
+    summary: String?,
+    analysisState: ReconciliationAnalysisState,
+) {
+    var expanded by remember(reconciliationId, summary) { mutableStateOf(false) }
+    when {
+        analysisState is ReconciliationAnalysisState.Running &&
+            analysisState.reconciliationId == reconciliationId -> Row(verticalAlignment = Alignment.CenterVertically) {
+            CircularProgressIndicator(Modifier.size(14.dp), strokeWidth = 2.dp)
+            Spacer(Modifier.width(8.dp))
+            Text(stringResource(R.string.ai_summary_running), style = MaterialTheme.typography.bodySmall)
+        }
+        analysisState is ReconciliationAnalysisState.Error &&
+            analysisState.reconciliationId == reconciliationId -> Text(
+            stringResource(R.string.ai_summary_unavailable),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        !summary.isNullOrBlank() -> {
+            TextButton(onClick = { expanded = !expanded }) {
+                Text(stringResource(if (expanded) R.string.ai_summary_hide else R.string.ai_summary_show))
+            }
+            if (expanded) Text(summary, style = MaterialTheme.typography.bodySmall)
+        }
+    }
+}
+
+@Composable
+private fun ReceiptOnlyCard(receipt: ReceiptEntity) {
+    Card(
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.72f),
+        ),
+        shape = RoundedCornerShape(18.dp),
+    ) {
+        Column(
+            Modifier.fillMaxWidth().padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            Text(
+                stringResource(R.string.receipt_only),
+                color = MaterialTheme.colorScheme.onTertiaryContainer,
+                fontWeight = FontWeight.SemiBold,
+            )
+            Text(receipt.location, style = MaterialTheme.typography.titleMedium)
+            Text(
+                "#${receipt.checkNumber} · ${formatMinor(receipt.foreignAmountMinor, receipt.foreignCurrencyCode)} · " +
+                    formatDate(receipt.occurredAt),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
 @Composable
 private fun StatementLineCard(
     line: StatementLineEntity,
     matchedReceipt: ReceiptEntity?,
+    suggestedReceipt: ReceiptEntity?,
     onEdit: () -> Unit,
     onDelete: () -> Unit,
     onAccept: (Boolean) -> Unit,
@@ -383,6 +726,13 @@ private fun StatementLineCard(
     onClearMatch: () -> Unit,
 ) {
     val status = statusPresentation(line.status)
+    val matchScore = matchedReceipt?.let { receipt ->
+        ReconciliationMatcher.rank(line, listOf(receipt)).single().score.coerceIn(0, 100)
+    }
+    val ambiguousDateText = if (line.dateAmbiguous) {
+        line.sourceDateText?.let { stringResource(R.string.ambiguous_source_date, it) }
+            ?: stringResource(R.string.ambiguous_date)
+    } else null
     Card(
         colors = CardDefaults.cardColors(containerColor = status.color.copy(alpha = 0.12f)),
         shape = RoundedCornerShape(18.dp),
@@ -402,12 +752,29 @@ private fun StatementLineCard(
                     if (line.checkNumber.isNotBlank()) append("#${line.checkNumber} · ")
                     append(formatMinor(line.amountMinor, line.currencyCode))
                     line.occurredOn?.let { append(" · ${formatDate(it)}") }
+                    ambiguousDateText?.let { append(" · $it") }
                 },
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             matchedReceipt?.let {
                 Spacer(Modifier.height(8.dp))
                 Text("↳ ${it.location} · #${it.checkNumber} · ${formatMinor(it.foreignAmountMinor, it.foreignCurrencyCode)}")
+            }
+            if (matchedReceipt == null && suggestedReceipt != null) {
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    stringResource(
+                        R.string.ai_match_suggestion,
+                        line.aiConfidence ?: 0,
+                        suggestedReceipt.location,
+                        suggestedReceipt.checkNumber,
+                    ),
+                    color = MaterialTheme.colorScheme.primary,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                line.aiReason?.takeIf(String::isNotBlank)?.let { reason ->
+                    Text(reason, style = MaterialTheme.typography.bodySmall)
+                }
             }
             Spacer(Modifier.height(8.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -439,9 +806,38 @@ private fun StatementLineCard(
                     }
                 }
             }
+            matchScore?.let { score ->
+                Spacer(Modifier.height(10.dp))
+                Text(
+                    stringResource(R.string.match_score, score),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.height(4.dp))
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .height(7.dp)
+                        .clip(RoundedCornerShape(50))
+                        .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f)),
+                ) {
+                    Box(
+                        Modifier
+                            .fillMaxWidth(score / 100f)
+                            .fillMaxHeight()
+                            .background(matchScoreColor(score)),
+                    )
+                }
+            }
         }
     }
 }
+
+private fun matchScoreColor(score: Int): Color = Color.hsv(
+    hue = score.coerceIn(0, 100) * 1.2f,
+    saturation = 0.86f,
+    value = 0.88f,
+)
 
 @Composable
 private fun CandidateDialog(
@@ -484,11 +880,16 @@ private fun CandidateDialog(
 }
 
 @Composable
-private fun TitleEditorDialog(onDismiss: () -> Unit, onSave: (String) -> Unit) {
-    var title by remember { mutableStateOf("") }
+private fun TitleEditorDialog(
+    initialTitle: String = "",
+    dialogTitle: Int,
+    onDismiss: () -> Unit,
+    onSave: (String) -> Unit,
+) {
+    var title by remember(initialTitle) { mutableStateOf(initialTitle) }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.new_reconciliation)) },
+        title = { Text(stringResource(dialogTitle)) },
         text = {
             OutlinedTextField(
                 value = title,
@@ -499,7 +900,12 @@ private fun TitleEditorDialog(onDismiss: () -> Unit, onSave: (String) -> Unit) {
             )
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } },
-        confirmButton = { TextButton(onClick = { onSave(title) }) { Text(stringResource(R.string.save)) } },
+        confirmButton = {
+            TextButton(
+                onClick = { onSave(title.trim()) },
+                enabled = title.isNotBlank(),
+            ) { Text(stringResource(R.string.save)) }
+        },
     )
 }
 
@@ -632,11 +1038,14 @@ private fun statusPresentation(status: String): StatusPresentation = when (statu
     ReconciliationStatus.CORRECT -> StatusPresentation(R.string.status_correct, Color(0xFF2E7D32))
     ReconciliationStatus.UNCERTAIN -> StatusPresentation(R.string.status_uncertain, Color(0xFFF9A825))
     ReconciliationStatus.AMOUNT_MISMATCH -> StatusPresentation(R.string.status_amount_mismatch, Color(0xFFEF6C00))
+    ReconciliationStatus.CURRENCY_MISMATCH -> StatusPresentation(R.string.status_currency_mismatch, Color(0xFFC62828))
+    ReconciliationStatus.DATE_MISMATCH -> StatusPresentation(R.string.status_date_mismatch, Color(0xFFEF6C00))
     ReconciliationStatus.ACCEPTED -> StatusPresentation(R.string.status_accepted, Color(0xFF2E7D32))
     else -> StatusPresentation(R.string.status_not_found, MaterialTheme.colorScheme.error)
 }
 
 private val dateFormatter: DateTimeFormatter = DateTimeFormatter.ofPattern("dd.MM.uuuu")
+    .withResolverStyle(ResolverStyle.STRICT)
 
 private fun parseDate(value: String): Long? = try {
     value.trim().takeIf { it.isNotEmpty() }?.let {
@@ -650,8 +1059,18 @@ private fun formatDate(value: Long): String =
     Instant.ofEpochMilli(value).atZone(ZoneId.systemDefault()).toLocalDate().format(dateFormatter)
 
 private fun formatInputMinor(value: Long): String =
-    String.format(Locale.GERMANY, "%.2f", value / 100.0)
+    NumberFormat.getNumberInstance(Locale.GERMANY).apply {
+        minimumFractionDigits = 2
+        maximumFractionDigits = 2
+        isGroupingUsed = false
+    }.format(BigDecimal.valueOf(value, 2))
 
 private fun formatMinor(value: Long, currencyCode: String): String = runCatching {
-    NumberFormat.getCurrencyInstance().apply { currency = Currency.getInstance(currencyCode) }.format(value / 100.0)
+    NumberFormat.getCurrencyInstance().apply { currency = Currency.getInstance(currencyCode) }
+        .format(BigDecimal.valueOf(value, 2))
 }.getOrElse { "${formatInputMinor(value)} $currencyCode" }
+
+private fun formatBigMinor(value: BigInteger, currencyCode: String): String = runCatching {
+    NumberFormat.getCurrencyInstance().apply { currency = Currency.getInstance(currencyCode) }
+        .format(BigDecimal(value, 2))
+}.getOrElse { "${BigDecimal(value, 2).toPlainString()} $currencyCode" }

@@ -22,11 +22,18 @@ data class ExtractedStatementLine(
     val amountText: String,
     val currencyCode: String,
     val occurredOn: String,
+    val suggestedReceiptId: String = "",
+    val matchConfidence: Int = 0,
+    val matchReason: String = "",
+    val sourceDateText: String = "",
+    val dateAmbiguous: Boolean = false,
 )
 
 data class ExtractedStatement(
     val title: String,
     val lines: List<ExtractedStatementLine>,
+    val declaredTotalAmountText: String = "",
+    val declaredTotalCurrencyCode: String = "",
 )
 
 sealed interface AiExtractionResult {
@@ -45,5 +52,12 @@ interface AiExtractionProvider {
         expectedCurrencyCode: String,
         apiKey: String,
         model: String,
+        receiptContext: List<ReconciliationReceiptContext> = emptyList(),
     ): AiExtractionResult
+
+    suspend fun summarizeReconciliation(
+        report: VerifiedReconciliationReport,
+        apiKey: String,
+        model: String,
+    ): String
 }

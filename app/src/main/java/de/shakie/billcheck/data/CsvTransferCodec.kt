@@ -10,7 +10,9 @@ object CsvTransferCodec {
         "defaultTipMinor", "defaultTipCurrency", "createdAt", "receiptId", "occurredAt", "date",
         "location", "checkNumber", "amountMinor", "currency", "exactEuroCents", "tipMinor", "tipCurrency",
         "reconciliationId", "reconciliationTitle", "lineId", "description", "status", "accepted",
-        "matchedReceiptId", "matchedManually",
+        "matchedReceiptId", "matchedManually", "analysisSummary", "analysisUpdatedAt",
+        "aiSuggestedReceiptId", "aiConfidence", "aiReason",
+        "declaredTotalMinor", "declaredTotalCurrency", "sourceDateText", "dateAmbiguous",
     )
 
     fun encode(value: TransferPackage): String = buildString {
@@ -36,7 +38,8 @@ object CsvTransferCodec {
         }
         val header = rows.getOrNull(1).orEmpty()
         val indices = header.withIndex().associate { it.value to it.index }
-        fun List<String>.value(name: String): String = indices[name]?.let { getOrNull(it) }.orEmpty()
+        fun List<String>.value(name: String): String = indices[name]?.let { getOrNull(it) }
+            .orEmpty().removeSpreadsheetGuard()
 
         val records = rows.drop(2).filter { it.isNotEmpty() }
         val trips = records.filter { it.value("recordType") == "TRIP" }.map { tripRow ->
@@ -91,6 +94,10 @@ object CsvTransferCodec {
                         statementImageEntry = null,
                         statementImageMimeType = null,
                         createdAt = row.value("createdAt").toLongOrNull() ?: 0,
+                        analysisSummary = row.value("analysisSummary").ifBlank { null },
+                        analysisUpdatedAt = row.value("analysisUpdatedAt").toLongOrNull(),
+                        declaredTotalMinor = row.value("declaredTotalMinor").toLongOrNull(),
+                        declaredTotalCurrencyCode = row.value("declaredTotalCurrency").ifBlank { null },
                         lines = lineRows.map { line ->
                             TransferStatementLine(
                                 id = line.value("lineId"),
@@ -103,6 +110,11 @@ object CsvTransferCodec {
                                 acceptedWithoutReceipt = line.value("accepted").toBooleanStrictOrNull() ?: false,
                                 matchedReceiptId = line.value("matchedReceiptId").ifBlank { null },
                                 matchedManually = line.value("matchedManually").toBooleanStrictOrNull() ?: false,
+                                aiSuggestedReceiptId = line.value("aiSuggestedReceiptId").ifBlank { null },
+                                aiConfidence = line.value("aiConfidence").toIntOrNull(),
+                                aiReason = line.value("aiReason").ifBlank { null },
+                                sourceDateText = line.value("sourceDateText").ifBlank { null },
+                                dateAmbiguous = line.value("dateAmbiguous").toBooleanStrictOrNull() ?: false,
                             )
                         },
                     )
@@ -148,12 +160,24 @@ object CsvTransferCodec {
             "accepted" to line?.acceptedWithoutReceipt?.toString().orEmpty(),
             "matchedReceiptId" to line?.matchedReceiptId.orEmpty(),
             "matchedManually" to line?.matchedManually?.toString().orEmpty(),
+            "analysisSummary" to reconciliation?.analysisSummary.orEmpty(),
+            "analysisUpdatedAt" to reconciliation?.analysisUpdatedAt?.toString().orEmpty(),
+            "aiSuggestedReceiptId" to line?.aiSuggestedReceiptId.orEmpty(),
+            "aiConfidence" to line?.aiConfidence?.toString().orEmpty(),
+            "aiReason" to line?.aiReason.orEmpty(),
+            "declaredTotalMinor" to reconciliation?.declaredTotalMinor?.toString().orEmpty(),
+            "declaredTotalCurrency" to reconciliation?.declaredTotalCurrencyCode.orEmpty(),
+            "sourceDateText" to line?.sourceDateText.orEmpty(),
+            "dateAmbiguous" to line?.dateAmbiguous?.toString().orEmpty(),
         )
         appendRow(columns.map { values[it].orEmpty() })
     }
 
     private fun StringBuilder.appendRow(values: List<String>) {
-        append(values.joinToString(";") { value -> "\"${value.replace("\"", "\"\"")}\"" })
+        append(values.joinToString(";") { value ->
+            val safeValue = value.addSpreadsheetGuard()
+            "\"${safeValue.replace("\"", "\"\"")}\""
+        })
         append("\r\n")
     }
 
@@ -196,4 +220,10 @@ object CsvTransferCodec {
         }
         return rows
     }
+
+    private fun String.addSpreadsheetGuard(): String =
+        if (firstOrNull() in setOf('=', '+', '-', '@')) "'$this" else this
+
+    private fun String.removeSpreadsheetGuard(): String =
+        if (length >= 2 && first() == '\'' && this[1] in setOf('=', '+', '-', '@')) drop(1) else this
 }

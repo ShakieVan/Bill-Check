@@ -99,6 +99,10 @@ data class ReconciliationEntity(
     val title: String,
     val statementImageUri: String?,
     val createdAt: Long,
+    val analysisSummary: String? = null,
+    val analysisUpdatedAt: Long? = null,
+    val declaredTotalMinor: Long? = null,
+    val declaredTotalCurrencyCode: String? = null,
 )
 
 data class ReconciliationWithLines(
@@ -133,6 +137,11 @@ data class StatementLineEntity(
     val currencyCode: String,
     val status: String,
     val acceptedWithoutReceipt: Boolean,
+    val aiSuggestedReceiptId: String? = null,
+    val aiConfidence: Int? = null,
+    val aiReason: String? = null,
+    val sourceDateText: String? = null,
+    val dateAmbiguous: Boolean = false,
 )
 
 data class StatementLineWithMatches(
@@ -163,7 +172,7 @@ data class StatementLineWithMatches(
     ],
     indices = [
         Index(value = ["statementLineId"], unique = true),
-        Index(value = ["receiptId"], unique = true),
+        Index(value = ["receiptId"]),
     ],
 )
 data class ReceiptMatchEntity(

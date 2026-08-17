@@ -126,6 +126,10 @@ interface BillCheckDao {
     @Query("SELECT * FROM reconciliations WHERE tripId = :tripId ORDER BY createdAt")
     suspend fun getReconciliations(tripId: String): List<ReconciliationWithLines>
 
+    @Transaction
+    @Query("SELECT * FROM reconciliations WHERE id = :reconciliationId LIMIT 1")
+    suspend fun getReconciliation(reconciliationId: String): ReconciliationWithLines?
+
     @Insert(onConflict = OnConflictStrategy.ABORT)
     suspend fun insertReconciliation(reconciliation: ReconciliationEntity)
 
@@ -159,6 +163,18 @@ interface BillCheckDao {
     @Query("UPDATE reconciliations SET title = :title, statementImageUri = :imageUri WHERE id = :reconciliationId")
     suspend fun updateReconciliation(reconciliationId: String, title: String, imageUri: String?)
 
+    @Update
+    suspend fun updateReconciliationEntity(reconciliation: ReconciliationEntity)
+
+    @Query("UPDATE reconciliations SET analysisSummary = :summary, analysisUpdatedAt = :updatedAt WHERE id = :reconciliationId")
+    suspend fun updateReconciliationAnalysis(reconciliationId: String, summary: String?, updatedAt: Long?)
+
+    @Query("UPDATE reconciliations SET analysisSummary = NULL, analysisUpdatedAt = NULL WHERE id = :reconciliationId")
+    suspend fun clearReconciliationAnalysis(reconciliationId: String)
+
+    @Query("UPDATE reconciliations SET analysisSummary = NULL, analysisUpdatedAt = NULL WHERE tripId = :tripId")
+    suspend fun clearTripAnalyses(tripId: String)
+
     @Query("SELECT * FROM receipts WHERE tripId = :tripId ORDER BY occurredAt DESC, createdAt DESC")
     suspend fun getReceipts(tripId: String): List<ReceiptEntity>
 
@@ -170,8 +186,30 @@ interface BillCheckDao {
     )
     suspend fun getTripMatches(tripId: String): List<ReceiptMatchEntity>
 
-    @Query("DELETE FROM receipt_matches WHERE statementLineId = :statementLineId OR receiptId = :receiptId")
-    suspend fun clearConflictingMatches(statementLineId: String, receiptId: String)
+    @Query(
+        "SELECT receipt_matches.* FROM receipt_matches " +
+            "INNER JOIN statement_lines ON statement_lines.id = receipt_matches.statementLineId " +
+            "WHERE statement_lines.reconciliationId = :reconciliationId",
+    )
+    suspend fun getReconciliationMatches(reconciliationId: String): List<ReceiptMatchEntity>
+
+    @Query(
+        "SELECT statement_lines.* FROM statement_lines " +
+            "INNER JOIN receipt_matches ON receipt_matches.statementLineId = statement_lines.id " +
+            "WHERE receipt_matches.receiptId = :receiptId",
+    )
+    suspend fun getStatementLinesForReceipt(receiptId: String): List<StatementLineEntity>
+
+    @Query(
+        "DELETE FROM receipt_matches WHERE statementLineId = :statementLineId OR " +
+            "(receiptId = :receiptId AND statementLineId IN " +
+            "(SELECT id FROM statement_lines WHERE reconciliationId = :reconciliationId))",
+    )
+    suspend fun clearConflictingMatches(
+        statementLineId: String,
+        receiptId: String,
+        reconciliationId: String,
+    )
 
     @Insert(onConflict = OnConflictStrategy.ABORT)
     suspend fun insertReceiptMatch(match: ReceiptMatchEntity)
@@ -197,9 +235,18 @@ interface BillCheckDao {
     }
 
     @Transaction
-    suspend fun replaceReceiptMatch(match: ReceiptMatchEntity) {
-        clearConflictingMatches(match.statementLineId, match.receiptId)
+    suspend fun replaceReceiptMatch(match: ReceiptMatchEntity, reconciliationId: String) {
+        clearConflictingMatches(match.statementLineId, match.receiptId, reconciliationId)
         insertReceiptMatch(match)
+    }
+
+    @Transaction
+    suspend fun applyExtractedStatement(
+        reconciliation: ReconciliationEntity,
+        lines: List<StatementLineEntity>,
+    ) {
+        updateReconciliationEntity(reconciliation)
+        replaceStatementLines(reconciliation.id, lines)
     }
 
     @Query("DELETE FROM receipt_matches WHERE statementLineId = :statementLineId")

@@ -138,6 +138,7 @@ import de.shakie.billcheck.ui.TransferState
 import de.shakie.billcheck.ui.AppUpdateStatus
 import de.shakie.billcheck.ui.UpdateManagerDialog
 import de.shakie.billcheck.ui.ReconciliationManagerDialog
+import de.shakie.billcheck.ui.ReconciliationAnalysisState
 import de.shakie.billcheck.data.ExportFormat
 import de.shakie.billcheck.data.ImportPreview
 import de.shakie.billcheck.ui.theme.BillCheckTheme
@@ -145,6 +146,7 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import java.math.BigDecimal
 import java.text.NumberFormat
 import java.time.Instant
+import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Currency
@@ -217,6 +219,7 @@ private fun BillCheckApp(
     val candidateSelection by viewModel.candidateSelection.collectAsStateWithLifecycle()
     val aiSettings by viewModel.aiSettings.collectAsStateWithLifecycle()
     val aiExtraction by viewModel.aiExtraction.collectAsStateWithLifecycle()
+    val reconciliationAnalysis by viewModel.reconciliationAnalysis.collectAsStateWithLifecycle()
     val localOcr by viewModel.localOcr.collectAsStateWithLifecycle()
     val geminiModels by viewModel.geminiModels.collectAsStateWithLifecycle()
     val transferState by viewModel.transfer.collectAsStateWithLifecycle()
@@ -745,11 +748,12 @@ private fun BillCheckApp(
                     draftReceiptImageUriString = null
                     viewModel.clearLocalOcr()
                 },
-                onSave = { location, check, amount, tip, itemDrafts ->
+                onSave = { location, check, amount, occurredOn, tip, itemDrafts ->
                     viewModel.addReceipt(
                         location,
                         check,
                         amount,
+                        occurredOn,
                         tip,
                         itemDrafts,
                         draftReceiptImageUriString,
@@ -810,12 +814,13 @@ private fun BillCheckApp(
                     editingReceipt = null
                     viewModel.clearLocalOcr()
                 },
-                onSave = { location, check, amount, tip, itemDrafts ->
+                onSave = { location, check, amount, occurredOn, tip, itemDrafts ->
                     viewModel.updateReceipt(
                         existing = existing,
                         location = location,
                         checkNumber = check,
                         foreignAmountText = amount,
+                        occurredOnText = occurredOn,
                         addDefaultTip = tip,
                         itemDrafts = itemDrafts,
                     ).also { saved ->
@@ -902,6 +907,7 @@ private fun BillCheckApp(
                 receipts = state.receipts,
                 defaultCurrencyCode = trip.foreignCurrencyCode,
                 candidateSelection = candidateSelection,
+                analysisState = reconciliationAnalysis,
                 onDismiss = {
                     showReconciliations = false
                     reconciliationReturnId = null
@@ -1898,7 +1904,7 @@ private fun ReceiptEditorDialog(
     onAnalyzeLocally: () -> Unit,
     onClearLocalOcr: () -> Unit,
     onDismiss: () -> Unit,
-    onSave: (String, String, String, Boolean, List<ReceiptItemDraft>) -> Boolean,
+    onSave: (String, String, String, String, Boolean, List<ReceiptItemDraft>) -> Boolean,
 ) {
     val stateKey = existing?.receipt?.id
     val receiptCurrencyCode = existing?.receipt?.foreignCurrencyCode ?: trip.foreignCurrencyCode
@@ -1910,10 +1916,17 @@ private fun ReceiptEditorDialog(
     var amount by remember(stateKey) {
         mutableStateOf(existing?.receipt?.foreignAmountMinor?.let(::formatInputMinor).orEmpty())
     }
+    var occurredOn by remember(stateKey) {
+        mutableStateOf(
+            existing?.receipt?.occurredAt?.let(::formatEditorDate)
+                ?: LocalDate.now().format(editorDateFormatter),
+        )
+    }
     var addTip by remember(stateKey) {
         mutableStateOf(existing?.receipt?.tipMinor?.let { it > 0 } ?: trip.defaultTipSelected)
     }
-    var invalid by remember(stateKey) { mutableStateOf(false) }
+    var invalidAmount by remember(stateKey) { mutableStateOf(false) }
+    var invalidDate by remember(stateKey) { mutableStateOf(false) }
     var showFullscreenImage by remember(stateKey, imageUri) { mutableStateOf(false) }
     val initialItems = existing?.items
         ?.sortedBy { it.sortPosition }
@@ -1940,13 +1953,17 @@ private fun ReceiptEditorDialog(
         location = extracted.location
         check = extracted.checkNumber
         amount = extracted.totalAmountText
+        extracted.occurredOn.takeIf(String::isNotBlank)?.let { extractedDate ->
+            occurredOn = normalizeEditorDate(extractedDate) ?: occurredOn
+        }
         if (extracted.items.isNotEmpty()) {
             items = extracted.items.mapIndexed { index, item ->
                 EditableReceiptItem(index.toLong(), item.name, item.amountText)
             }
             nextItemId = items.size.toLong()
         }
-        invalid = false
+        invalidAmount = false
+        invalidDate = false
     }
 
     if (!visible) return
@@ -1955,10 +1972,13 @@ private fun ReceiptEditorDialog(
         title = stringResource(if (existing == null) R.string.add_receipt else R.string.edit_receipt),
         onDismiss = onDismiss,
         onSave = {
-            invalid = !onSave(
+            invalidDate = MainViewModel.parseReceiptDate(occurredOn) == null
+            if (invalidDate) return@ScrollableEditorDialog
+            invalidAmount = !onSave(
                 location,
                 check,
                 amount,
+                occurredOn,
                 addTip,
                 items.map { ReceiptItemDraft(it.name, it.amountText) },
             )
@@ -2005,15 +2025,30 @@ private fun ReceiptEditorDialog(
                 )
                 OutlinedTextField(check, { check = it }, label = { Text(stringResource(R.string.check_number)) })
                 OutlinedTextField(
+                    value = occurredOn,
+                    onValueChange = {
+                        occurredOn = it
+                        invalidDate = false
+                    },
+                    label = { Text(stringResource(R.string.receipt_date)) },
+                    placeholder = { Text(stringResource(R.string.date_example)) },
+                    isError = invalidDate,
+                    supportingText = if (invalidDate) {
+                        { Text(stringResource(R.string.invalid_date)) }
+                    } else null,
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                )
+                OutlinedTextField(
                     amount,
                     {
                         amount = it
-                        invalid = false
+                        invalidAmount = false
                     },
                     label = { Text(stringResource(R.string.amount_in_currency, receiptCurrencyCode)) },
                     placeholder = { Text(stringResource(R.string.amount_example)) },
-                    isError = invalid,
-                    supportingText = if (invalid) {
+                    isError = invalidAmount,
+                    supportingText = if (invalidAmount) {
                         { Text(stringResource(R.string.invalid_amount)) }
                     } else null,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
@@ -2066,7 +2101,7 @@ private fun ReceiptEditorDialog(
                                     items = items.toMutableList().also {
                                         it[index] = item.copy(amountText = value)
                                     }
-                                    invalid = false
+                                    invalidAmount = false
                                 },
                                 label = {
                                     Text(
@@ -2432,6 +2467,17 @@ private fun formatEuroCents(cents: Long): String = formatMinor(cents, "EUR")
 private fun formatInputMinor(minor: Long): String = BigDecimal.valueOf(minor, 2)
     .stripTrailingZeros()
     .toPlainString()
+
+private val editorDateFormatter: DateTimeFormatter = DateTimeFormatter.ofPattern("dd.MM.uuuu")
+
+private fun formatEditorDate(epochMillis: Long): String = Instant.ofEpochMilli(epochMillis)
+    .atZone(ZoneId.systemDefault())
+    .toLocalDate()
+    .format(editorDateFormatter)
+
+private fun normalizeEditorDate(value: String): String? = runCatching {
+    LocalDate.parse(value.trim(), DateTimeFormatter.ISO_LOCAL_DATE).format(editorDateFormatter)
+}.getOrNull()
 
 private fun formatMinor(minor: Long, currencyCode: String): String = runCatching {
     NumberFormat.getCurrencyInstance().apply {
