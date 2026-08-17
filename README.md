@@ -9,7 +9,7 @@ gespeicherte Belege und Übersichten vollständig nutzbar.
 
 ![Früher nativer Dashboard-Stand mit centgenauer und aufgerundeter Übersicht](docs/screenshots/dashboard-rounding.png)
 
-## Geplanter Funktionsumfang
+## Funktionsumfang
 
 - mehrere frei sortierbare Reisen
 - Belegfotos aus Kamera oder Galerie
@@ -28,10 +28,18 @@ gespeicherte Belege und Übersichten vollständig nutzbar.
 - Room-Datenbank
 - App-ID `de.shakie.billcheck`
 
-Das erste lauffähige Fundament umfasst Reiseanlage, lokale Speicherung,
-manuelle Belegerfassung mit einzelnen Posten, automatische oder feste
-Wechselkurse, Löschen von Belegen und die festgelegte Rundungslogik. Kamera,
-KI-Erkennung und Rechnungsabgleich folgen iterativ.
+Das lauffähige Fundament umfasst Reiseanlage und -bearbeitung, lokale
+Speicherung, manuelle Belegerfassung mit editierbaren Einzelposten,
+automatische oder feste Wechselkurse, Kamera- und Galeriebelege, persistente
+Hell-/Dunkel-Darstellung sowie die festgelegte Rundungslogik. Zwischen- und
+Endrechnungen können automatisch oder manuell 1:1 abgeglichen werden. Für
+Bilddaten stehen eine bestätigungspflichtige Gemini-Auswertung und eine
+vollständig lokale OCR-Bausteinhilfe bereit. Selektive `.billcheck`-
+Vollsicherungen sowie CSV-/PDF-Berichte können direkt über den Android-
+Dateidialog exportiert werden; Vollarchiv und CSV sind wieder importierbar.
+Das Homescreen-Widget bietet Übersicht und Schnellerfassung. Die integrierte
+GitHub-Updateverwaltung zeigt Release Notes, prüft den SHA-256-Digest und
+übergibt eine bestätigte APK an den Android-Systeminstaller.
 
 ## Build
 
@@ -43,6 +51,16 @@ Die öffentliche Projektdokumentation beginnt unter [`docs/README.md`](docs/READ
 Reale Testbelege sind aus Datenschutzgründen nicht Bestandteil dieses
 Repositories.
 
+Ein signierter Produktionsbuild benötigt die private `key.properties`:
+
+```powershell
+.\gradlew.bat testDebugUnitTest lintDebug assembleRelease --console=plain
+```
+
+Der tag-gesteuerte GitHub-Ablauf ist in
+[`docs/technical-notes/github-release-process.md`](docs/technical-notes/github-release-process.md)
+dokumentiert.
+
 ## Historischer Prototyp
 
 `bill_check_v7.html` ist der ursprüngliche Offline-Webprototyp. Er dient nur
@@ -50,5 +68,5 @@ als fachliche Referenz und wird nicht in die Android-App eingebettet.
 
 ## Lizenz
 
-Eine Open-Source-Lizenz wird vor dem ersten öffentlichen Release bewusst
-festgelegt. Bis dahin gelten die gesetzlichen Urheberrechte.
+Bill Check ist unter der GNU General Public License v3.0 veröffentlicht
+(`GPL-3.0-only`). Der vollständige Lizenztext steht in [`LICENSE`](LICENSE).

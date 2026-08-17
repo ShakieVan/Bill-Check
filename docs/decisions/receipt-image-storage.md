@@ -1,0 +1,56 @@
+# Belegbilder: Kamera, Galerie und Verknüpfung
+
+Status: verbindlich für Android 16
+
+## Entscheidung
+
+Kameraaufnahmen werden über die installierte Systemkamera direkt in einen
+von Bill Check angelegten `MediaStore`-Eintrag geschrieben. Das Ziel liegt im
+Galeriealbum `Pictures/Bill Check`, verwendet JPEG und behält die von der
+Kamera gelieferte Auflösung. Die App fordert dafür weder Kamera- noch breite
+Speicherberechtigungen an.
+
+Vorhandene Bilder werden ausschließlich über den Android Photo Picker gewählt.
+Bill Check merkt sich die Leseberechtigung des ausgewählten URI und erzeugt
+keine Kopie.
+
+## Lebenszyklen
+
+- Nach Aufnahme oder Auswahl erscheint immer zuerst eine bildschirmfüllende
+  Prüfansicht. Ein Tipp auf das dort gezeigte Bild öffnet die zoombare
+  Detailansicht. Erst „Bild verwenden“ verknüpft das Bild mit einem neuen
+  Eintrag.
+- Ein verknüpftes Bild lässt sich über jede sichtbare Belegminiatur in der
+  gemeinsamen zoombaren Detailansicht öffnen. Ersetzen oder vom Eintrag lösen
+  lässt es sich bewusst nur im Belegeditor.
+- Der Belegeditor bietet unabhängig vom aktuellen Bildstatus Kamera und Photo
+  Picker an. Sein Formularzustand bleibt während der externen Auswahl und der
+  anschließenden Prüfansicht im Speicher.
+- Die erneute KI-/OCR-Auswertung wird vom Bildbereich des Editors aus
+  angestoßen. Bildverwaltung und Erkennungsanbieter bleiben dabei getrennte
+  Verantwortlichkeiten.
+- Das Lösen der Verknüpfung und das Löschen eines Belegs löschen niemals das
+  Galerieoriginal.
+- Eine abgebrochene Kameraaufnahme entfernt nur den zuvor angelegten leeren
+  Galerieeintrag.
+- Ziel-URI und laufender Ersetzungsmodus werden über Activity-Neuerstellungen
+  hinweg gespeichert.
+
+## Android-16-Erkenntnis
+
+Ein mit `MediaStore.IS_PENDING = 1` markiertes Bild kann unter Android 16 nur
+von seinem Eigentümer geöffnet werden. Die externe Systemkamera ist trotz
+temporärer URI-Freigabe nicht dieser Eigentümer und kann beim Bestätigen der
+Aufnahme abstürzen. Deshalb ist der Ziel-Eintrag während des Kameraaufrufs
+bereits veröffentlicht; bei Abbruch wird er wieder entfernt. Zusätzlich prüft
+Bill Check bei uneinheitlichen Kamera-Rückgabewerten, ob tatsächlich Bilddaten
+geschrieben wurden.
+
+## Geräteentscheidung
+
+Der Systemkamera-Fluss wurde auf einem Samsung Galaxy S24 Ultra praktisch
+geprüft. Dort stehen die gewohnte Samsung-Kameraauswahl und Zoomstufen zur
+Verfügung und der Ablauf wurde vom Nutzer ausdrücklich bestätigt. Bill Check
+bleibt deshalb bei der externen Systemkamera und führt vorerst keine eigene
+CameraX-Oberfläche samt zusätzlicher Kameraberechtigung ein. Die sehr einfache
+Kamera des Android-Emulators ist kein Maßstab für die reale Gerätebedienung.

@@ -99,6 +99,20 @@ data class ReconciliationEntity(
     val title: String,
     val statementImageUri: String?,
     val createdAt: Long,
+    val analysisSummary: String? = null,
+    val analysisUpdatedAt: Long? = null,
+    val declaredTotalMinor: Long? = null,
+    val declaredTotalCurrencyCode: String? = null,
+)
+
+data class ReconciliationWithLines(
+    @Embedded val reconciliation: ReconciliationEntity,
+    @Relation(
+        entity = StatementLineEntity::class,
+        parentColumn = "id",
+        entityColumn = "reconciliationId",
+    )
+    val lines: List<StatementLineWithMatches>,
 )
 
 @Entity(
@@ -123,6 +137,20 @@ data class StatementLineEntity(
     val currencyCode: String,
     val status: String,
     val acceptedWithoutReceipt: Boolean,
+    val aiSuggestedReceiptId: String? = null,
+    val aiConfidence: Int? = null,
+    val aiReason: String? = null,
+    val sourceDateText: String? = null,
+    val dateAmbiguous: Boolean = false,
+)
+
+data class StatementLineWithMatches(
+    @Embedded val line: StatementLineEntity,
+    @Relation(
+        parentColumn = "id",
+        entityColumn = "statementLineId",
+    )
+    val matches: List<ReceiptMatchEntity>,
 )
 
 @Entity(
@@ -142,7 +170,10 @@ data class StatementLineEntity(
             onDelete = ForeignKey.CASCADE,
         ),
     ],
-    indices = [Index(value = ["receiptId"], unique = true)],
+    indices = [
+        Index(value = ["statementLineId"], unique = true),
+        Index(value = ["receiptId"]),
+    ],
 )
 data class ReceiptMatchEntity(
     val statementLineId: String,

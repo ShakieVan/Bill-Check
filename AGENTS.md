@@ -47,6 +47,9 @@ Zugriff auf bereits gespeicherte Daten.
   `BigDecimal`, niemals `Double` oder `Float`.
 - Zustände aus KI/OCR müssen als Vorschläge erkennbar und manuell korrigierbar
   bleiben.
+- Eingabedialoge verwenden den gemeinsamen Editor-Aufbau mit festem Kopf und
+  Aktionsbereich, unabhängig scrollbarer Feldfläche und IME-Abstand. Ein
+  einfaches `AlertDialog` ist nur für kurze Dialoge ohne Texteingaben gedacht.
 - Eine Cloud-Provider-Abstraktion erlaubt Gemini zuerst und weitere Anbieter
   später. Provider-spezifische DTOs dürfen nicht das Domänenmodell bestimmen.
 - Ein Abgleich ist im Normalfall eine 1:1-Zuordnung zwischen Rechnungszeile
@@ -63,4 +66,3 @@ Zugriff auf bereits gespeicherte Daten.
 - Vor Commits Build und relevante Tests ausführen.
 - Bestehende Nutzeränderungen und private Dateien nicht überschreiben oder
   versehentlich versionieren.
-
