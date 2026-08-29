@@ -10,6 +10,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.rememberScrollState
@@ -28,8 +29,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.imePadding
-import androidx.compose.foundation.layout.FlowRow
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -61,8 +60,6 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.AssistChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -112,6 +109,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.role
 import androidx.compose.ui.zIndex
 import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -122,7 +125,13 @@ import de.shakie.billcheck.data.ReceiptEntity
 import de.shakie.billcheck.data.ReceiptImageStorage
 import de.shakie.billcheck.data.ReceiptWithItems
 import de.shakie.billcheck.data.TripEntity
+import de.shakie.billcheck.data.HybridOcrPageBuilder
 import de.shakie.billcheck.domain.MoneyCalculator
+import de.shakie.billcheck.domain.AiSuggestionCertainty
+import de.shakie.billcheck.domain.ExtractedItem
+import de.shakie.billcheck.domain.ExtractedFieldSuggestions
+import de.shakie.billcheck.domain.ExtractedReceipt
+import de.shakie.billcheck.domain.SuggestionSource
 import de.shakie.billcheck.ui.MainUiState
 import de.shakie.billcheck.ui.MainViewModel
 import de.shakie.billcheck.ui.OpenImageDocumentContract
@@ -130,10 +139,15 @@ import de.shakie.billcheck.ui.ReceiptItemDraft
 import de.shakie.billcheck.ui.ReceiptImageReview
 import de.shakie.billcheck.ui.ReceiptThumbnail
 import de.shakie.billcheck.ui.FullscreenReceiptImage
+import de.shakie.billcheck.ui.SpatialTextSelectionDialog
 import de.shakie.billcheck.ui.ExchangeRateLookupState
 import de.shakie.billcheck.ui.AiExtractionState
 import de.shakie.billcheck.ui.LocalOcrState
 import de.shakie.billcheck.ui.GeminiModelsState
+import de.shakie.billcheck.ui.LocalAiConnectionState
+import de.shakie.billcheck.data.LocalAiAuthType
+import de.shakie.billcheck.data.AI_PROVIDER_GEMINI
+import de.shakie.billcheck.data.AI_PROVIDER_LOCAL
 import de.shakie.billcheck.ui.TransferState
 import de.shakie.billcheck.ui.AppUpdateStatus
 import de.shakie.billcheck.ui.UpdateManagerDialog
@@ -222,6 +236,8 @@ private fun BillCheckApp(
     val reconciliationAnalysis by viewModel.reconciliationAnalysis.collectAsStateWithLifecycle()
     val localOcr by viewModel.localOcr.collectAsStateWithLifecycle()
     val geminiModels by viewModel.geminiModels.collectAsStateWithLifecycle()
+    val localAiSettings by viewModel.localAiSettings.collectAsStateWithLifecycle()
+    val localAiConnection by viewModel.localAiConnection.collectAsStateWithLifecycle()
     val transferState by viewModel.transfer.collectAsStateWithLifecycle()
     val appUpdate by viewModel.appUpdate.collectAsStateWithLifecycle()
     val context = LocalContext.current
@@ -642,9 +658,15 @@ private fun BillCheckApp(
             onDarkThemeChange = onDarkThemeChange,
             aiSettings = aiSettings,
             geminiModels = geminiModels,
+            localAiSettings = localAiSettings,
+            localAiConnection = localAiConnection,
             onLoadGeminiModels = viewModel::loadGeminiModels,
             onSaveAiSettings = viewModel::saveAiSettings,
             onClearAiApiKey = viewModel::clearAiApiKey,
+            onTestLocalAi = viewModel::testLocalAiConnection,
+            onSaveLocalAi = viewModel::saveLocalAiSettings,
+            onClearLocalAiCredential = viewModel::clearLocalAiCredential,
+            onClearLocalAiConnectionResult = viewModel::clearLocalAiConnectionResult,
             onDismiss = { showSettings = false },
         )
     }
@@ -844,7 +866,7 @@ private fun BillCheckApp(
             },
             confirmButton = {},
         )
-        AiExtractionState.MissingApiKey -> AlertDialog(
+        AiExtractionState.MissingCredential -> AlertDialog(
             onDismissRequest = viewModel::clearAiExtraction,
             title = { Text(stringResource(R.string.ai_recognition)) },
             text = { Text(stringResource(R.string.ai_missing_key)) },
@@ -1152,13 +1174,29 @@ private fun AppearanceSettingsDialog(
     onDarkThemeChange: (Boolean) -> Unit,
     aiSettings: de.shakie.billcheck.data.AiSettings,
     geminiModels: GeminiModelsState,
+    localAiSettings: de.shakie.billcheck.data.LocalAiSettings,
+    localAiConnection: LocalAiConnectionState,
     onLoadGeminiModels: () -> Unit,
-    onSaveAiSettings: (String?, String) -> Unit,
+    onSaveAiSettings: (String, String?, String) -> Unit,
     onClearAiApiKey: () -> Unit,
+    onTestLocalAi: (String, String, LocalAiAuthType, String, String?) -> Unit,
+    onSaveLocalAi: (String, String, LocalAiAuthType, String, String?) -> Unit,
+    onClearLocalAiCredential: () -> Unit,
+    onClearLocalAiConnectionResult: () -> Unit,
     onDismiss: () -> Unit,
 ) {
     var apiKey by remember { mutableStateOf("") }
+    var aiProvider by remember(aiSettings.providerId) { mutableStateOf(aiSettings.providerId) }
     var model by remember(aiSettings.model) { mutableStateOf(aiSettings.model) }
+    var localAiBaseUrl by remember(localAiSettings.baseUrl) { mutableStateOf(localAiSettings.baseUrl) }
+    var localAiModel by remember(localAiSettings.model) { mutableStateOf(localAiSettings.model) }
+    var localAiAuthType by remember(localAiSettings.authType) {
+        mutableStateOf(localAiSettings.authType)
+    }
+    var localAiUsername by remember(localAiSettings.username) {
+        mutableStateOf(localAiSettings.username)
+    }
+    var localAiCredential by remember { mutableStateOf("") }
     val uriHandler = LocalUriHandler.current
     Dialog(onDismissRequest = onDismiss) {
         Surface(
@@ -1201,12 +1239,26 @@ private fun AppearanceSettingsDialog(
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.SemiBold,
                 )
-                OutlinedTextField(
-                    value = stringResource(R.string.gemini),
-                    onValueChange = {},
-                    readOnly = true,
-                    label = { Text(stringResource(R.string.ai_provider)) },
+                Text(
+                    stringResource(R.string.ai_provider),
+                    style = MaterialTheme.typography.labelLarge,
+                )
+                LocalAiAuthChoice(
+                    label = stringResource(R.string.local_ai_provider),
+                    selected = aiProvider == AI_PROVIDER_LOCAL,
+                    onClick = { aiProvider = AI_PROVIDER_LOCAL },
                     modifier = Modifier.fillMaxWidth(),
+                )
+                LocalAiAuthChoice(
+                    label = stringResource(R.string.gemini),
+                    selected = aiProvider == AI_PROVIDER_GEMINI,
+                    onClick = { aiProvider = AI_PROVIDER_GEMINI },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Text(
+                    stringResource(R.string.gemini_configuration),
+                    style = MaterialTheme.typography.labelLarge,
+                    modifier = Modifier.padding(top = 8.dp),
                 )
                 OutlinedButton(
                     onClick = onLoadGeminiModels,
@@ -1304,6 +1356,173 @@ private fun AppearanceSettingsDialog(
                 ) {
                     Text(stringResource(R.string.open_quota_dashboard))
                 }
+                HorizontalDivider(Modifier.padding(vertical = 12.dp))
+                Text(
+                    stringResource(R.string.local_ai_server),
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Text(
+                    stringResource(R.string.local_ai_connection_hint),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                OutlinedTextField(
+                    value = localAiBaseUrl,
+                    onValueChange = {
+                        localAiBaseUrl = it
+                        onClearLocalAiConnectionResult()
+                    },
+                    label = { Text(stringResource(R.string.local_ai_base_url)) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth().onFocusChanged {
+                        if (it.isFocused) onClearLocalAiConnectionResult()
+                    },
+                )
+                OutlinedTextField(
+                    value = localAiModel,
+                    onValueChange = {
+                        localAiModel = it
+                        onClearLocalAiConnectionResult()
+                    },
+                    label = { Text(stringResource(R.string.local_ai_model)) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth().onFocusChanged {
+                        if (it.isFocused) onClearLocalAiConnectionResult()
+                    },
+                )
+                Text(
+                    stringResource(R.string.authentication),
+                    style = MaterialTheme.typography.labelLarge,
+                )
+                Row(Modifier.fillMaxWidth()) {
+                    LocalAiAuthChoice(
+                        label = stringResource(R.string.basic_authentication),
+                        selected = localAiAuthType == LocalAiAuthType.BASIC,
+                        onClick = {
+                            localAiAuthType = LocalAiAuthType.BASIC
+                            onClearLocalAiConnectionResult()
+                        },
+                        modifier = Modifier.weight(1f),
+                    )
+                    LocalAiAuthChoice(
+                        label = stringResource(R.string.bearer_token),
+                        selected = localAiAuthType == LocalAiAuthType.BEARER,
+                        onClick = {
+                            localAiAuthType = LocalAiAuthType.BEARER
+                            onClearLocalAiConnectionResult()
+                        },
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+                if (localAiAuthType == LocalAiAuthType.BASIC) {
+                    OutlinedTextField(
+                        value = localAiUsername,
+                        onValueChange = {
+                            localAiUsername = it
+                            onClearLocalAiConnectionResult()
+                        },
+                        label = { Text(stringResource(R.string.username)) },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth().onFocusChanged {
+                            if (it.isFocused) onClearLocalAiConnectionResult()
+                        },
+                    )
+                }
+                if (localAiSettings.hasCredential) {
+                    Text(
+                        stringResource(R.string.local_ai_credential_saved),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                }
+                OutlinedTextField(
+                    value = localAiCredential,
+                    onValueChange = {
+                        localAiCredential = it
+                        onClearLocalAiConnectionResult()
+                    },
+                    label = {
+                        Text(
+                            if (localAiAuthType == LocalAiAuthType.BASIC) {
+                                stringResource(R.string.password)
+                            } else {
+                                stringResource(R.string.access_token)
+                            },
+                        )
+                    },
+                    placeholder = { Text(stringResource(R.string.credential_placeholder)) },
+                    visualTransformation = PasswordVisualTransformation(),
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth().onFocusChanged {
+                        if (it.isFocused) onClearLocalAiConnectionResult()
+                    },
+                )
+                if (localAiSettings.hasCredential) {
+                    TextButton(onClick = {
+                        onClearLocalAiCredential()
+                        localAiCredential = ""
+                    }) {
+                        Text(
+                            stringResource(R.string.remove_local_ai_credential),
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    }
+                }
+                OutlinedButton(
+                    onClick = {
+                        onTestLocalAi(
+                            localAiBaseUrl,
+                            localAiModel,
+                            localAiAuthType,
+                            localAiUsername,
+                            localAiCredential.takeIf(String::isNotBlank),
+                        )
+                    },
+                    enabled = localAiConnection !is LocalAiConnectionState.Testing,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    if (localAiConnection is LocalAiConnectionState.Testing) {
+                        CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
+                        Spacer(Modifier.width(8.dp))
+                        Text(stringResource(R.string.connection_testing))
+                    } else {
+                        Text(stringResource(R.string.test_connection))
+                    }
+                }
+                when (localAiConnection) {
+                    LocalAiConnectionState.MissingCredential -> Text(
+                        stringResource(R.string.local_ai_credential_missing),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.tertiary,
+                    )
+                    is LocalAiConnectionState.Error -> Text(
+                        stringResource(R.string.connection_failed, localAiConnection.message),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                    is LocalAiConnectionState.Success -> Text(
+                        if (localAiConnection.result.configuredModelAvailable) {
+                            stringResource(
+                                R.string.connection_success,
+                                localAiConnection.result.elapsedMilliseconds,
+                            )
+                        } else {
+                            stringResource(
+                                R.string.connection_model_missing,
+                                localAiConnection.result.elapsedMilliseconds,
+                                localAiConnection.result.availableModels.joinToString(),
+                            )
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (localAiConnection.result.configuredModelAvailable) {
+                            MaterialTheme.colorScheme.primary
+                        } else {
+                            MaterialTheme.colorScheme.tertiary
+                        },
+                    )
+                    else -> Unit
+                }
                 Spacer(Modifier.height(24.dp))
                 }
                 Row(
@@ -1312,12 +1531,39 @@ private fun AppearanceSettingsDialog(
                 ) {
                     TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
                     TextButton(onClick = {
-                        onSaveAiSettings(apiKey.takeIf(String::isNotBlank), model)
+                        onSaveAiSettings(
+                            aiProvider,
+                            apiKey.takeIf(String::isNotBlank),
+                            model,
+                        )
+                        onSaveLocalAi(
+                            localAiBaseUrl,
+                            localAiModel,
+                            localAiAuthType,
+                            localAiUsername,
+                            localAiCredential.takeIf(String::isNotBlank),
+                        )
                         onDismiss()
                     }) { Text(stringResource(R.string.save)) }
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun LocalAiAuthChoice(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier = modifier.clip(RoundedCornerShape(14.dp)).clickable(onClick = onClick),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        RadioButton(selected = selected, onClick = onClick)
+        Text(label, style = MaterialTheme.typography.bodyMedium)
     }
 }
 
@@ -1928,6 +2174,11 @@ private fun ReceiptEditorDialog(
     var invalidAmount by remember(stateKey) { mutableStateOf(false) }
     var invalidDate by remember(stateKey) { mutableStateOf(false) }
     var showFullscreenImage by remember(stateKey, imageUri) { mutableStateOf(false) }
+    var openTextSelectionWhenReady by remember(stateKey, imageUri) { mutableStateOf(false) }
+    var showTextSelection by remember(stateKey, imageUri) { mutableStateOf(false) }
+    var pendingImageText by remember(stateKey, imageUri) { mutableStateOf<String?>(null) }
+    var analysisBaseline by remember(stateKey, imageUri) { mutableStateOf<ReceiptEditorBaseline?>(null) }
+    var aiResultConflicted by remember(stateKey, imageUri) { mutableStateOf(false) }
     val initialItems = existing?.items
         ?.sortedBy { it.sortPosition }
         ?.mapIndexed { index, item ->
@@ -1941,15 +2192,61 @@ private fun ReceiptEditorDialog(
         .ifEmpty { listOf(EditableReceiptItem(id = 0)) }
     var nextItemId by remember(stateKey) { mutableStateOf(initialItems.size.toLong()) }
     var items by remember(stateKey) { mutableStateOf(initialItems) }
-    var ocrTarget by remember(stateKey) { mutableStateOf("LOCATION") }
     val itemSumMinor = items.mapNotNull { MainViewModel.parseMinor(it.amountText) }.sum()
     val receiptMinor = MainViewModel.parseMinor(amount)
+    var retainedExtractedReceipt by remember(stateKey, imageUri) {
+        mutableStateOf<ExtractedReceipt?>(null)
+    }
+    val incomingExtractedReceipt = (aiExtraction as? AiExtractionState.ReceiptSuccess)
+        ?.takeIf { it.imageUri == imageUri }
+        ?.receipt
+    val extractedReceipt = incomingExtractedReceipt ?: retainedExtractedReceipt
+    val recognizedPage = (localOcr as? LocalOcrState.Success)
+        ?.takeIf { it.imageUri == imageUri }
+        ?.page
+    val selectablePage = remember(recognizedPage, extractedReceipt) {
+        recognizedPage?.let { localPage ->
+            HybridOcrPageBuilder.merge(
+                local = localPage,
+                transcript = extractedReceipt?.transcriptLines.orEmpty(),
+                extraCandidates = extractedReceipt
+                    ?.takeIf { it.transcriptLines.isEmpty() }
+                    ?.imageTextCandidates()
+                    .orEmpty(),
+            )
+        }
+    }
+    fun currentBaseline() = ReceiptEditorBaseline(
+        location = location,
+        checkNumber = check,
+        amountText = amount,
+        occurredOn = occurredOn,
+        items = items.map { it.name to it.amountText },
+    )
+
+    LaunchedEffect(localOcr, openTextSelectionWhenReady) {
+        when {
+            openTextSelectionWhenReady && recognizedPage != null -> {
+                openTextSelectionWhenReady = false
+                showTextSelection = true
+            }
+            openTextSelectionWhenReady && localOcr is LocalOcrState.Error -> {
+                openTextSelectionWhenReady = false
+            }
+        }
+    }
 
     LaunchedEffect(aiExtraction) {
-        val extracted = (aiExtraction as? AiExtractionState.ReceiptSuccess)
-            ?.takeIf { it.imageUri == imageUri }
-            ?.receipt
-            ?: return@LaunchedEffect
+        if (aiExtraction is AiExtractionState.Error) {
+            analysisBaseline = null
+            return@LaunchedEffect
+        }
+        val extracted = incomingExtractedReceipt ?: return@LaunchedEffect
+        retainedExtractedReceipt = extracted
+        val mayApplyAutomatically = analysisBaseline?.let { it == currentBaseline() } == true
+        analysisBaseline = null
+        aiResultConflicted = !mayApplyAutomatically
+        if (!mayApplyAutomatically) return@LaunchedEffect
         location = extracted.location
         check = extracted.checkNumber
         amount = extracted.totalAmountText
@@ -1958,12 +2255,21 @@ private fun ReceiptEditorDialog(
         }
         if (extracted.items.isNotEmpty()) {
             items = extracted.items.mapIndexed { index, item ->
-                EditableReceiptItem(index.toLong(), item.name, item.amountText)
+                val displayedName = formatExtractedItemName(item.quantityText, item.name)
+                EditableReceiptItem(
+                    id = index.toLong(),
+                    name = displayedName,
+                    amountText = item.amountText,
+                    aiSourceIndex = index,
+                    nameAiSuggestions = itemNameAiSuggestions(item),
+                    amountAiSuggestions = item.amountSuggestions.toEditorSuggestions(),
+                )
             }
             nextItemId = items.size.toLong()
         }
         invalidAmount = false
         invalidDate = false
+        aiResultConflicted = false
     }
 
     if (!visible) return
@@ -1991,67 +2297,164 @@ private fun ReceiptEditorDialog(
                     onChooseImage = onChooseImage,
                     onBrowseFolders = onBrowseFolders,
                     onOpenImage = onOpenImage,
-                    onAnalyzeImage = onAnalyzeImage,
-                    onAnalyzeLocally = onAnalyzeLocally,
-                )
-                LocalOcrHelper(
-                    state = localOcr,
-                    imageUri = imageUri,
-                    target = ocrTarget,
-                    itemCount = items.size,
-                    onTargetChange = { ocrTarget = it },
-                    onToken = { token ->
-                        when {
-                            ocrTarget == "LOCATION" -> location = appendToken(location, token)
-                            ocrTarget == "CHECK" -> check = appendToken(check, token)
-                            ocrTarget == "AMOUNT" -> amount = normalizeOcrAmount(token)
-                            ocrTarget.startsWith("ITEM_") -> {
-                                val index = ocrTarget.removePrefix("ITEM_").toIntOrNull()
-                                if (index != null && index in items.indices) {
-                                    items = items.toMutableList().also {
-                                        it[index] = it[index].copy(name = appendToken(it[index].name, token))
-                                    }
-                                }
-                            }
+                    onAnalyzeImage = {
+                        analysisBaseline = currentBaseline()
+                        onAnalyzeImage()
+                    },
+                    onAnalyzeLocally = {
+                        if (recognizedPage != null) {
+                            showTextSelection = true
+                        } else {
+                            openTextSelectionWhenReady = true
+                            onAnalyzeLocally()
                         }
                     },
+                )
+                LocalOcrStatus(
+                    state = localOcr,
+                    imageUri = imageUri,
                     onClose = onClearLocalOcr,
                 )
-                HistoryTextField(
-                    value = location,
-                    onValueChange = { location = it },
-                    label = stringResource(R.string.location),
-                    suggestions = locationSuggestions,
+                pendingImageText?.let { selectedText ->
+                    PendingImageTextBanner(
+                        selectedText = selectedText,
+                        onCancel = { pendingImageText = null },
+                    )
+                }
+                if (aiResultConflicted && extractedReceipt?.items?.isNotEmpty() == true) {
+                    AiItemConflictBanner(
+                        aiItems = extractedReceipt.items,
+                        onApplyItems = {
+                            items = extractedReceipt.items.mapIndexed { index, item ->
+                                EditableReceiptItem(
+                                    id = index.toLong(),
+                                    name = formatExtractedItemName(item.quantityText, item.name),
+                                    amountText = item.amountText,
+                                    aiSourceIndex = index,
+                                )
+                            }
+                            nextItemId = items.size.toLong()
+                            aiResultConflicted = false
+                        },
+                        onDismiss = { aiResultConflicted = false },
+                    )
+                }
+                ImageTextTarget(
+                    pendingText = pendingImageText,
+                    fieldLabel = stringResource(R.string.location),
+                    onApply = {
+                        location = it
+                        pendingImageText = null
+                    },
+                ) {
+                    HistoryTextField(
+                        value = location,
+                        onValueChange = { location = it },
+                        label = stringResource(R.string.location),
+                        suggestions = locationSuggestions,
+                        aiSuggestions = extractedReceipt
+                            ?.locationSuggestions
+                            ?.toEditorSuggestions()
+                            .orEmpty(),
+                    )
+                }
+                ImageTextTarget(
+                    pendingText = pendingImageText,
+                    fieldLabel = stringResource(R.string.check_number),
+                    onApply = {
+                        check = it
+                        pendingImageText = null
+                    },
+                ) {
+                    OutlinedTextField(
+                        check,
+                        { check = it },
+                        label = { Text(stringResource(R.string.check_number)) },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+                if (pendingImageText == null) AiSuggestionMenu(
+                    currentValue = check,
+                    suggestions = extractedReceipt
+                        ?.checkNumberSuggestions
+                        ?.toEditorSuggestions()
+                        .orEmpty(),
+                    onSelected = { check = it },
                 )
-                OutlinedTextField(check, { check = it }, label = { Text(stringResource(R.string.check_number)) })
-                OutlinedTextField(
-                    value = occurredOn,
-                    onValueChange = {
-                        occurredOn = it
+                ImageTextTarget(
+                    pendingText = pendingImageText,
+                    fieldLabel = stringResource(R.string.receipt_date),
+                    onApply = {
+                        occurredOn = normalizeEditorDate(it) ?: it
+                        invalidDate = false
+                        pendingImageText = null
+                    },
+                ) {
+                    OutlinedTextField(
+                        value = occurredOn,
+                        onValueChange = {
+                            occurredOn = it
+                            invalidDate = false
+                        },
+                        label = { Text(stringResource(R.string.receipt_date)) },
+                        placeholder = { Text(stringResource(R.string.date_example)) },
+                        isError = invalidDate,
+                        supportingText = if (invalidDate) {
+                            { Text(stringResource(R.string.invalid_date)) }
+                        } else null,
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+                if (pendingImageText == null) AiSuggestionMenu(
+                    currentValue = occurredOn,
+                    suggestions = extractedReceipt
+                        ?.occurredOnSuggestions
+                        ?.toEditorSuggestions { candidate ->
+                            normalizeEditorDate(candidate) ?: candidate
+                        }
+                        .orEmpty(),
+                    onSelected = { selected ->
+                        occurredOn = normalizeEditorDate(selected) ?: selected
                         invalidDate = false
                     },
-                    label = { Text(stringResource(R.string.receipt_date)) },
-                    placeholder = { Text(stringResource(R.string.date_example)) },
-                    isError = invalidDate,
-                    supportingText = if (invalidDate) {
-                        { Text(stringResource(R.string.invalid_date)) }
-                    } else null,
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                 )
-                OutlinedTextField(
-                    amount,
-                    {
+                ImageTextTarget(
+                    pendingText = pendingImageText,
+                    fieldLabel = stringResource(R.string.amount_in_currency, receiptCurrencyCode),
+                    onApply = {
+                        amount = normalizeOcrAmount(it)
+                        invalidAmount = false
+                        pendingImageText = null
+                    },
+                ) {
+                    OutlinedTextField(
+                        amount,
+                        {
+                            amount = it
+                            invalidAmount = false
+                        },
+                        label = { Text(stringResource(R.string.amount_in_currency, receiptCurrencyCode)) },
+                        placeholder = { Text(stringResource(R.string.amount_example)) },
+                        isError = invalidAmount,
+                        supportingText = if (invalidAmount) {
+                            { Text(stringResource(R.string.invalid_amount)) }
+                        } else null,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+                if (pendingImageText == null) AiSuggestionMenu(
+                    currentValue = amount,
+                    suggestions = extractedReceipt
+                        ?.totalAmountSuggestions
+                        ?.toEditorSuggestions()
+                        .orEmpty(),
+                    onSelected = {
                         amount = it
                         invalidAmount = false
                     },
-                    label = { Text(stringResource(R.string.amount_in_currency, receiptCurrencyCode)) },
-                    placeholder = { Text(stringResource(R.string.amount_example)) },
-                    isError = invalidAmount,
-                    supportingText = if (invalidAmount) {
-                        { Text(stringResource(R.string.invalid_amount)) }
-                    } else null,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                 )
                 Text(
                     stringResource(R.string.receipt_items),
@@ -2059,6 +2462,11 @@ private fun ReceiptEditorDialog(
                     fontWeight = FontWeight.SemiBold,
                 )
                 items.forEachIndexed { index, item ->
+                    val aiItemSuggestionSource = item.aiSourceIndex
+                        ?.let { extractedReceipt?.items?.getOrNull(it) }
+                        ?: extractedReceipt?.items?.getOrNull(index)?.takeIf {
+                            aiResultConflicted && items.size == extractedReceipt.items.size
+                        }
                     Card(
                         colors = CardDefaults.cardColors(
                             containerColor = MaterialTheme.colorScheme.surfaceVariant,
@@ -2084,36 +2492,75 @@ private fun ReceiptEditorDialog(
                                     )
                                 }
                             }
-                            HistoryTextField(
-                                value = item.name,
-                                onValueChange = { value ->
+                            ImageTextTarget(
+                                pendingText = pendingImageText,
+                                fieldLabel = stringResource(R.string.item_name_with_number, index + 1),
+                                onApply = { selected ->
                                     items = items.toMutableList().also {
-                                        it[index] = item.copy(name = value)
+                                        it[index] = item.copy(name = selected)
                                     }
+                                    pendingImageText = null
                                 },
-                                label = stringResource(R.string.item_name),
-                                suggestions = itemNameSuggestions,
-                                modifier = Modifier.fillMaxWidth(),
-                            )
-                            OutlinedTextField(
-                                value = item.amountText,
-                                onValueChange = { value ->
+                            ) {
+                                HistoryTextField(
+                                    value = item.name,
+                                    onValueChange = { value ->
+                                        items = items.toMutableList().also {
+                                            it[index] = item.copy(name = value)
+                                        }
+                                    },
+                                    label = stringResource(R.string.item_name),
+                                    suggestions = itemNameSuggestions,
+                                    aiSuggestions = aiItemSuggestionSource
+                                        ?.let(::itemNameAiSuggestions)
+                                        ?: item.nameAiSuggestions,
+                                    modifier = Modifier.fillMaxWidth(),
+                                )
+                            }
+                            ImageTextTarget(
+                                pendingText = pendingImageText,
+                                fieldLabel = stringResource(R.string.item_amount_with_number, index + 1),
+                                onApply = { selected ->
+                                    items = items.toMutableList().also {
+                                        it[index] = item.copy(amountText = normalizeOcrAmount(selected))
+                                    }
+                                    invalidAmount = false
+                                    pendingImageText = null
+                                },
+                            ) {
+                                OutlinedTextField(
+                                    value = item.amountText,
+                                    onValueChange = { value ->
+                                        items = items.toMutableList().also {
+                                            it[index] = item.copy(amountText = value)
+                                        }
+                                        invalidAmount = false
+                                    },
+                                    label = {
+                                        Text(
+                                            stringResource(
+                                                R.string.item_amount,
+                                                receiptCurrencyCode,
+                                            ),
+                                        )
+                                    },
+                                    singleLine = true,
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                                    modifier = Modifier.fillMaxWidth(),
+                                )
+                            }
+                            if (pendingImageText == null) AiSuggestionMenu(
+                                currentValue = item.amountText,
+                                suggestions = aiItemSuggestionSource
+                                    ?.amountSuggestions
+                                    ?.toEditorSuggestions()
+                                    ?: item.amountAiSuggestions,
+                                onSelected = { value ->
                                     items = items.toMutableList().also {
                                         it[index] = item.copy(amountText = value)
                                     }
                                     invalidAmount = false
                                 },
-                                label = {
-                                    Text(
-                                        stringResource(
-                                            R.string.item_amount,
-                                            receiptCurrencyCode,
-                                        ),
-                                    )
-                                },
-                                singleLine = true,
-                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                                modifier = Modifier.fillMaxWidth(),
                             )
                         }
                     }
@@ -2173,6 +2620,17 @@ private fun ReceiptEditorDialog(
         FullscreenReceiptImage(
             imageUri = imageUri,
             onDismiss = { showFullscreenImage = false },
+        )
+    }
+    if (showTextSelection && imageUri != null && selectablePage != null) {
+        SpatialTextSelectionDialog(
+            imageUri = Uri.parse(imageUri),
+            ocrPage = selectablePage,
+            onConfirm = { selectedText ->
+                pendingImageText = selectedText.trim().takeIf(String::isNotEmpty)
+                showTextSelection = false
+            },
+            onDismiss = { showTextSelection = false },
         )
     }
 }
@@ -2270,21 +2728,16 @@ private fun ReceiptEditorImageSection(
         ) {
             Icon(Icons.Default.AutoAwesome, contentDescription = null)
             Spacer(Modifier.width(8.dp))
-            Text(stringResource(R.string.local_text_help))
+            Text(stringResource(R.string.select_text_in_image))
         }
     }
     HorizontalDivider(Modifier.padding(vertical = 4.dp))
 }
 
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun LocalOcrHelper(
+private fun LocalOcrStatus(
     state: LocalOcrState,
     imageUri: String?,
-    target: String,
-    itemCount: Int,
-    onTargetChange: (String) -> Unit,
-    onToken: (String) -> Unit,
     onClose: () -> Unit,
 ) {
     when (state) {
@@ -2296,46 +2749,24 @@ private fun LocalOcrHelper(
             }
         }
         is LocalOcrState.Error -> if (state.imageUri == imageUri) {
-            Text(
-                stringResource(R.string.local_ocr_failed, state.message),
-                color = MaterialTheme.colorScheme.error,
-                style = MaterialTheme.typography.bodySmall,
-            )
+            Column {
+                Text(
+                    stringResource(R.string.local_ocr_failed, state.message),
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                TextButton(onClick = onClose, modifier = Modifier.align(Alignment.End)) {
+                    Text(stringResource(R.string.close))
+                }
+            }
         }
         is LocalOcrState.Success -> if (state.imageUri == imageUri) {
-            Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)) {
-                Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(stringResource(R.string.recognized_text_blocks), fontWeight = FontWeight.SemiBold)
-                    if (state.tokens.isEmpty()) {
-                        Text(stringResource(R.string.local_ocr_empty))
-                    } else {
-                        Text(stringResource(R.string.ocr_target), style = MaterialTheme.typography.labelMedium)
-                        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            OcrTargetChip("LOCATION", stringResource(R.string.ocr_target_location), target, onTargetChange)
-                            OcrTargetChip("CHECK", stringResource(R.string.ocr_target_check), target, onTargetChange)
-                            OcrTargetChip("AMOUNT", stringResource(R.string.ocr_target_amount), target, onTargetChange)
-                            repeat(itemCount) { index ->
-                                OcrTargetChip(
-                                    "ITEM_$index",
-                                    stringResource(R.string.ocr_target_item, index + 1),
-                                    target,
-                                    onTargetChange,
-                                )
-                            }
-                        }
-                        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            state.tokens.forEach { token ->
-                                AssistChip(
-                                    onClick = { onToken(token.text) },
-                                    label = { Text(token.text) },
-                                )
-                            }
-                        }
-                    }
-                    TextButton(onClick = onClose, modifier = Modifier.align(Alignment.End)) {
-                        Text(stringResource(R.string.clear_ocr_blocks))
-                    }
-                }
+            if (state.page.text.isBlank()) {
+                Text(
+                    stringResource(R.string.local_ocr_empty),
+                    color = MaterialTheme.colorScheme.tertiary,
+                    style = MaterialTheme.typography.bodySmall,
+                )
             }
         }
         LocalOcrState.Idle -> Unit
@@ -2343,17 +2774,126 @@ private fun LocalOcrHelper(
 }
 
 @Composable
-private fun OcrTargetChip(
-    key: String,
-    label: String,
-    selected: String,
-    onSelect: (String) -> Unit,
+private fun PendingImageTextBanner(
+    selectedText: String,
+    onCancel: () -> Unit,
 ) {
-    FilterChip(
-        selected = selected == key,
-        onClick = { onSelect(key) },
-        label = { Text(label) },
-    )
+    Card(
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.primaryContainer,
+        ),
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            Text(
+                stringResource(R.string.choose_target_field),
+                fontWeight = FontWeight.SemiBold,
+            )
+            Text(
+                selectedText,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onPrimaryContainer,
+            )
+            TextButton(onClick = onCancel, modifier = Modifier.align(Alignment.End)) {
+                Text(stringResource(R.string.cancel_selection))
+            }
+        }
+    }
+}
+
+@Composable
+private fun AiItemConflictBanner(
+    aiItems: List<ExtractedItem>,
+    onApplyItems: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    Card(
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.tertiaryContainer,
+        ),
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            Text(
+                stringResource(R.string.ai_result_preserved_edits),
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            aiItems.take(5).forEach { item ->
+                Text(
+                    buildString {
+                        append("• ")
+                        append(formatExtractedItemName(item.quantityText, item.name))
+                        item.amountText.takeIf(String::isNotBlank)?.let { append(" · ").append(it) }
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+            Row(
+                modifier = Modifier.align(Alignment.End),
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                TextButton(onClick = onDismiss) {
+                    Text(stringResource(R.string.keep_my_items))
+                }
+                TextButton(onClick = onApplyItems) {
+                    Text(stringResource(R.string.apply_ai_items))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ImageTextTarget(
+    pendingText: String?,
+    fieldLabel: String,
+    onApply: (String) -> Unit,
+    content: @Composable () -> Unit,
+) {
+    val shape = RoundedCornerShape(12.dp)
+    val applyLabel = stringResource(R.string.apply_selected_text_to, fieldLabel)
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .then(
+                if (pendingText != null) {
+                    Modifier.border(2.dp, MaterialTheme.colorScheme.primary, shape)
+                } else {
+                    Modifier
+                },
+            )
+            .then(
+                if (pendingText != null) {
+                    Modifier.clearAndSetSemantics {
+                        role = Role.Button
+                        contentDescription = applyLabel
+                        onClick(action = {
+                            onApply(pendingText)
+                            true
+                        })
+                    }
+                } else {
+                    Modifier
+                },
+            ),
+    ) {
+        content()
+        pendingText?.let { selectedText ->
+            Box(
+                modifier = Modifier
+                    .matchParentSize()
+                    .clip(shape)
+                    .clickable(
+                        onClickLabel = applyLabel,
+                        onClick = { onApply(selectedText) },
+                    ),
+            )
+        }
+    }
 }
 
 @Composable
@@ -2362,6 +2902,7 @@ private fun HistoryTextField(
     onValueChange: (String) -> Unit,
     label: String,
     suggestions: List<String>,
+    aiSuggestions: List<EditorSuggestion> = emptyList(),
     modifier: Modifier = Modifier,
 ) {
     var expanded by remember { mutableStateOf(false) }
@@ -2373,7 +2914,7 @@ private fun HistoryTextField(
             fieldValue = TextFieldValue(value, selection = TextRange(value.length))
         }
     }
-    Box(modifier = modifier.fillMaxWidth()) {
+    Column(modifier = modifier.fillMaxWidth()) {
         OutlinedTextField(
             value = fieldValue,
             onValueChange = { updated ->
@@ -2384,34 +2925,126 @@ private fun HistoryTextField(
             singleLine = false,
             minLines = 1,
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-            trailingIcon = if (suggestions.isNotEmpty()) {
-                {
-                    IconButton(onClick = { expanded = true }) {
-                        Icon(
-                            Icons.Default.History,
-                            contentDescription = stringResource(R.string.show_previous_values, label),
-                        )
-                    }
-                }
-            } else null,
             modifier = Modifier.fillMaxWidth(),
         )
+        FieldSuggestionMenu(
+            currentValue = fieldValue.text,
+            suggestions = aiSuggestions + suggestions.map {
+                EditorSuggestion(value = it, source = SuggestionSource.HISTORY)
+            },
+            expanded = expanded,
+            onExpandedChange = { expanded = it },
+            onSelected = { suggestion ->
+                fieldValue = TextFieldValue(
+                    suggestion,
+                    selection = TextRange(suggestion.length),
+                )
+                onValueChange(suggestion)
+            },
+            modifier = Modifier.align(Alignment.End),
+        )
+    }
+}
+
+@Composable
+private fun AiSuggestionMenu(
+    currentValue: String,
+    suggestions: List<EditorSuggestion>,
+    onSelected: (String) -> Unit,
+) {
+    var expanded by remember { mutableStateOf(false) }
+    FieldSuggestionMenu(
+        currentValue = currentValue,
+        suggestions = suggestions,
+        expanded = expanded,
+        onExpandedChange = { expanded = it },
+        onSelected = onSelected,
+        modifier = Modifier.fillMaxWidth(),
+    )
+}
+
+@Composable
+private fun FieldSuggestionMenu(
+    currentValue: String,
+    suggestions: List<EditorSuggestion>,
+    expanded: Boolean,
+    onExpandedChange: (Boolean) -> Unit,
+    onSelected: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val alternatives = suggestions
+        .filter { it.value.isNotBlank() && !it.value.equals(currentValue, ignoreCase = true) }
+        .distinctBy { it.value.trim().lowercase(Locale.ROOT) }
+        .take(8)
+    if (alternatives.isEmpty()) return
+
+    Box(modifier = modifier) {
+        TextButton(
+            onClick = { onExpandedChange(true) },
+            modifier = Modifier.align(Alignment.CenterEnd),
+        ) {
+            Icon(Icons.Default.History, contentDescription = null)
+            Spacer(modifier = Modifier.width(6.dp))
+            Text(
+                if (alternatives.any { it.source != SuggestionSource.HISTORY }) {
+                    stringResource(R.string.field_suggestions, alternatives.size)
+                } else {
+                    stringResource(R.string.previous_values, alternatives.size)
+                },
+            )
+        }
         DropdownMenu(
             expanded = expanded,
-            onDismissRequest = { expanded = false },
+            onDismissRequest = { onExpandedChange(false) },
         ) {
-            suggestions.forEach { suggestion ->
+            alternatives.forEach { suggestion ->
                 DropdownMenuItem(
-                    text = { Text(suggestion) },
+                    text = {
+                        Column {
+                            Text(suggestion.value)
+                            Text(
+                                when (suggestion.source) {
+                                    SuggestionSource.AI -> stringResource(
+                                        R.string.ai_suggestion_source,
+                                        suggestion.certainty.localizedLabel(),
+                                    )
+                                    SuggestionSource.HISTORY -> stringResource(R.string.history_suggestion_source)
+                                    SuggestionSource.LOCAL_OCR -> stringResource(R.string.local_ocr_suggestion_source)
+                                    SuggestionSource.MANUAL_IMAGE -> stringResource(R.string.image_selection_suggestion_source)
+                                },
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.primary,
+                            )
+                            suggestion.evidence
+                                .takeIf { it.isNotBlank() && !it.equals(suggestion.value, ignoreCase = true) }
+                                ?.let { evidence ->
+                                    Text(
+                                        stringResource(R.string.ai_suggestion_evidence, evidence),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                        }
+                    },
                     onClick = {
-                        onValueChange(suggestion)
-                        expanded = false
+                        onSelected(suggestion.value)
+                        onExpandedChange(false)
                     },
                 )
             }
         }
     }
 }
+
+@Composable
+private fun AiSuggestionCertainty?.localizedLabel(): String = stringResource(
+    when (this) {
+        AiSuggestionCertainty.HIGH -> R.string.ai_certainty_high
+        AiSuggestionCertainty.MEDIUM -> R.string.ai_certainty_medium
+        AiSuggestionCertainty.LOW -> R.string.ai_certainty_low
+        null -> R.string.ai_certainty_unknown
+    },
+)
 
 @Composable
 private fun ScrollableEditorDialog(
@@ -2460,7 +3093,87 @@ private data class EditableReceiptItem(
     val id: Long,
     val name: String = "",
     val amountText: String = "",
+    val aiSourceIndex: Int? = null,
+    val nameAiSuggestions: List<EditorSuggestion> = emptyList(),
+    val amountAiSuggestions: List<EditorSuggestion> = emptyList(),
 )
+
+private data class ReceiptEditorBaseline(
+    val location: String,
+    val checkNumber: String,
+    val amountText: String,
+    val occurredOn: String,
+    val items: List<Pair<String, String>>,
+)
+
+private data class EditorSuggestion(
+    val value: String,
+    val source: SuggestionSource,
+    val evidence: String = "",
+    val certainty: AiSuggestionCertainty? = null,
+)
+
+private fun ExtractedFieldSuggestions.toEditorSuggestions(
+    transformValue: (String) -> String = { it },
+): List<EditorSuggestion> = candidates.map { candidate ->
+    EditorSuggestion(
+        value = transformValue(candidate.value),
+        source = candidate.source,
+        evidence = candidate.evidenceText,
+        certainty = candidate.certainty,
+    )
+}
+
+private fun itemNameAiSuggestions(item: ExtractedItem): List<EditorSuggestion> {
+    val preferredQuantity = item.quantitySuggestions.preferred.ifBlank { item.quantityText }
+    val nameVariants = item.nameSuggestions.toEditorSuggestions { candidateName ->
+        formatExtractedItemName(preferredQuantity, candidateName)
+    }
+    val quantityVariants = item.quantitySuggestions.toEditorSuggestions { candidateQuantity ->
+        formatExtractedItemName(candidateQuantity, item.nameSuggestions.preferred.ifBlank { item.name })
+    }
+    return (nameVariants + quantityVariants)
+        .distinctBy { it.value.trim().lowercase(Locale.ROOT) }
+}
+
+private fun ExtractedReceipt.imageTextCandidates() = buildList {
+    addAll(locationSuggestions.candidates)
+    addAll(checkNumberSuggestions.candidates)
+    addAll(totalAmountSuggestions.candidates)
+    addAll(occurredOnSuggestions.candidates)
+    items.forEach { item ->
+        addAll(item.quantitySuggestions.candidates)
+        addAll(item.nameSuggestions.candidates)
+        addAll(item.amountSuggestions.candidates)
+    }
+}
+
+internal fun formatExtractedItemName(quantityText: String, name: String): String {
+    val quantity = quantityText.trim()
+    val cleanName = name.trim()
+    val normalizedQuantity = runCatching {
+        BigDecimal(quantity.replace(',', '.')).stripTrailingZeros().toPlainString()
+    }.getOrDefault(quantity)
+    val quantityPattern = listOf(quantity, normalizedQuantity)
+        .filter(String::isNotBlank)
+        .distinct()
+        .joinToString("|") { Regex.escape(it) }
+    val quantityPrefix = if (quantityPattern.isBlank()) null else Regex(
+        pattern = "^(?:$quantityPattern)(?:\\s*[x×*]\\s*|\\s+)",
+        option = RegexOption.IGNORE_CASE,
+    )
+    val nameWithoutRepeatedQuantity = quantityPrefix
+        ?.find(cleanName)
+        ?.takeIf { it.range.first == 0 }
+        ?.let { cleanName.removeRange(it.range).trim() }
+        ?.takeIf(String::isNotBlank)
+    return when {
+        quantity.isBlank() -> cleanName
+        cleanName.isBlank() -> quantity
+        nameWithoutRepeatedQuantity != null -> "$quantity × $nameWithoutRepeatedQuantity"
+        else -> "$quantity × $cleanName"
+    }
+}
 
 private fun formatEuroCents(cents: Long): String = formatMinor(cents, "EUR")
 

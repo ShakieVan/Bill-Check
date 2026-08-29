@@ -1,5 +1,71 @@
 # Entwicklungsprotokoll
 
+## 29.08.2026 – Mengen, Feldkandidaten und räumliche Textauswahl
+
+- Belegantworten um getrennte Mengen, maximal drei bildgestützte Kandidaten je
+  Kopf- und Postenfeld sowie vollständige Transkriptzeilen erweitert.
+- Mengen werden im Postentext als `5 × Bezeichnung` sichtbar; bereits vom
+  Modell wiederholte Mengen werden ohne Verfälschung von Namen wie `500ml`
+  normalisiert.
+- „Früher verwendet“ und KI-Vorschläge liegen in einem Menü unterhalb des
+  Textfeldes. Der Auslöser belegt keinen Teil der editierbaren Zeile mehr.
+- Spät eintreffende KI-Ergebnisse überschreiben zwischenzeitliche Eingaben
+  nicht. Kandidaten und eine explizite Übernahme der KI-Posten bleiben verfügbar.
+- Das bestätigte KI-Ergebnis bleibt für die Lebensdauer des Belegeditors erhalten,
+  damit Vorschlagsmenüs und KI-Transkript nach dem Schließen des Ergebnisdialogs
+  nicht verschwinden.
+- Die alte OCR-Wortfetzenliste durch eine zoombare, bildgebundene Wort- und
+  Zeichenauswahl ersetzt. ML Kit liefert die Geometrie; KI-Transkripte können
+  besseren Text daran ausrichten. Bei leerem lokalen-Qwen-Transkript erfolgt
+  ein separater OCR-Fallback-Durchlauf.
+- Die Anfangs- und Endgriffe der Auswahl lassen sich wie bei der
+  Android-Textauswahl direkt verschieben. Während des Ziehens zeigt eine Lupe
+  die Zeichen unter dem Finger; die Auswahl bleibt weiterhin zeichengenau.
+- Im Rechnungsabgleich pulsiert ausschließlich der sinnvolle nächste Schritt
+  dezent: nach einem gewählten, noch nicht ausgewerteten Bild „Bild auswerten“,
+  nach extrahierten Zeilen „Abgleich ausführen“. Ein lokaler Abgleich wird auch
+  ohne optionale KI-Zusammenfassung dauerhaft als ausgeführt markiert, sodass
+  die Aufforderung danach endet.
+- Private Problembelege #5595 und #783 bleiben außerhalb des Repositorys. Im
+  Emulator reproduzierte #5595 den schwachen lokalen Restauranttext und führte
+  zur verpflichtenden Hybrid-/Fallback-Strategie.
+
+## 29.08.2026 – Verbindungstest für lokalen KI-Server
+
+- Die Einstellungen um eine getrennte Konfiguration für den privaten,
+  OpenAI-kompatiblen KI-Endpunkt ergänzt. Voreingestellt sind
+  `https://ai.replinator.de/v1` und `qwen3.8-27b-q8`.
+- Basic-Authentifizierung und Bearer-Token werden unterstützt; das jeweilige
+  Geheimnis wird mit einem eigenen Android-Keystore-Schlüssel verschlüsselt.
+- Der Verbindungstest ruft ausschließlich `/v1/models` auf, misst die
+  Antwortzeit und prüft, ob das konfigurierte Modell tatsächlich geladen ist.
+  Ein altes Erfolgs- oder Fehlerergebnis verschwindet beim erneuten Fokussieren
+  oder Bearbeiten der Verbindungsfelder, damit es nicht als Ergebnis einer noch
+  nicht gestarteten Wiederholungsprüfung missverstanden wird.
+- Den lokalen Vision-Durchstich mit 25 privaten Bildern vollständig wiederholt
+  und gegen Gemma 4 31B Q4 sowie die Originale geprüft. Qwen3.8 27B Q8 lieferte
+  25/25 gültige JSON-Ergebnisse; 22 gedruckte Einzelbelege passten anhand von
+  Checknummer-Endung und Betrag exakt zu den 26 erkannten Rechnungszeilen.
+  Dauerhafte Folgerungen zu Normalisierung, Ortsfehlern und zu konservativer
+  Datumsbewertung stehen in `technical-notes/local-ai-lm-studio.md`.
+  Gemini blieb bis zum unmittelbar folgenden vollständigen LM-Studio-Adapter
+  der aktive Bildauswertungsanbieter.
+- Den vollständigen OpenAI-kompatiblen Vision-Adapter ergänzt. In den
+  Einstellungen ist der private Qwen-Server nun ausdrücklich neben Gemini als
+  Auswertungsanbieter wählbar; es gibt keinen automatischen Cloud-Fallback.
+- Lokale Antworten werden über ein striktes JSON-Schema begrenzt. Beträge,
+  Währungscodes und bekannte Checknummer-Präfixe werden deterministisch
+  normalisiert; unsichere Schreibweisen bleiben sichtbar und scheitern an der
+  bestehenden fachlichen Validierung statt stillschweigend übernommen zu
+  werden.
+- Den vollständigen Ablauf ausschließlich auf `emulator-5554` geprüft: echter
+  Einzelbeleg korrekt als Editorvorschlag, private Endrechnung mit denselben 11
+  Zeilen und derselben Gesamtsumme wie im Referenzlauf sowie anschließender
+  Abgleich mit lokaler deutscher Qwen-Zusammenfassung.
+- Nach einem zu positiven ersten KI-Fazit den Zusammenfassungs-Prompt gegen
+  unbelegte Ursachen und positive Gesamturteile bei offenen Abweichungen
+  verschärft und den Emulatorlauf erfolgreich wiederholt.
+
 ## 16.08.2026 – Projektstart
 
 - Bestehenden HTML-Prototyp und 25 reale Beispielbilder analysiert.

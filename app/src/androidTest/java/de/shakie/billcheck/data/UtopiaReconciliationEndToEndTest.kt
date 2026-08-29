@@ -12,6 +12,7 @@ import java.time.ZoneId
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -55,6 +56,7 @@ class UtopiaReconciliationEndToEndTest {
             assertEquals(740_420L, refreshed.reconciliation.declaredTotalMinor)
             assertEquals(ReconciliationStatus.CORRECT, matched.line.status)
             assertEquals(1, matched.matches.size)
+            assertNotNull(refreshed.reconciliation.analysisUpdatedAt)
             assertEquals(10, report.statementOnlyCount)
             assertEquals(1, report.receiptOnlyCount)
             assertEquals(StatementTotalCheck.MATCH.name, report.totalCheck)

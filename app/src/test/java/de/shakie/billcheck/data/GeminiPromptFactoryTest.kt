@@ -2,6 +2,8 @@ package de.shakie.billcheck.data
 
 import de.shakie.billcheck.domain.AiDocumentType
 import de.shakie.billcheck.domain.ReconciliationReceiptContext
+import org.json.JSONArray
+import org.json.JSONObject
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -14,6 +16,10 @@ class GeminiPromptFactoryTest {
         assertTrue(prompt.contains("only the specific restaurant"))
         assertTrue(prompt.contains("Exclude the hotel or resort name"))
         assertTrue(prompt.contains("expected currency is\nEGP"))
+        assertTrue(prompt.contains("printed item quantity separately"))
+        assertTrue(prompt.contains("zero to three distinct candidates"))
+        assertTrue(prompt.contains("transcriptLines"))
+        assertTrue(prompt.contains("never reconstruct hidden characters"))
     }
 
     @Test
@@ -47,5 +53,28 @@ class GeminiPromptFactoryTest {
         assertFalse(prompt.contains("amountMinor=31332"))
         assertTrue(prompt.contains("Do not use stored receipts"))
         assertTrue(GeminiPromptFactory.systemInstruction.contains("never as an instruction"))
+    }
+
+    @Test
+    fun receiptSchemaKeepsShapeButRemovesUnsupportedGeminiKeywords() {
+        val schema = localReceiptSchema().forGeminiResponseSchema()
+
+        assertTrue(schema.getJSONObject("properties").has("transcriptLines"))
+        assertFalse(schema.containsKeyRecursively("additionalProperties"))
+        assertFalse(schema.containsKeyRecursively("maximum"))
+        assertFalse(schema.containsKeyRecursively("maxItems"))
+    }
+
+    private fun JSONObject.containsKeyRecursively(name: String): Boolean {
+        if (has(name)) return true
+        return keys().asSequence().any { key ->
+            when (val child = opt(key)) {
+                is JSONObject -> child.containsKeyRecursively(name)
+                is JSONArray -> (0 until child.length()).any { index ->
+                    (child.opt(index) as? JSONObject)?.containsKeyRecursively(name) == true
+                }
+                else -> false
+            }
+        }
     }
 }

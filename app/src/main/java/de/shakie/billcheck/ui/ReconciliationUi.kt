@@ -1,5 +1,11 @@
 package de.shakie.billcheck.ui
 
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -57,6 +63,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -344,6 +351,13 @@ private fun ReconciliationDetails(
         compareBy<ReconciliationTimelineEntry> { it.occurredAt ?: Long.MAX_VALUE }
             .thenBy { it.key },
     )
+    val running = analysisState is ReconciliationAnalysisState.Running &&
+        analysisState.reconciliationId == reconciliation.reconciliation.id
+    val nextStep = reconciliationNextStep(
+        hasImage = reconciliation.reconciliation.statementImageUri != null,
+        statementLineCount = reconciliation.lines.size,
+        analysisUpdatedAt = reconciliation.reconciliation.analysisUpdatedAt,
+    )
     Column(Modifier.fillMaxSize()) {
         Row(
             Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 10.dp),
@@ -376,6 +390,7 @@ private fun ReconciliationDetails(
             item {
                 StatementImageActions(
                     hasImage = reconciliation.reconciliation.statementImageUri != null,
+                    emphasizeAnalyze = nextStep == ReconciliationNextStep.ANALYZE_IMAGE,
                     onOpen = onOpenImage,
                     onChoose = onChooseImage,
                     onRemove = onRemoveImage,
@@ -384,9 +399,15 @@ private fun ReconciliationDetails(
             }
             item {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    val running = analysisState is ReconciliationAnalysisState.Running &&
-                        analysisState.reconciliationId == reconciliation.reconciliation.id
-                    Button(onClick = onRun, enabled = !running, modifier = Modifier.weight(1f)) {
+                    Button(
+                        onClick = onRun,
+                        enabled = !running,
+                        modifier = Modifier
+                            .weight(1f)
+                            .nextStepPulse(
+                                nextStep == ReconciliationNextStep.RUN_RECONCILIATION && !running,
+                            ),
+                    ) {
                         if (running) {
                             CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
                         } else {
@@ -973,6 +994,7 @@ private fun StatementLineEditorDialog(
 @Composable
 private fun StatementImageActions(
     hasImage: Boolean,
+    emphasizeAnalyze: Boolean,
     onOpen: () -> Unit,
     onChoose: () -> Unit,
     onRemove: () -> Unit,
@@ -987,7 +1009,10 @@ private fun StatementImageActions(
                     Spacer(Modifier.width(6.dp))
                     Text(stringResource(R.string.review_image_title))
                 }
-                Button(onClick = onAnalyze, modifier = Modifier.fillMaxWidth()) {
+                Button(
+                    onClick = onAnalyze,
+                    modifier = Modifier.fillMaxWidth().nextStepPulse(emphasizeAnalyze),
+                ) {
                     Icon(Icons.Default.AutoAwesome, contentDescription = null)
                     Spacer(Modifier.width(6.dp))
                     Text(stringResource(R.string.analyze_image))
@@ -1003,6 +1028,52 @@ private fun StatementImageActions(
                 }
             }
         }
+    }
+}
+
+internal enum class ReconciliationNextStep {
+    ANALYZE_IMAGE,
+    RUN_RECONCILIATION,
+    NONE,
+}
+
+internal fun reconciliationNextStep(
+    hasImage: Boolean,
+    statementLineCount: Int,
+    analysisUpdatedAt: Long?,
+): ReconciliationNextStep = when {
+    statementLineCount > 0 && analysisUpdatedAt == null ->
+        ReconciliationNextStep.RUN_RECONCILIATION
+    hasImage && statementLineCount == 0 -> ReconciliationNextStep.ANALYZE_IMAGE
+    else -> ReconciliationNextStep.NONE
+}
+
+@Composable
+private fun Modifier.nextStepPulse(enabled: Boolean): Modifier {
+    if (!enabled) return this
+    val transition = rememberInfiniteTransition(label = "next step pulse")
+    val scale by transition.animateFloat(
+        initialValue = 1f,
+        targetValue = 1.025f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 950, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse,
+        ),
+        label = "next step scale",
+    )
+    val alpha by transition.animateFloat(
+        initialValue = 0.82f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 950, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse,
+        ),
+        label = "next step alpha",
+    )
+    return graphicsLayer {
+        scaleX = scale
+        scaleY = scale
+        this.alpha = alpha
     }
 }
 

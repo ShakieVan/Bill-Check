@@ -18,11 +18,17 @@ import de.shakie.billcheck.domain.MoneyCalculator
 import de.shakie.billcheck.domain.ExchangeRateQuote
 import de.shakie.billcheck.domain.RankedReceiptCandidate
 import de.shakie.billcheck.domain.AiDocumentType
+import de.shakie.billcheck.domain.AiExtractionProvider
 import de.shakie.billcheck.domain.AiExtractionResult
 import de.shakie.billcheck.domain.ExtractedReceipt
 import de.shakie.billcheck.domain.ExtractedStatement
-import de.shakie.billcheck.data.OcrToken
+import de.shakie.billcheck.data.OcrPage
 import de.shakie.billcheck.data.GeminiModelInfo
+import de.shakie.billcheck.data.LocalAiAuthType
+import de.shakie.billcheck.data.LocalAiConnectionResult
+import de.shakie.billcheck.data.LocalAiSettings
+import de.shakie.billcheck.data.AI_PROVIDER_GEMINI
+import de.shakie.billcheck.data.AI_PROVIDER_LOCAL
 import de.shakie.billcheck.data.ExportFormat
 import de.shakie.billcheck.data.ImportPreview
 import de.shakie.billcheck.BillCheckWidget
@@ -96,9 +102,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val repository = billCheckApplication.repository
     private val exchangeRateProvider = billCheckApplication.exchangeRateProvider
     private val aiSettingsStore = billCheckApplication.aiSettingsStore
-    private val aiExtractionProvider = billCheckApplication.aiExtractionProvider
+    private val geminiAiExtractionProvider = billCheckApplication.geminiAiExtractionProvider
+    private val localAiExtractionProvider = billCheckApplication.localAiExtractionProvider
     private val localTextRecognizer = billCheckApplication.localTextRecognizer
     private val geminiModelCatalog = billCheckApplication.geminiModelCatalog
+    private val localAiSettingsStore = billCheckApplication.localAiSettingsStore
+    private val localAiConnectionTester = billCheckApplication.localAiConnectionTester
     private val dataTransferManager = billCheckApplication.dataTransferManager
     private val appUpdateManager = billCheckApplication.appUpdateManager
     private val widgetPreferences = application.getSharedPreferences(
@@ -122,6 +131,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val localOcr = _localOcr.asStateFlow()
     private val _geminiModels = MutableStateFlow<GeminiModelsState>(GeminiModelsState.Idle)
     val geminiModels = _geminiModels.asStateFlow()
+    private val _localAiSettings = MutableStateFlow(localAiSettingsStore.read())
+    val localAiSettings = _localAiSettings.asStateFlow()
+    private val _localAiConnection = MutableStateFlow<LocalAiConnectionState>(LocalAiConnectionState.Idle)
+    val localAiConnection = _localAiConnection.asStateFlow()
     private val _transfer = MutableStateFlow<TransferState>(TransferState.Idle)
     val transfer = _transfer.asStateFlow()
     private val _appUpdate = MutableStateFlow(AppUpdateState())
@@ -351,14 +364,77 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch { repository.updateReceiptImage(receiptId, imageUri) }
     }
 
-    fun saveAiSettings(apiKey: String?, model: String) {
-        aiSettingsStore.saveGemini(apiKey, model)
+    fun saveAiSettings(providerId: String, apiKey: String?, model: String) {
+        aiSettingsStore.save(providerId, apiKey, model)
         _aiSettings.value = aiSettingsStore.read()
     }
 
     fun clearAiApiKey() {
         aiSettingsStore.clearApiKey()
         _aiSettings.value = aiSettingsStore.read()
+    }
+
+    fun saveLocalAiSettings(
+        baseUrl: String,
+        model: String,
+        authType: LocalAiAuthType,
+        username: String,
+        credential: String?,
+    ) {
+        localAiSettingsStore.save(
+            LocalAiSettings(
+                baseUrl = baseUrl,
+                model = model,
+                authType = authType,
+                username = username,
+            ),
+            credential,
+        )
+        _localAiSettings.value = localAiSettingsStore.read()
+        _localAiConnection.value = LocalAiConnectionState.Idle
+    }
+
+    fun clearLocalAiCredential() {
+        localAiSettingsStore.clearCredential()
+        _localAiSettings.value = localAiSettingsStore.read()
+        _localAiConnection.value = LocalAiConnectionState.Idle
+    }
+
+    fun clearLocalAiConnectionResult() {
+        if (_localAiConnection.value !is LocalAiConnectionState.Testing) {
+            _localAiConnection.value = LocalAiConnectionState.Idle
+        }
+    }
+
+    fun testLocalAiConnection(
+        baseUrl: String,
+        model: String,
+        authType: LocalAiAuthType,
+        username: String,
+        credential: String?,
+    ) {
+        val accessCredential = credential?.takeIf(String::isNotBlank)
+            ?: localAiSettingsStore.credential()
+        if (accessCredential.isNullOrBlank()) {
+            _localAiConnection.value = LocalAiConnectionState.MissingCredential
+            return
+        }
+        val settings = LocalAiSettings(
+            baseUrl = baseUrl,
+            model = model,
+            authType = authType,
+            username = username,
+        )
+        _localAiConnection.value = LocalAiConnectionState.Testing
+        viewModelScope.launch {
+            runCatching { localAiConnectionTester.test(settings, accessCredential) }
+                .onSuccess { _localAiConnection.value = LocalAiConnectionState.Success(it) }
+                .onFailure {
+                    _localAiConnection.value = LocalAiConnectionState.Error(
+                        it.message?.take(200).orEmpty(),
+                    )
+                }
+        }
     }
 
     fun loadGeminiModels() {
@@ -379,21 +455,20 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun analyzeReceipt(imageUri: String, expectedCurrencyCode: String? = null) {
         val trip = uiState.value.selectedTrip ?: return
-        val settings = aiSettingsStore.read()
-        val key = aiSettingsStore.apiKey()
-        if (key.isNullOrBlank()) {
-            _aiExtraction.value = AiExtractionState.MissingApiKey
+        val runtime = activeAiRuntime()
+        if (runtime == null) {
+            _aiExtraction.value = AiExtractionState.MissingCredential
             return
         }
         _aiExtraction.value = AiExtractionState.Loading(imageUri)
         viewModelScope.launch {
             runCatching {
-                aiExtractionProvider.extract(
+                runtime.provider.extract(
                     imageUri = Uri.parse(imageUri),
                     documentType = AiDocumentType.RECEIPT,
                     expectedCurrencyCode = expectedCurrencyCode ?: trip.foreignCurrencyCode,
-                    apiKey = key,
-                    model = settings.model,
+                    apiKey = runtime.credential,
+                    model = runtime.model,
                 ) as AiExtractionResult.Receipt
             }.onSuccess {
                 _aiExtraction.value = AiExtractionState.ReceiptSuccess(imageUri, it.value)
@@ -408,21 +483,20 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun analyzeStatement(reconciliationId: String, imageUri: String) {
         val trip = uiState.value.selectedTrip ?: return
-        val settings = aiSettingsStore.read()
-        val key = aiSettingsStore.apiKey()
-        if (key.isNullOrBlank()) {
-            _aiExtraction.value = AiExtractionState.MissingApiKey
+        val runtime = activeAiRuntime()
+        if (runtime == null) {
+            _aiExtraction.value = AiExtractionState.MissingCredential
             return
         }
         _aiExtraction.value = AiExtractionState.Loading(imageUri)
         viewModelScope.launch {
             runCatching {
-                aiExtractionProvider.extract(
+                runtime.provider.extract(
                     imageUri = Uri.parse(imageUri),
                     documentType = AiDocumentType.STATEMENT,
                     expectedCurrencyCode = trip.foreignCurrencyCode,
-                    apiKey = key,
-                    model = settings.model,
+                    apiKey = runtime.credential,
+                    model = runtime.model,
                 ) as AiExtractionResult.Statement
             }.onSuccess {
                 _aiExtraction.value = AiExtractionState.StatementSuccess(
@@ -699,13 +773,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             runCatching {
                 val report = repository.runAutomaticReconciliation(tripId, reconciliation)
-                val key = aiSettingsStore.apiKey()
-                if (!key.isNullOrBlank()) {
-                    val settings = aiSettingsStore.read()
-                    val summary = aiExtractionProvider.summarizeReconciliation(
+                val runtime = activeAiRuntime()
+                if (runtime != null) {
+                    val summary = runtime.provider.summarizeReconciliation(
                         report = report,
-                        apiKey = key,
-                        model = settings.model,
+                        apiKey = runtime.credential,
+                        model = runtime.model,
                     )
                     repository.storeReconciliationSummary(report.reconciliationId, summary)
                 }
@@ -726,6 +799,24 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun deleteReconciliation(reconciliationId: String) {
         viewModelScope.launch { repository.deleteReconciliation(reconciliationId) }
+    }
+
+    private fun activeAiRuntime(): AiRuntime? {
+        val settings = aiSettingsStore.read()
+        return when (settings.providerId) {
+            AI_PROVIDER_LOCAL -> {
+                val credential = localAiSettingsStore.credential()?.takeIf(String::isNotBlank)
+                    ?: return null
+                val localSettings = localAiSettingsStore.read()
+                AiRuntime(localAiExtractionProvider, credential, localSettings.model)
+            }
+            AI_PROVIDER_GEMINI -> {
+                val credential = aiSettingsStore.apiKey()?.takeIf(String::isNotBlank)
+                    ?: return null
+                AiRuntime(geminiAiExtractionProvider, credential, settings.model)
+            }
+            else -> null
+        }
     }
 
     companion object {
@@ -799,7 +890,7 @@ sealed interface ExchangeRateLookupState {
 
 sealed interface AiExtractionState {
     data object Idle : AiExtractionState
-    data object MissingApiKey : AiExtractionState
+    data object MissingCredential : AiExtractionState
     data class Loading(val imageUri: String) : AiExtractionState
     data class ReceiptSuccess(val imageUri: String, val receipt: ExtractedReceipt) : AiExtractionState
     data class StatementSuccess(
@@ -819,7 +910,7 @@ sealed interface ReconciliationAnalysisState {
 sealed interface LocalOcrState {
     data object Idle : LocalOcrState
     data class Loading(val imageUri: String) : LocalOcrState
-    data class Success(val imageUri: String, val tokens: List<OcrToken>) : LocalOcrState
+    data class Success(val imageUri: String, val page: OcrPage) : LocalOcrState
     data class Error(val imageUri: String, val message: String) : LocalOcrState
 }
 
@@ -829,6 +920,20 @@ sealed interface GeminiModelsState {
     data object MissingApiKey : GeminiModelsState
     data class Success(val models: List<GeminiModelInfo>) : GeminiModelsState
     data class Error(val message: String) : GeminiModelsState
+}
+
+private data class AiRuntime(
+    val provider: AiExtractionProvider,
+    val credential: String,
+    val model: String,
+)
+
+sealed interface LocalAiConnectionState {
+    data object Idle : LocalAiConnectionState
+    data object Testing : LocalAiConnectionState
+    data object MissingCredential : LocalAiConnectionState
+    data class Success(val result: LocalAiConnectionResult) : LocalAiConnectionState
+    data class Error(val message: String) : LocalAiConnectionState
 }
 
 sealed interface TransferState {

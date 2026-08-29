@@ -4,15 +4,37 @@ Status: verbindlich
 
 ## Entscheidung
 
-Cloud-Auswertung hängt hinter der domäneneigenen Schnittstelle
-`AiExtractionProvider`. Gemini ist der erste Adapter; Beleg- und
-Rechnungsdaten bleiben providerunabhängige Kotlin-Typen. Ein Wechsel oder eine
-Ergänzung um weitere Anbieter verändert deshalb weder Room noch die Editoren.
+Jede KI-Auswertung hängt hinter der domäneneigenen Schnittstelle
+`AiExtractionProvider`. Implementiert sind Gemini und ein privater,
+OpenAI-kompatibler Server. Beleg- und Rechnungsdaten bleiben
+providerunabhängige Kotlin-Typen; ein Anbieterwechsel verändert deshalb weder
+Room noch die Editoren.
 
-Gemini erhält das Bild ausschließlich nach der ausdrücklichen Aktion „Bild
-auswerten“. Das Ergebnis wird als korrigierbarer Vorschlag in den Editor
-kopiert, mit einem stehenbleibenden Ergebnisdialog bestätigt und nie
+Ein eigener, OpenAI-kompatibler Server kann unabhängig davon in den
+Einstellungen vorbereitet und über `GET /v1/models` geprüft werden. URL,
+Modell, Authentifizierungsart und Benutzername liegen in privaten
+App-Einstellungen; Kennwort oder Bearer-Token werden wie Cloud-API-Schlüssel
+mit dem Android Keystore verschlüsselt. Der Verbindungstest sendet keine
+Belegbilder. Der Nutzer wählt ausdrücklich zwischen dem privaten Server und
+Gemini; ein automatischer Cloud-Fallback findet nicht statt.
+
+Der ausgewählte Anbieter erhält das Bild ausschließlich nach der ausdrücklichen
+Aktion „Bild auswerten“. Das Ergebnis wird als korrigierbarer Vorschlag in den
+Editor kopiert, mit einem stehenbleibenden Ergebnisdialog bestätigt und nie
 unmittelbar in Room gespeichert.
+
+Belegantworten trennen gedruckte Mengen von Artikelbezeichnungen und liefern
+für fachliche Felder bis zu drei bildgestützte Kandidaten mit Evidenz,
+Sicherheit und grober Position. Vorschlagsmenüs liegen außerhalb des
+editierbaren Textfeldes, damit Cursor und Textmarkierung bis zum letzten Zeichen
+frei bleiben. Während einer laufenden Analyse geänderte Nutzerwerte werden bei
+der Antwort nicht überschrieben; Kandidaten und KI-Posten können anschließend
+gezielt übernommen werden.
+
+Ein sichtbares KI-Transkript kann mit der lokalen ML-Kit-Zeichengeometrie
+fusioniert werden. Diese Hybridlage unterstützt die manuelle Auswahl direkt im
+Bild, ist aber keine automatische Wahrheit: KI-Positionen und proportional
+ergänzte Zeichen bleiben Näherungen.
 
 API-Schlüssel liegen verschlüsselt mit einem nicht exportierbaren AES/GCM-
 Schlüssel im Android Keystore. Klartextschlüssel gehören weder in Ressourcen,

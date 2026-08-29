@@ -33,6 +33,8 @@ Fehlschläge dauerhaft außerhalb einzelner Chats fest.
   privates Bildmaterial sicher in den lokalen Emulator einspielen
 - [`technical-notes/offline-ocr-helper.md`](technical-notes/offline-ocr-helper.md):
   lokale Texterkennung und manuell gesteuerte Textbausteine
+- [`technical-notes/local-ai-lm-studio.md`](technical-notes/local-ai-lm-studio.md):
+  verschlüsselter LM-Studio-Zugriff und lokaler Vision-Benchmark
 - [`technical-notes/github-release-process.md`](technical-notes/github-release-process.md):
   Signierschlüssel, GitHub-Secrets, Release-Vertrag und Pflichtprüfungen
 

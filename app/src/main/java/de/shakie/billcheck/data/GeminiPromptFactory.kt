@@ -26,7 +26,26 @@ internal object GeminiPromptFactory {
                 "Utopia Beach Club, Marsa Alam, Sunset Lobby".
                 Keep decimal amounts as plain strings without currency symbols. Use YYYY-MM-DD for
                 dates and an empty string when a value is not visible. Item amounts must be the
-                printed line totals. Never invent missing values.
+                printed line totals. Extract each explicitly printed item quantity separately from
+                its description. Return an empty quantity when the receipt does not visibly print
+                one; do not infer a quantity from an amount, package size, or repeated-looking row.
+
+                For location, check number, total amount, date, and every item's quantity, name, and
+                amount, return a preferred value plus zero to three distinct candidates. Every
+                candidate must be grounded in visible text from this image: copy that literal text
+                into evidenceText and give its coarse source rectangle as integer coordinates from
+                0 to 1000 relative to the full image. Use an all-zero rectangle only when no source
+                rectangle can be located. Set ambiguous=true only when more than one candidate
+                remains genuinely plausible. The preferred value must equal one candidate value
+                unless it is empty, and its candidate must be listed first. Do not create spelling
+                variants, complete occluded text, or propose alternatives without separate visible
+                evidence.
+
+                Also transcribe all visibly readable receipt text in top-to-bottom transcriptLines.
+                Each line has the literal visible text and one coarse 0-to-1000 rectangle. Preserve
+                punctuation and partial words; never reconstruct hidden characters. These AI boxes
+                are for coarse alignment, not character-precise selection. Never invent missing
+                values.
             """.trimIndent()
 
             AiDocumentType.STATEMENT -> """
@@ -39,10 +58,12 @@ internal object GeminiPromptFactory {
 
                 Preserve check numbers and printedDate exactly as printed. Return normalizedDate as
                 YYYY-MM-DD only when the calendar interpretation is unambiguous; otherwise return an
-                empty normalizedDate and set dateAmbiguous=true. Amounts and declaredTotal must be
-                positive plain decimal strings without symbols or grouping separators. Return an
-                empty string when a value is not visible. Never invent, merge, silently correct, or
-                omit a charge line. Keep the original top-to-bottom order.
+                empty normalizedDate and set dateAmbiguous=true. A valid printed date in DD.MM.YY is
+                not ambiguous merely because its year has two digits when the statement is clearly
+                contemporary: map 00-79 to 2000-2079 and 80-99 to 1980-1999. Amounts and
+                declaredTotal must be positive plain decimal strings without symbols or grouping
+                separators. Return an empty string when a value is not visible. Never invent, merge,
+                silently correct, or omit a charge line. Keep the original top-to-bottom order.
             """.trimIndent()
         }
 }

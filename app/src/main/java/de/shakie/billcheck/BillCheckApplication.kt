@@ -8,6 +8,9 @@ import de.shakie.billcheck.data.AiSettingsStore
 import de.shakie.billcheck.data.GeminiAiExtractionProvider
 import de.shakie.billcheck.data.LocalTextRecognizer
 import de.shakie.billcheck.data.GeminiModelCatalog
+import de.shakie.billcheck.data.LocalAiConnectionTester
+import de.shakie.billcheck.data.LocalAiExtractionProvider
+import de.shakie.billcheck.data.LocalAiSettingsStore
 import de.shakie.billcheck.data.DataTransferManager
 import de.shakie.billcheck.update.AppUpdateManager
 
@@ -16,7 +19,10 @@ class BillCheckApplication : Application() {
     val repository by lazy { BillCheckRepository(database) }
     val exchangeRateProvider by lazy { OpenExchangeRateProvider(this) }
     val aiSettingsStore by lazy { AiSettingsStore(this) }
-    val aiExtractionProvider by lazy { GeminiAiExtractionProvider(this) }
+    val geminiAiExtractionProvider by lazy { GeminiAiExtractionProvider(this) }
+    val localAiSettingsStore by lazy { LocalAiSettingsStore(this) }
+    val localAiExtractionProvider by lazy { LocalAiExtractionProvider(this, localAiSettingsStore) }
+    val localAiConnectionTester by lazy { LocalAiConnectionTester() }
     val localTextRecognizer by lazy { LocalTextRecognizer(this) }
     val geminiModelCatalog by lazy { GeminiModelCatalog() }
     val dataTransferManager by lazy { DataTransferManager(this, database) }

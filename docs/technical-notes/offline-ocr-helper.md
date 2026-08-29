@@ -1,26 +1,36 @@
-# Lokale OCR-Bausteinhilfe
+# Räumliche OCR-Textauswahl
 
 ## Umsetzung
 
 Die gebündelte lateinische ML-Kit-Texterkennung läuft vollständig lokal und
-benötigt nach Installation keinen Modelldownload. Sie zerlegt erkannte Zeilen
-in eindeutige Textbausteine. Im Belegeditor wird zunächst das Zielfeld gewählt
-(Ort, Checknummer, Gesamtbetrag oder ein Posten); anschließend fügt ein Tipp
-auf einen Baustein dessen Text dort ein. Mehrere Wörter werden bei Textfeldern
-mit Leerzeichen aneinandergefügt.
+benötigt nach Installation keinen Modelldownload. Statt einer deduplizierten
+Wortliste speichert sie die Hierarchie aus Seite, Blöcken, Zeilen, Wörtern und
+Zeichen samt Pixel- und normalisierten Koordinaten.
 
-Das ist bewusst eine Bausteinhilfe, keine automatische fachliche Zuordnung.
-Sie bleibt bei fehlendem Internet nutzbar und lässt den Menschen über jedes
-übernommene Wort beziehungsweise jeden Betrag entscheiden. Drag-and-drop kann
-später zusätzlich angeboten werden; Antippen ist auf kleinen Displays der
-robustere erste Bedienweg.
+„Text im Bild auswählen“ zeigt den vollständigen Beleg. Ein Tipp oder langer
+Druck wählt ein Wort. Die beiden blauen Anfangs- und Endgriffe lassen sich
+anschließend wie bei der nativen Textauswahl verschieben und verändern die
+Auswahl bis auf Zeichenebene. Während des Ziehens vergrößert eine Lupe den
+Bereich unter dem Finger. Zoom und Verschieben bleiben möglich. Nach dem Haken
+kehrt die App in den Editor zurück; alle geeigneten Zielfelder sind
+hervorgehoben. Erst der bewusste Tipp auf ein Feld ersetzt dessen Inhalt. Die
+frühere Wortfetzen-/Zielchip-Oberfläche wurde vollständig entfernt.
+
+Wenn die aktive KI-Auswertung Transkriptzeilen liefert, fusioniert die App
+deren meist besseren Text mit der lokalen Geometrie. Passende Zeilen behalten
+die präzisere ML-Kit-Position; weitere sichtbare KI-Zeilen werden mit ihrer
+groben Box ergänzt. Fehlt das Transkript in einer lokalen Qwen-Antwort, folgt
+einmalig ein reiner OCR-Durchlauf. Ohne KI oder Netzwerk bleibt die lokale
+Auswahl verfügbar. Ergänzte Zeichenpositionen sind geometrische Näherungen.
 
 ## Regressionstest
 
-Mit einem privaten Belegbild im Android-16-Emulator wurden Textblöcke lokal
-erkannt, Zielchips gewechselt und einzelne Wörter in das Ortsfeld übernommen.
-Der Test benötigt weder Gemini-Schlüssel noch Netzwerkzugriff. Private
-Belegbilder bleiben außerhalb dieses öffentlichen Repositorys.
+Mit privaten Belegen im Android-16-Emulator wurden Wort-, Zeichen- und
+Mehrwortauswahl, beide verschiebbaren Auswahlgriffe, die Lupe während einer
+laufenden Geste, Haken/Abbrechen und die gezielte Übernahme in hervorgehobene
+Felder geprüft. Synthetische Unit-Tests prüfen Geometrie, Leserichtung und die
+Fusion von lokalem sowie KI-Text. Private Belegbilder bleiben außerhalb dieses
+öffentlichen Repositorys.
 
 ## Android-16-Releasefehler
 
@@ -37,6 +47,5 @@ Samsung-Kamerabilder zuverlässig, hält den Speicherbedarf begrenzt und wahrt
 mehr Textdetail als eine kleine Vorschaudatei.
 
 Der ursprüngliche private Beleg wurde anschließend mit der signierten,
-minifizierten Release-APK auf demselben S24 Ultra erneut getestet: erkannte
-Textbausteine und Zielfelder erschienen, ohne Fehlerprotokoll. Es wurde kein
-Baustein übernommen und der Beleg nicht gespeichert.
+minifizierten Release-APK auf demselben S24 Ultra erneut getestet: die
+Erkennung lief ohne Fehlerprotokoll. Es wurde kein Beleg gespeichert.

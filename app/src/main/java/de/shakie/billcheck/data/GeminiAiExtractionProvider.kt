@@ -8,8 +8,6 @@ import android.util.Base64
 import de.shakie.billcheck.domain.AiDocumentType
 import de.shakie.billcheck.domain.AiExtractionProvider
 import de.shakie.billcheck.domain.AiExtractionResult
-import de.shakie.billcheck.domain.ExtractedItem
-import de.shakie.billcheck.domain.ExtractedReceipt
 import de.shakie.billcheck.domain.ExtractedStatement
 import de.shakie.billcheck.domain.ExtractedStatementLine
 import de.shakie.billcheck.domain.ReconciliationReceiptContext
@@ -172,7 +170,11 @@ class GeminiAiExtractionProvider(private val context: Context) : AiExtractionPro
             every entry. Do not repeat all metric values already shown by the app. Mention a printed
             total only when totalCheck is MISMATCH or CURRENCY_MISMATCH; do not discuss an unavailable
             printed control total. Never claim that the whole statement is complete when totalCheck
-            is UNAVAILABLE, MISMATCH, or CURRENCY_MISMATCH. The local facts remain authoritative.
+            is UNAVAILABLE, MISMATCH, or CURRENCY_MISMATCH. Never call the overall reconciliation
+            correct, complete, or successful while any uncertain, amountMismatch, statementOnly, or
+            receiptOnly count is greater than zero. Do not invent causes such as date ranges,
+            duplicate charges, or missing pages unless they are explicitly present in auditWarnings
+            or entries. The local facts remain authoritative.
 
             VERIFIED_FACTS:
             $verifiedFacts
@@ -218,16 +220,7 @@ class GeminiAiExtractionProvider(private val context: Context) : AiExtractionPro
         val json = JSONObject(text)
         return when (type) {
             AiDocumentType.RECEIPT -> AiExtractionResult.Receipt(
-                ExtractedReceipt(
-                    location = json.getString("location"),
-                    checkNumber = json.getString("checkNumber"),
-                    totalAmountText = json.getString("totalAmount"),
-                    currencyCode = json.getString("currencyCode"),
-                    occurredOn = json.getString("date"),
-                    items = json.getJSONArray("items").toObjectList { item ->
-                        ExtractedItem(item.getString("name"), item.getString("amount"))
-                    },
-                ),
+                parseReceiptExtraction(json),
             )
             AiDocumentType.STATEMENT -> AiExtractionResult.Statement(
                 ExtractedStatement(
@@ -279,7 +272,9 @@ class GeminiAiExtractionProvider(private val context: Context) : AiExtractionPro
         )
     }
 
-    private fun receiptSchema() = JSONObject(SCHEMA_RECEIPT)
+    // Gemini's responseSchema accepts a narrower schema dialect than the OpenAI-compatible local
+    // endpoint. Keep the response shape identical while omitting strict-only object keywords.
+    private fun receiptSchema() = localReceiptSchema().forGeminiResponseSchema()
 
     private fun statementSchema() = JSONObject(SCHEMA_STATEMENT)
 
@@ -296,16 +291,6 @@ class GeminiAiExtractionProvider(private val context: Context) : AiExtractionPro
         const val MAX_IMAGE_EDGE = 3_072
         const val MAX_STATEMENT_LINES = 1_000
         val MODEL_PATTERN = Regex("[A-Za-z0-9._-]{1,80}")
-        val SCHEMA_RECEIPT = """
-            {"type":"object","properties":{
-              "location":{"type":"string","description":"Only the specific restaurant, bar, lounge, pool, or beach venue; never the hotel/resort name, city, or address"},
-              "checkNumber":{"type":"string"},
-              "totalAmount":{"type":"string"},"currencyCode":{"type":"string"},
-              "date":{"type":"string"},"items":{"type":"array","items":{"type":"object",
-              "properties":{"name":{"type":"string"},"amount":{"type":"string"}},
-              "required":["name","amount"]}}},
-              "required":["location","checkNumber","totalAmount","currencyCode","date","items"]}
-        """
         val SCHEMA_STATEMENT = """
             {"type":"object","properties":{"title":{"type":"string"},
               "declaredTotal":{"type":"string"},
@@ -324,3 +309,18 @@ class GeminiAiExtractionProvider(private val context: Context) : AiExtractionPro
 
 private inline fun <T> JSONArray?.toObjectList(transform: (JSONObject) -> T): List<T> =
     if (this == null) emptyList() else (0 until length()).map { transform(getJSONObject(it)) }
+
+internal fun JSONObject.forGeminiResponseSchema(): JSONObject = apply {
+    remove("additionalProperties")
+    remove("minimum")
+    remove("maximum")
+    remove("maxItems")
+    keys().asSequence().toList().forEach { key ->
+        when (val child = opt(key)) {
+            is JSONObject -> child.forGeminiResponseSchema()
+            is JSONArray -> (0 until child.length()).forEach { index ->
+                (child.opt(index) as? JSONObject)?.forGeminiResponseSchema()
+            }
+        }
+    }
+}

@@ -374,7 +374,16 @@ class BillCheckRepository(database: BillCheckDatabase) {
             } ?: ReconciliationStatus.NOT_FOUND
             dao.updateStatementLine(line.copy(status = status, acceptedWithoutReceipt = false))
         }
-        return buildVerifiedReport(tripId, reconciliation.reconciliation.id)
+        val report = buildVerifiedReport(tripId, reconciliation.reconciliation.id)
+        // analysisUpdatedAt is the durable marker that the local reconciliation has run.
+        // The optional AI wording may be stored afterwards, but it must not determine whether
+        // the UI considers the deterministic reconciliation complete.
+        dao.updateReconciliationAnalysis(
+            reconciliation.reconciliation.id,
+            summary = null,
+            updatedAt = System.currentTimeMillis(),
+        )
+        return report
     }
 
     suspend fun resetReconciliation(reconciliation: ReconciliationWithLines) {
