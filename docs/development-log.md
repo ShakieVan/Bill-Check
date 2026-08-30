@@ -21,6 +21,14 @@
 - Ein im ViewModel verbliebenes älteres KI-Ergebnis öffnet beim erneuten
   Bearbeiten keinen Review mehr. Nur eine im aktuellen Editor gestartete
   Analyse darf neue Vorschläge und Aktionen einblenden.
+- „Erkannte Werte übernehmen“ und „Erkannte Posten übernehmen“ stehen nun
+  gleichzeitig zur Verfügung und funktionieren unabhängig voneinander; die
+  redundanten „Meine … behalten“-Schaltflächen entfallen.
+- Die bisher unsichtbare Bestätigung einer mit der Auswahl übereinstimmenden
+  Währung wird orange eingeblendet. Der KI-Prompt darf die erwartete Währung
+  nicht mehr ohne Bildbeleg als Fallback ausgeben; fehlende, unbekannte oder
+  für die Reise nicht verfügbare Währungsergebnisse werden ausdrücklich
+  benannt.
 - Die destruktive Aktion „Reise löschen“ aus der gemeinsamen Zeile mit
   „Abbrechen/Speichern“ gelöst, damit keine Beschriftung mehr schmal umbricht.
 

@@ -16,6 +16,8 @@ class GeminiPromptFactoryTest {
         assertTrue(prompt.contains("only the specific restaurant"))
         assertTrue(prompt.contains("Exclude the hotel or resort name"))
         assertTrue(prompt.contains("expected currency is\nEGP"))
+        assertTrue(prompt.contains("not evidence or a fallback"))
+        assertTrue(prompt.contains("return an empty currencyCode"))
         assertTrue(prompt.contains("printed item quantity separately"))
         assertTrue(prompt.contains("zero to three distinct candidates"))
         assertTrue(prompt.contains("transcriptLines"))

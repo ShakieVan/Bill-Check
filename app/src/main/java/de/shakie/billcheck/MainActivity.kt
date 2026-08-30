@@ -2426,7 +2426,6 @@ internal fun ReceiptEditorDialog(
         val key = ReceiptAiItemField(index, kind)
         pendingAiReview = pendingAiReview?.let { review ->
             review.copy(
-                itemsProtected = true,
                 protectedItemFields = review.protectedItemFields + key,
                 resolvedItemFields = if (resolved) review.resolvedItemFields + key else review.resolvedItemFields,
             )
@@ -2473,9 +2472,6 @@ internal fun ReceiptEditorDialog(
             extracted = extracted,
             protectedFields = protectedFields,
             resolvedFields = if (suppressCurrency) setOf(ReceiptAiField.CURRENCY) else emptySet(),
-            itemsProtected = existing != null ||
-                request.baseline.items.any { (name, value) -> name.isNotBlank() || value.isNotBlank() } ||
-                request.baseline.items != current.items,
         )
     }
     fun applyOpenAiValues() {
@@ -2502,14 +2498,14 @@ internal fun ReceiptEditorDialog(
             receiptCurrencyCode = detectedCode
             invalidAmount = false
         }
-        if (!review.itemsProtected && !review.itemsDismissed) {
-            replaceItemsFromExtraction(extracted)
-            pendingAiReview = null
-        } else if (review.itemsDismissed || extracted.items.isEmpty()) {
-            pendingAiReview = null
-        } else {
-            pendingAiReview = review.copy(resolvedFields = ReceiptAiField.entries.toSet())
-        }
+        val updated = review.copy(
+            resolvedFields = ReceiptAiField.entries.toSet(),
+            valuesApplied = true,
+        )
+        val itemActionComplete = updated.itemsApplied ||
+            updated.itemsDismissed ||
+            updated.extracted.items.isEmpty()
+        pendingAiReview = updated.takeUnless { itemActionComplete }
     }
     fun applyReviewedItems() {
         val review = pendingAiReview ?: return
@@ -2538,7 +2534,8 @@ internal fun ReceiptEditorDialog(
             )
         }
         nextItemId = maxOf(nextItemId, items.size.toLong())
-        pendingAiReview = null
+        val updated = review.copy(itemsApplied = true)
+        pendingAiReview = updated.takeUnless { updated.valuesApplied }
     }
 
     LaunchedEffect(localOcr, openTextSelectionWhenReady) {
@@ -2647,16 +2644,13 @@ internal fun ReceiptEditorDialog(
                     },
                 )
                 pendingAiReview?.let { review ->
-                    val awaitsItemDecision = review.resolvedFields.containsAll(ReceiptAiField.entries) &&
-                        review.itemsProtected &&
-                        !review.itemsDismissed &&
-                        review.extracted.items.isNotEmpty()
                     AiReviewActions(
-                        itemDecision = awaitsItemDecision,
-                        onApply = {
-                            if (awaitsItemDecision) applyReviewedItems() else applyOpenAiValues()
-                        },
-                        onKeep = { pendingAiReview = null },
+                        showValuesAction = !review.valuesApplied,
+                        showItemsAction = !review.itemsApplied &&
+                            !review.itemsDismissed &&
+                            review.extracted.items.isNotEmpty(),
+                        onApplyValues = ::applyOpenAiValues,
+                        onApplyItems = ::applyReviewedItems,
                     )
                 }
                 HorizontalDivider(Modifier.padding(vertical = 4.dp))
@@ -2830,18 +2824,33 @@ internal fun ReceiptEditorDialog(
                 )
                 pendingAiReview?.let { review ->
                     val detected = review.extracted.currencyCode.trim().uppercase(Locale.ROOT)
-                    PendingAiValue(
-                        value = detected,
-                        currentValue = receiptCurrencyCode,
-                        visible = ReceiptAiField.CURRENCY !in review.resolvedFields &&
-                            (tripCurrencies.any { it.currencyCode == detected } ||
-                                detected in newlyConfiguredCurrencyCodes),
-                        onApply = {
-                            receiptCurrencyCode = detected
-                            invalidAmount = false
-                            protectAiField(ReceiptAiField.CURRENCY, resolved = true)
-                        },
-                    )
+                    val supported = CurrencyCatalog.entries(Locale.ROOT).any { it.code == detected }
+                    val selectable = tripCurrencies.any { it.currencyCode == detected } ||
+                        detected in newlyConfiguredCurrencyCodes
+                    if (!review.valuesApplied) {
+                        when {
+                            detected.isBlank() -> PendingAiNotice(
+                                stringResource(R.string.currency_not_recognized),
+                            )
+                            !supported -> PendingAiNotice(
+                                stringResource(R.string.currency_recognized_unknown, detected),
+                            )
+                            !selectable -> PendingAiNotice(
+                                stringResource(R.string.currency_recognized_not_available, detected),
+                            )
+                            ReceiptAiField.CURRENCY !in review.resolvedFields -> PendingAiValue(
+                                value = detected,
+                                currentValue = receiptCurrencyCode,
+                                visible = true,
+                                showWhenUnchanged = true,
+                                onApply = {
+                                    receiptCurrencyCode = detected
+                                    invalidAmount = false
+                                    protectAiField(ReceiptAiField.CURRENCY, resolved = true)
+                                },
+                            )
+                        }
+                    }
                 }
                 ImageTextTarget(
                     pendingText = pendingImageText,
@@ -2931,7 +2940,6 @@ internal fun ReceiptEditorDialog(
                                     onClick = {
                                         items = items.filterNot { it.id == item.id }
                                         pendingAiReview = pendingAiReview?.copy(
-                                            itemsProtected = true,
                                             itemsDismissed = true,
                                         )
                                     },
@@ -3148,7 +3156,6 @@ internal fun ReceiptEditorDialog(
                     onClick = {
                         items = items + EditableReceiptItem(id = nextItemId++)
                         pendingAiReview = pendingAiReview?.copy(
-                            itemsProtected = true,
                             itemsDismissed = true,
                         )
                     },
@@ -3495,9 +3502,10 @@ private fun PendingImageTextBanner(
 
 @Composable
 private fun AiReviewActions(
-    itemDecision: Boolean,
-    onApply: () -> Unit,
-    onKeep: () -> Unit,
+    showValuesAction: Boolean,
+    showItemsAction: Boolean,
+    onApplyValues: () -> Unit,
+    onApplyItems: () -> Unit,
 ) {
     Card(
         colors = CardDefaults.cardColors(
@@ -3514,28 +3522,29 @@ private fun AiReviewActions(
                 fontWeight = FontWeight.SemiBold,
                 color = MaterialTheme.colorScheme.tertiary,
             )
-            Button(
-                onClick = onApply,
-                modifier = Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = MaterialTheme.colorScheme.tertiary,
-                    contentColor = MaterialTheme.colorScheme.onTertiary,
-                ),
-            ) {
-                Text(
-                    stringResource(
-                        if (itemDecision) R.string.apply_detected_items
-                        else R.string.apply_detected_values,
+            if (showValuesAction) {
+                Button(
+                    onClick = onApplyValues,
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.tertiary,
+                        contentColor = MaterialTheme.colorScheme.onTertiary,
                     ),
-                )
+                ) {
+                    Text(stringResource(R.string.apply_detected_values))
+                }
             }
-            OutlinedButton(onClick = onKeep, modifier = Modifier.fillMaxWidth()) {
-                Text(
-                    stringResource(
-                        if (itemDecision) R.string.keep_my_items
-                        else R.string.keep_my_entries,
+            if (showItemsAction) {
+                Button(
+                    onClick = onApplyItems,
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.tertiary,
+                        contentColor = MaterialTheme.colorScheme.onTertiary,
                     ),
-                )
+                ) {
+                    Text(stringResource(R.string.apply_detected_items))
+                }
             }
         }
     }
@@ -3546,9 +3555,13 @@ private fun PendingAiValue(
     value: String,
     currentValue: String,
     visible: Boolean,
+    showWhenUnchanged: Boolean = false,
     onApply: () -> Unit,
 ) {
-    if (!visible || value.isBlank() || value.trim().equals(currentValue.trim(), ignoreCase = true)) return
+    if (!visible || value.isBlank() || (
+            !showWhenUnchanged && value.trim().equals(currentValue.trim(), ignoreCase = true)
+            )
+    ) return
     val applyDescription = stringResource(R.string.apply_detected_value, value)
     Text(
         text = value,
@@ -3558,6 +3571,16 @@ private fun PendingAiValue(
             .fillMaxWidth()
             .clickable(onClickLabel = applyDescription, onClick = onApply)
             .padding(horizontal = 12.dp, vertical = 4.dp),
+    )
+}
+
+@Composable
+private fun PendingAiNotice(text: String) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.tertiary,
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
     )
 }
 
@@ -3882,10 +3905,11 @@ private data class PendingReceiptAiReview(
     val extracted: ExtractedReceipt,
     val protectedFields: Set<ReceiptAiField> = emptySet(),
     val resolvedFields: Set<ReceiptAiField> = emptySet(),
-    val itemsProtected: Boolean = false,
     val protectedItemFields: Set<ReceiptAiItemField> = emptySet(),
     val resolvedItemFields: Set<ReceiptAiItemField> = emptySet(),
     val itemsDismissed: Boolean = false,
+    val valuesApplied: Boolean = false,
+    val itemsApplied: Boolean = false,
 )
 
 private data class EditorSuggestion(

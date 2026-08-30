@@ -40,6 +40,17 @@ eigene ausdrückliche Entscheidung; ein unbemerkter Listentausch findet nicht
 statt. Aktuelle Posten ohne positionsgleichen KI-Posten werden orange als bei
 der Listenübernahme entfallend gekennzeichnet.
 
+Kopfwerte und Posten sind zwei gleichzeitige, voneinander unabhängige
+Übernahmeaktionen. Sie dürfen in beliebiger Reihenfolge ausgeführt oder durch
+Abbrechen beziehungsweise Speichern beide ignoriert werden; eigene
+„Behalten“-Schaltflächen sind deshalb nicht nötig.
+
+Die erwartete Währung ist nur Kontext und niemals Ersatz für sichtbare
+Währungsevidenz. Das Modell liefert bei fehlender oder uneindeutiger Evidenz
+einen leeren Code. Der Editor zeigt eine erkannte Währung auch dann orange an,
+wenn sie der aktuellen Auswahl entspricht, und benennt ein leeres oder nicht
+nutzbares Ergebnis ausdrücklich.
+
 Ein sichtbares KI-Transkript kann mit der lokalen ML-Kit-Zeichengeometrie
 fusioniert werden. Diese Hybridlage unterstützt die manuelle Auswahl direkt im
 Bild, ist aber keine automatische Wahrheit: KI-Positionen und proportional

@@ -96,14 +96,15 @@
     <string name="apply_selected_text_to">Apply selected text to %1$s</string>
     <string name="item_name_with_number">Name of item %1$d</string>
     <string name="item_amount_with_number">Amount of item %1$d</string>
-    <string name="keep_my_items">Keep my items</string>
     <string name="ai_analysis_complete">Analysis complete</string>
     <string name="apply_detected_values">Apply recognized values</string>
-    <string name="keep_my_entries">Keep my entries</string>
     <string name="apply_detected_items">Apply recognized items</string>
     <string name="apply_detected_value">Apply recognized value: %1$s</string>
     <string name="additional_detected_items">Additional recognized items</string>
     <string name="detected_items_would_remove_item">Not recognized — would be removed when applying the recognized items.</string>
+    <string name="currency_not_recognized">No currency recognized in the image — the current selection is kept.</string>
+    <string name="currency_recognized_unknown">Currency “%1$s” was recognized, but the code is unknown.</string>
+    <string name="currency_recognized_not_available">Currency “%1$s” was recognized, but is not available for this trip.</string>
     <string name="spatial_text_accessibility">Receipt image. Recognized text: %1$s</string>
     <string name="item_amount">Amount (%1$s)</string>
     <string name="add_item">Add item</string>

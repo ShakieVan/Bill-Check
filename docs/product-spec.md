@@ -108,10 +108,12 @@ Stand: 16.08.2026
   Checknummern erhalten bewusst keine solchen Vorschläge.
 - Die Auswahl eines alternativen KI-Kandidaten schützt das betreffende Feld
   vor der späteren Sammelübernahme. Bei konkurrierenden Postenlisten werden
-  Kopfdaten und Liste getrennt bestätigt; manuelle Einzelwerte bleiben auch
-  bei einer ausdrücklich übernommenen KI-Liste erhalten. Aktuelle Posten, die
-  bei dieser Listenübernahme entfallen würden, werden vorher orange und
-  ausdrücklich als solche gekennzeichnet.
+  Kopfdaten und Liste über zwei gleichzeitig sichtbare Schaltflächen getrennt
+  und in beliebiger Reihenfolge bestätigt; manuelle Einzelwerte bleiben auch
+  bei einer ausdrücklich übernommenen KI-Liste erhalten. Nicht gewünschte
+  Vorschläge können ohne eigene „Behalten“-Aktion durch Abbrechen oder
+  Speichern ignoriert werden. Aktuelle Posten, die bei der Listenübernahme
+  entfallen würden, werden vorher orange und ausdrücklich gekennzeichnet.
 
 ## Abgleich
 
@@ -165,6 +167,10 @@ Stand: 16.08.2026
   Rate-Limit-/Nutzungsansicht in Google AI Studio.
 - Bei Belegen enthält „Ort/Restaurant“ nur den konkreten Bewirtungsort, nicht
   Hotelname, Stadt oder Adresse.
+- Die erwartete Belegwährung dient der KI nur als Kontext, nicht als Fallback.
+  Ohne sichtbaren, eindeutigen Währungshinweis bleibt das Erkennungsergebnis
+  leer. Erkannte Währungen und fehlende Erkennung werden im Editor auch bei
+  Übereinstimmung mit der aktuellen Auswahl sichtbar ausgewiesen.
 - Die lokale OCR-Bausteinhilfe erkennt Text offline. Nach Wahl eines Zielfelds
   können einzelne Wörter oder Beträge per Tipp kontrolliert übernommen und bei
   Textfeldern aneinandergefügt werden. Nach einer solchen Ergänzung stehen

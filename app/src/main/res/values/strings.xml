@@ -96,14 +96,15 @@
     <string name="apply_selected_text_to">Ausgewählten Text in %1$s übernehmen</string>
     <string name="item_name_with_number">Name von Posten %1$d</string>
     <string name="item_amount_with_number">Betrag von Posten %1$d</string>
-    <string name="keep_my_items">Meine Posten behalten</string>
     <string name="ai_analysis_complete">Auswertung fertig</string>
     <string name="apply_detected_values">Erkannte Werte übernehmen</string>
-    <string name="keep_my_entries">Meine Eingaben behalten</string>
     <string name="apply_detected_items">Erkannte Posten übernehmen</string>
     <string name="apply_detected_value">Erkannten Wert übernehmen: %1$s</string>
     <string name="additional_detected_items">Weitere erkannte Posten</string>
     <string name="detected_items_would_remove_item">Nicht erkannt – würde beim Übernehmen der erkannten Posten entfernt.</string>
+    <string name="currency_not_recognized">Keine Währung im Bild erkannt – die aktuelle Auswahl bleibt erhalten.</string>
+    <string name="currency_recognized_unknown">Währung „%1$s“ erkannt, aber das Kürzel ist unbekannt.</string>
+    <string name="currency_recognized_not_available">Währung „%1$s“ erkannt, aber für diese Reise nicht verfügbar.</string>
     <string name="spatial_text_accessibility">Belegbild. Erkannter Text: %1$s</string>
     <string name="item_amount">Betrag (%1$s)</string>
     <string name="add_item">Posten hinzufügen</string>
