@@ -126,11 +126,17 @@
     <string name="add_item">Posten hinzufügen</string>
     <string name="remove_item">Posten entfernen</string>
     <string name="more_receipt_items">+ %1$d weitere</string>
+    <string name="show_more_receipt_items">%1$d weitere Posten</string>
+    <string name="collapse_receipt_items">Posten einklappen</string>
+    <string name="expand_receipt_details">Rechnungsdaten anzeigen</string>
+    <string name="collapse_receipt_details">Rechnungsdaten ausblenden</string>
     <string name="item_sum_used_as_total">Postensumme %1$s wird als Gesamtbetrag übernommen.</string>
     <string name="item_sum_matches">Postensumme stimmt: %1$s</string>
     <string name="item_sum_differs">Postensumme %1$s · Differenz %2$s</string>
     <string name="add_default_tip">Standard-Trinkgeld hinzufügen</string>
     <string name="delete_receipt">Beleg löschen</string>
+    <string name="receipt">Beleg</string>
+    <string name="delete_receipt_confirm">„%1$s“ wirklich löschen? Das Originalbild im Galeriealbum „Bill Check“ bleibt erhalten.</string>
     <string name="not_yet_available">Folgt im nächsten Entwicklungsschritt.</string>
     <string name="invalid_amount">Bitte einen gültigen positiven Betrag eingeben.</string>
     <string name="rate_example">z. B. 55,5</string>

@@ -126,11 +126,17 @@
     <string name="add_item">Add item</string>
     <string name="remove_item">Remove item</string>
     <string name="more_receipt_items">+ %1$d more</string>
+    <string name="show_more_receipt_items">%1$d more items</string>
+    <string name="collapse_receipt_items">Collapse items</string>
+    <string name="expand_receipt_details">Show receipt details</string>
+    <string name="collapse_receipt_details">Hide receipt details</string>
     <string name="item_sum_used_as_total">The item total %1$s will be used as the receipt total.</string>
     <string name="item_sum_matches">Item total matches: %1$s</string>
     <string name="item_sum_differs">Item total %1$s · difference %2$s</string>
     <string name="add_default_tip">Add default tip</string>
     <string name="delete_receipt">Delete receipt</string>
+    <string name="receipt">Receipt</string>
+    <string name="delete_receipt_confirm">Really delete “%1$s”? The original image in the “Bill Check” gallery album will be kept.</string>
     <string name="not_yet_available">Coming in the next development step.</string>
     <string name="invalid_amount">Enter a valid positive amount.</string>
     <string name="rate_example">e.g. 55.5</string>

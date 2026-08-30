@@ -55,6 +55,26 @@ Stand: 16.08.2026
 - Die prominente Reisesumme addiert zuerst die centgenauen Beträge und rundet
   erst das Ergebnis nach oben.
 
+## Belegliste
+
+- Jede Belegkarte gliedert sich vertikal in Kopfdaten, Gesamtsumme und Posten.
+  Im Kopf stehen die Bildminiatur links und Ort, Datum mit Uhrzeit sowie
+  Checknummer rechts; ein Tipp auf die Kopfdaten öffnet den Editor.
+- Die zunächst kompakte Summenzeile zeigt mittig nur den aufgerundeten Betrag
+  in der Heimatwährung. Sie lässt sich aufklappen und zeigt dann
+  Fremdwährungsbetrag, Wechselkurs, Trinkgeld samt Kurs sowie den centgenauen
+  Heimatbetrag.
+- Die ersten zwei Posten sind immer sichtbar. Weitere Posten werden über eine
+  eigene, kurzzeitig dezent pulsierende Aufklappaktion ein- und wieder
+  ausgeblendet; innerhalb einer Belegkarte gibt es keine verschachtelte
+  Scrollfläche.
+- Ein Wischen nach links legt eine rote Löschfläche über die gesamte Kartenhöhe
+  frei, löscht aber niemals unmittelbar. Erst ein Tipp auf diese Fläche und die
+  anschließende Bestätigung löschen den Datensatz. Beim Scrollen oder Öffnen
+  einer anderen Karte schließt sich die Fläche; gleichzeitig kann höchstens
+  eine Löschfläche offen sein. Als barrierearme Alternative ist dieselbe
+  bestätigte Löschaktion im Belegeditor erreichbar.
+
 ## Bilder
 
 - Kameraaufnahmen werden in Originalqualität im Galeriealbum `Bill Check`

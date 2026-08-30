@@ -1,5 +1,27 @@
 # Entwicklungsprotokoll
 
+## 30.08.2026 – Responsive Belegkarten und bestätigtes Swipe-Löschen
+
+- Die bisher konkurrierenden Bild-, Text-, Preis- und Löschspalten in drei
+  klare vertikale Bereiche aufgeteilt: Bild mit Kopfdaten, kompakte
+  Gesamtsumme und Postenliste. Lange Orts- und Postentexte erhalten dadurch
+  die verfügbare Kartenbreite, während Beträge einzeilig rechts stehen.
+- Die Rechnungsdaten hinter der mittig dargestellten, aufgerundeten
+  Heimatwährungssumme aufklappbar gemacht. Fremdwährung, Kurse, Trinkgeld und
+  centgenauer Heimatbetrag erscheinen erst auf Wunsch.
+- Zwei Posten bleiben stets sichtbar; zusätzliche Posten lassen sich über eine
+  kurz zweimal pulsierende Aktion ein- und ausklappen. Eine verschachtelte
+  Scrollfläche innerhalb der Dashboardliste wurde bewusst vermieden.
+- End-to-start-Wischen legt eine vollhohe rote Löschaktion frei. Wischen allein
+  verändert keine Daten; erst Aktion und Bestätigungsdialog löschen den Beleg,
+  das Galerieoriginal bleibt erhalten. Scrolling und das Antippen einer
+  anderen Karte schließen die offene Aktion, und der Belegeditor bietet einen
+  gleichwertigen barrierearmen Löschweg.
+- Die Interaktionsflächen getrennt, damit Preiszeile, Bildminiatur,
+  Belegbearbeitung und Postenumschalter einander nicht abfangen. Vier neue
+  Compose-Instrumentierungstests sichern Gliederung, Detailaufklappen,
+  Postenbegrenzung und den zweistufigen Löschablauf.
+
 ## 30.08.2026 – Deterministische Datumswerte im KI-Abgleichsfazit
 
 - Einen reproduzierten Widerspruch beseitigt, bei dem das lokale Kurzfazit den

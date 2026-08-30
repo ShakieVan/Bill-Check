@@ -8,10 +8,18 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -31,6 +39,7 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
@@ -45,6 +54,8 @@ import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.DragHandle
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Image
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.RemoveCircleOutline
@@ -94,6 +105,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.LocalContext
@@ -266,6 +278,7 @@ private fun BillCheckApp(
     var deletingTrip by remember { mutableStateOf<TripEntity?>(null) }
     var showManualReceipt by remember { mutableStateOf(false) }
     var editingReceipt by remember { mutableStateOf<ReceiptWithItems?>(null) }
+    var deletingReceipt by remember { mutableStateOf<ReceiptEntity?>(null) }
     var showAppMenu by remember { mutableStateOf(false) }
     var showSettings by remember { mutableStateOf(false) }
     var showUpdates by remember { mutableStateOf(false) }
@@ -677,7 +690,7 @@ private fun BillCheckApp(
                 },
                 onOpenReceiptImage = { fullscreenImageUriString = it },
                 onEditReceipt = { editingReceipt = it },
-                onDeleteReceipt = viewModel::deleteReceipt,
+                onDeleteReceipt = { deletingReceipt = it },
                 onRetryBatchItem = viewModel::retryBatchReceiptImport,
                 onCancelBatch = viewModel::cancelBatchReceiptImports,
                 onDismissBatch = viewModel::dismissBatchReceiptImports,
@@ -806,6 +819,37 @@ private fun BillCheckApp(
                         deletingTrip = null
                         editingTrip = null
                         viewModel.clearExchangeRateLookup()
+                    },
+                ) {
+                    Text(stringResource(R.string.delete), color = MaterialTheme.colorScheme.error)
+                }
+            },
+        )
+    }
+
+    deletingReceipt?.let { receipt ->
+        AlertDialog(
+            onDismissRequest = { deletingReceipt = null },
+            title = { Text(stringResource(R.string.delete_receipt)) },
+            text = {
+                Text(
+                    stringResource(
+                        R.string.delete_receipt_confirm,
+                        receipt.location.ifBlank { stringResource(R.string.receipt) },
+                    ),
+                )
+            },
+            dismissButton = {
+                TextButton(onClick = { deletingReceipt = null }) {
+                    Text(stringResource(R.string.cancel))
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        viewModel.deleteReceipt(receipt)
+                        deletingReceipt = null
+                        if (editingReceipt?.receipt?.id == receipt.id) editingReceipt = null
                     },
                 ) {
                     Text(stringResource(R.string.delete), color = MaterialTheme.colorScheme.error)
@@ -1017,6 +1061,10 @@ private fun BillCheckApp(
                     existing.receipt.imageUri?.let(viewModel::continueWithLocalReceiptText)
                 },
                 onAddTripCurrency = viewModel::addCurrencyToSelectedTrip,
+                onDeleteRequested = {
+                    editingReceipt = null
+                    deletingReceipt = existing.receipt
+                },
                 onDismiss = {
                     editingReceipt = null
                     viewModel.clearLocalOcr()
@@ -1923,8 +1971,16 @@ private fun Dashboard(
     onDismissBatch: (String) -> Unit,
     onOpenReconciliations: () -> Unit,
 ) {
+    val listState = rememberLazyListState()
+    var revealedReceiptId by rememberSaveable(state.selectedTrip?.id) {
+        mutableStateOf<String?>(null)
+    }
+    LaunchedEffect(listState.isScrollInProgress) {
+        if (listState.isScrollInProgress) revealedReceiptId = null
+    }
     LazyColumn(
         modifier = modifier.fillMaxSize(),
+        state = listState,
         contentPadding = PaddingValues(16.dp, 8.dp, 16.dp, 32.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
@@ -1981,11 +2037,22 @@ private fun Dashboard(
         } else {
             items(state.receipts, key = { it.receipt.id }) { receipt ->
                 ReceiptCard(
-                    receipt,
-                    state.selectedTrip?.homeCurrencyCode ?: state.defaultHomeCurrencyCode,
-                    onDeleteReceipt,
-                    onOpenReceiptImage,
-                    onEditReceipt,
+                    receiptWithItems = receipt,
+                    homeCurrencyCode = state.selectedTrip?.homeCurrencyCode
+                        ?: state.defaultHomeCurrencyCode,
+                    onDelete = onDeleteReceipt,
+                    onOpenImage = onOpenReceiptImage,
+                    onEdit = {
+                        if (revealedReceiptId != null) {
+                            revealedReceiptId = null
+                        } else {
+                            onEditReceipt(it)
+                        }
+                    },
+                    deleteRevealed = revealedReceiptId == receipt.receipt.id,
+                    onDeleteRevealChange = { revealed ->
+                        revealedReceiptId = receipt.receipt.id.takeIf { revealed }
+                    },
                 )
             }
         }
@@ -2102,6 +2169,8 @@ internal fun ReceiptCard(
     onDelete: (ReceiptEntity) -> Unit,
     onOpenImage: (String) -> Unit,
     onEdit: (ReceiptWithItems) -> Unit,
+    deleteRevealed: Boolean = false,
+    onDeleteRevealChange: (Boolean) -> Unit = {},
 ) {
     val receipt = receiptWithItems.receipt
     val needsReview = ReceiptReviewState.needsReview(receipt.reviewState)
@@ -2111,95 +2180,278 @@ internal fun ReceiptCard(
         ?.getOrNull(1)
     val exactHomeMinor = MoneyCalculator.exactHomeMinor(receipt)
     val rounded = MoneyCalculator.roundedUpHomeMajor(exactHomeMinor, homeCurrencyCode)
-    Card(
-        onClick = { onEdit(receiptWithItems) },
-        colors = CardDefaults.cardColors(
-            containerColor = if (needsReview) {
-                MaterialTheme.colorScheme.tertiaryContainer
-            } else {
-                MaterialTheme.colorScheme.surface
-            },
-        ),
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            receipt.imageUri?.let { imageUri ->
-                ReceiptThumbnail(
-                    imageUri = imageUri,
-                    modifier = Modifier
-                        .size(72.dp)
-                        .clickable { onOpenImage(imageUri) },
-                )
-                Spacer(Modifier.width(12.dp))
+    val sortedItems = remember(receiptWithItems.items) {
+        receiptWithItems.items.sortedBy { it.sortPosition }
+    }
+    var priceExpanded by rememberSaveable(receipt.id) { mutableStateOf(false) }
+    var itemsExpanded by rememberSaveable(receipt.id) { mutableStateOf(false) }
+    val itemHintAlpha = remember(receipt.id) { Animatable(1f) }
+    LaunchedEffect(receipt.id, sortedItems.size) {
+        if (sortedItems.size > 2) {
+            repeat(2) {
+                itemHintAlpha.animateTo(0.42f, tween(500))
+                itemHintAlpha.animateTo(1f, tween(500))
             }
-            Column(Modifier.weight(1f)) {
+        }
+    }
+
+    val actionWidth = 112.dp
+    val actionWidthPx = with(LocalDensity.current) { actionWidth.toPx() }
+    var dragging by remember(receipt.id) { mutableStateOf(false) }
+    var draggedOffset by remember(receipt.id) { mutableStateOf(0f) }
+    val foregroundOffset by androidx.compose.animation.core.animateFloatAsState(
+        targetValue = if (dragging) {
+            draggedOffset
+        } else if (deleteRevealed) {
+            -actionWidthPx
+        } else {
+            0f
+        },
+        animationSpec = tween(220),
+        label = "receipt-delete-reveal",
+    )
+    val shape = RoundedCornerShape(12.dp)
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(shape)
+            .background(MaterialTheme.colorScheme.errorContainer),
+    ) {
+        Box(modifier = Modifier.matchParentSize()) {
+            Column(
+                modifier = Modifier
+                    .align(Alignment.CenterEnd)
+                    .fillMaxHeight()
+                    .width(actionWidth)
+                    .clickable(role = Role.Button) {
+                        onDeleteRevealChange(false)
+                        onDelete(receipt)
+                    }
+                    .testTag("receipt-delete-action-${receipt.id}"),
+                verticalArrangement = Arrangement.Center,
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Icon(
+                    Icons.Default.DeleteOutline,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onErrorContainer,
+                )
+                Spacer(Modifier.height(4.dp))
                 Text(
-                    receipt.location.ifBlank { stringResource(R.string.add_receipt) },
+                    stringResource(R.string.delete),
+                    color = MaterialTheme.colorScheme.onErrorContainer,
                     fontWeight = FontWeight.SemiBold,
                 )
-                if (needsReview) {
-                    Text(
-                        unavailableCurrency?.let {
-                            stringResource(R.string.receipt_currency_needs_review, it)
-                        } ?: stringResource(R.string.receipt_needs_review),
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.tertiary,
-                        fontWeight = FontWeight.SemiBold,
-                    )
+            }
+        }
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .offset { IntOffset(foregroundOffset.roundToInt(), 0) }
+                .pointerInput(receipt.id, actionWidthPx) {
+                    detectHorizontalDragGestures(
+                        onDragStart = {
+                            dragging = true
+                            draggedOffset = if (deleteRevealed) -actionWidthPx else 0f
+                        },
+                        onDragCancel = {
+                            dragging = false
+                            onDeleteRevealChange(draggedOffset <= -actionWidthPx * 0.35f)
+                        },
+                        onDragEnd = {
+                            dragging = false
+                            onDeleteRevealChange(draggedOffset <= -actionWidthPx * 0.35f)
+                        },
+                    ) { change, dragAmount ->
+                        if (dragAmount < 0f || draggedOffset < 0f) {
+                            change.consume()
+                            draggedOffset = (draggedOffset + dragAmount).coerceIn(-actionWidthPx, 0f)
+                        }
+                    }
                 }
-                Text(
-                    buildString {
-                        append(formatDate(receipt.occurredAt))
-                        if (receipt.checkNumber.isNotBlank()) append("  ·  #${receipt.checkNumber}")
-                    },
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Spacer(Modifier.height(8.dp))
-                Text(
-                    formatMinor(receipt.amountMinor, receipt.currencyCode),
-                    style = MaterialTheme.typography.bodyMedium,
-                )
-                Text(
-                    stringResource(
-                        R.string.receipt_exchange_rate,
-                        homeCurrencyCode,
-                        receipt.exchangeRateSnapshot,
-                        receipt.currencyCode,
-                    ),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                if (receipt.tipMinor > 0) {
-                    Text(
-                        stringResource(
-                            R.string.receipt_tip,
-                            formatMinor(receipt.tipMinor, receipt.tipCurrencyCode),
-                        ),
-                        style = MaterialTheme.typography.bodySmall,
-                    )
-                    Text(
-                        stringResource(
-                            R.string.receipt_exchange_rate,
-                            homeCurrencyCode,
-                            receipt.tipExchangeRateSnapshot,
-                            receipt.tipCurrencyCode,
-                        ),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+                .testTag("receipt-card-${receipt.id}"),
+            shape = shape,
+            colors = CardDefaults.cardColors(
+                containerColor = if (needsReview) {
+                    MaterialTheme.colorScheme.tertiaryContainer
+                } else {
+                    MaterialTheme.colorScheme.surface
+                },
+            ),
+        ) {
+            Column(Modifier.fillMaxWidth()) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    receipt.imageUri?.let { imageUri ->
+                        ReceiptThumbnail(
+                            imageUri = imageUri,
+                            modifier = Modifier
+                                .size(84.dp)
+                                .clickable { onOpenImage(imageUri) },
+                        )
+                        Spacer(Modifier.width(14.dp))
+                    }
+                    Column(
+                        Modifier
+                            .weight(1f)
+                            .clickable(
+                                role = Role.Button,
+                                onClickLabel = stringResource(R.string.edit_receipt),
+                            ) {
+                                if (deleteRevealed) {
+                                    onDeleteRevealChange(false)
+                                } else {
+                                    onEdit(receiptWithItems)
+                                }
+                            },
+                    ) {
+                        Text(
+                            receipt.location.ifBlank { stringResource(R.string.add_receipt) },
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            maxLines = 2,
+                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                        )
+                        if (needsReview) {
+                            Text(
+                                unavailableCurrency?.let {
+                                    stringResource(R.string.receipt_currency_needs_review, it)
+                                } ?: stringResource(R.string.receipt_needs_review),
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.tertiary,
+                                fontWeight = FontWeight.SemiBold,
+                            )
+                        }
+                        Text(
+                            formatDate(receipt.occurredAt),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        if (receipt.checkNumber.isNotBlank()) {
+                            Text(
+                                "#${receipt.checkNumber}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
                 }
-                if (receiptWithItems.items.isNotEmpty()) {
-                    Spacer(Modifier.height(10.dp))
+
+                HorizontalDivider()
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable(
+                            role = Role.Button,
+                            onClickLabel = stringResource(
+                                if (priceExpanded) {
+                                    R.string.collapse_receipt_details
+                                } else {
+                                    R.string.expand_receipt_details
+                                },
+                            ),
+                        ) { priceExpanded = !priceExpanded }
+                        .testTag("receipt-price-summary-${receipt.id}")
+                        .padding(horizontal = 8.dp),
+                ) {
+                    Text(
+                        "$rounded $homeCurrencyCode",
+                        modifier = Modifier.align(Alignment.Center).padding(vertical = 14.dp),
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    IconButton(
+                        onClick = { priceExpanded = !priceExpanded },
+                        modifier = Modifier.align(Alignment.CenterEnd),
+                    ) {
+                        Icon(
+                            if (priceExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                            contentDescription = stringResource(
+                                if (priceExpanded) {
+                                    R.string.collapse_receipt_details
+                                } else {
+                                    R.string.expand_receipt_details
+                                },
+                            ),
+                        )
+                    }
+                }
+
+                AnimatedVisibility(
+                    visible = priceExpanded,
+                    enter = expandVertically() + fadeIn(),
+                    exit = shrinkVertically() + fadeOut(),
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(16.dp, 2.dp, 16.dp, 16.dp),
+                        horizontalArrangement = Arrangement.spacedBy(16.dp),
+                        verticalAlignment = Alignment.Top,
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                formatMinor(receipt.amountMinor, receipt.currencyCode),
+                                style = MaterialTheme.typography.bodyMedium,
+                            )
+                            Text(
+                                stringResource(
+                                    R.string.receipt_exchange_rate,
+                                    homeCurrencyCode,
+                                    receipt.exchangeRateSnapshot,
+                                    receipt.currencyCode,
+                                ),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            if (receipt.tipMinor > 0) {
+                                Spacer(Modifier.height(6.dp))
+                                Text(
+                                    stringResource(
+                                        R.string.receipt_tip,
+                                        formatMinor(receipt.tipMinor, receipt.tipCurrencyCode),
+                                    ),
+                                    style = MaterialTheme.typography.bodySmall,
+                                )
+                                Text(
+                                    stringResource(
+                                        R.string.receipt_exchange_rate,
+                                        homeCurrencyCode,
+                                        receipt.tipExchangeRateSnapshot,
+                                        receipt.tipCurrencyCode,
+                                    ),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        }
+                        Column(horizontalAlignment = Alignment.End) {
+                            Text(
+                                stringResource(R.string.exact_total),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            Text(
+                                formatMinor(exactHomeMinor, homeCurrencyCode),
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.SemiBold,
+                            )
+                        }
+                    }
+                }
+
+                if (sortedItems.isNotEmpty()) {
                     HorizontalDivider()
-                    Spacer(Modifier.height(6.dp))
-                    receiptWithItems.items
-                        .sortedBy { it.sortPosition }
-                        .take(3)
-                        .forEach { item ->
-                            Row(Modifier.fillMaxWidth()) {
+                    Column(
+                        modifier = Modifier.fillMaxWidth().padding(16.dp, 10.dp, 16.dp, 12.dp),
+                        verticalArrangement = Arrangement.spacedBy(7.dp),
+                    ) {
+                        (if (itemsExpanded) sortedItems else sortedItems.take(2)).forEach { item ->
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                verticalAlignment = Alignment.Top,
+                            ) {
                                 Text(
                                     item.name,
                                     style = MaterialTheme.typography.bodySmall,
@@ -2209,35 +2461,43 @@ internal fun ReceiptCard(
                                     formatMinor(item.amountMinor, item.currencyCode),
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 1,
                                 )
                             }
                         }
-                    if (receiptWithItems.items.size > 3) {
-                        Text(
-                            stringResource(
-                                R.string.more_receipt_items,
-                                receiptWithItems.items.size - 3,
-                            ),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.primary,
-                        )
+                        if (sortedItems.size > 2) {
+                            TextButton(
+                                onClick = { itemsExpanded = !itemsExpanded },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .testTag("receipt-items-toggle-${receipt.id}"),
+                            ) {
+                                Text(
+                                    if (itemsExpanded) {
+                                        stringResource(R.string.collapse_receipt_items)
+                                    } else {
+                                        stringResource(
+                                            R.string.show_more_receipt_items,
+                                            sortedItems.size - 2,
+                                        )
+                                    },
+                                )
+                                Spacer(Modifier.width(4.dp))
+                                Icon(
+                                    if (itemsExpanded) {
+                                        Icons.Default.KeyboardArrowUp
+                                    } else {
+                                        Icons.Default.KeyboardArrowDown
+                                    },
+                                    contentDescription = null,
+                                    modifier = Modifier.alpha(
+                                        if (itemsExpanded) 1f else itemHintAlpha.value,
+                                    ),
+                                )
+                            }
+                        }
                     }
                 }
-            }
-            Column(horizontalAlignment = Alignment.End) {
-                Text("$rounded $homeCurrencyCode", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                Text(
-                    formatMinor(exactHomeMinor, homeCurrencyCode),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            IconButton(onClick = { onDelete(receipt) }) {
-                Icon(
-                    Icons.Default.DeleteOutline,
-                    contentDescription = stringResource(R.string.delete_receipt),
-                    tint = MaterialTheme.colorScheme.error,
-                )
             }
         }
     }
@@ -2553,6 +2813,7 @@ internal fun ReceiptEditorDialog(
     onClearLocalOcr: () -> Unit,
     onContinueWithLocalText: () -> Unit = {},
     onAddTripCurrency: (String, String, Boolean) -> Boolean,
+    onDeleteRequested: (() -> Unit)? = null,
     onDismiss: () -> Unit,
     onSave: (String, String, String, String, String, String, Boolean, List<ReceiptItemDraft>) -> Boolean,
 ) {
@@ -2877,6 +3138,21 @@ internal fun ReceiptEditorDialog(
     ScrollableEditorDialog(
         title = stringResource(if (existing == null) R.string.add_receipt else R.string.edit_receipt),
         onDismiss = onDismiss,
+        destructiveAction = onDeleteRequested?.let { requestDelete ->
+            {
+                OutlinedButton(
+                    onClick = requestDelete,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Icon(Icons.Default.DeleteOutline, contentDescription = null)
+                    Spacer(Modifier.width(6.dp))
+                    Text(
+                        stringResource(R.string.delete_receipt),
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+            }
+        },
         onSave = {
             val validTimestamp = MainViewModel.parseReceiptDateTime(occurredOn, occurredTime) != null
             invalidDate = MainViewModel.parseReceiptDate(occurredOn) == null
