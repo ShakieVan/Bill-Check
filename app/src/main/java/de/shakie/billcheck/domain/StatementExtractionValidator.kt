@@ -1,6 +1,5 @@
 package de.shakie.billcheck.domain
 
-import java.math.RoundingMode
 import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeParseException
@@ -29,8 +28,9 @@ class StatementExtractionValidationException(val problems: List<String>) :
 object StatementExtractionValidator {
     private const val MAX_LINES = 1_000
     private const val MAX_TEXT_LENGTH = 500
-    private val amountPattern = Regex("[0-9]+(?:\\.[0-9]{1,2})?")
-    private val currencyPattern = Regex("[A-Z]{3}")
+    private val supportedCurrencies by lazy {
+        CurrencyCatalog.entries(Locale.ROOT).mapTo(hashSetOf(), CurrencyCatalogEntry::code)
+    }
 
     fun validate(
         extracted: ExtractedStatement,
@@ -46,14 +46,19 @@ object StatementExtractionValidator {
 
         val lines = extracted.lines.mapIndexedNotNull { index, line ->
             val prefix = "Line ${index + 1}"
-            val amount = parsePositiveMinor(line.amountText)
-                ?: run { problems += "$prefix has an invalid positive amount: ${line.amountText.take(40)}"; null }
             val currency = when {
                 line.currencyCode.isBlank() -> fallbackCurrency
                 else -> normalizeCurrency(line.currencyCode).also {
                     if (it == null) problems += "$prefix has an invalid currency: ${line.currencyCode.take(12)}"
                 }
             }
+            val amount = currency?.let { parsePositiveMinor(line.amountText, it) }
+                ?: run {
+                    if (currency != null) {
+                        problems += "$prefix has an invalid positive amount: ${line.amountText.take(40)}"
+                    }
+                    null
+                }
             val sourceDate = line.sourceDateText.trim().takeIf(String::isNotEmpty)
             val occurredOn = when {
                 line.dateAmbiguous -> {
@@ -85,18 +90,19 @@ object StatementExtractionValidator {
             )
         }
 
-        val declaredTotalMinor = if (extracted.declaredTotalAmountText.isBlank()) {
-            null
-        } else {
-            parsePositiveMinor(extracted.declaredTotalAmountText).also {
-                if (it == null) problems += "Declared statement total is invalid"
-            }
-        }
+        val hasDeclaredTotal = extracted.declaredTotalAmountText.isNotBlank()
         val declaredCurrency = when {
-            declaredTotalMinor == null -> null
+            !hasDeclaredTotal -> null
             extracted.declaredTotalCurrencyCode.isBlank() -> fallbackCurrency
             else -> normalizeCurrency(extracted.declaredTotalCurrencyCode).also {
                 if (it == null) problems += "Declared statement currency is invalid"
+            }
+        }
+        val declaredTotalMinor = when {
+            !hasDeclaredTotal -> null
+            declaredCurrency == null -> null
+            else -> parsePositiveMinor(extracted.declaredTotalAmountText, declaredCurrency).also {
+                if (it == null) problems += "Declared statement total is invalid"
             }
         }
         if (problems.isNotEmpty()) throw StatementExtractionValidationException(problems)
@@ -108,20 +114,11 @@ object StatementExtractionValidator {
         )
     }
 
-    internal fun parsePositiveMinor(value: String): Long? {
-        val normalized = value.trim()
-        if (!amountPattern.matches(normalized)) return null
-        return runCatching {
-            normalized.toBigDecimal()
-                .movePointRight(2)
-                .setScale(0, RoundingMode.UNNECESSARY)
-                .longValueExact()
-                .takeIf { it > 0 }
-        }.getOrNull()
-    }
+    internal fun parsePositiveMinor(value: String, currencyCode: String): Long? =
+        CurrencyAmount.parseMajorToMinor(value, currencyCode)?.takeIf { it > 0 }
 
     private fun normalizeCurrency(value: String): String? = value.trim().uppercase(Locale.ROOT)
-        .takeIf(currencyPattern::matches)
+        .takeIf(supportedCurrencies::contains)
 
     private fun parseIsoDate(value: String, zoneId: ZoneId): Long? = try {
         LocalDate.parse(value.trim()).atStartOfDay(zoneId).toInstant().toEpochMilli()

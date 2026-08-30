@@ -6,8 +6,8 @@ Status: verbindlich für den ersten Anbieter
 
 Bill Check verwendet zunächst den offenen, schlüssellosen Endpunkt von
 [ExchangeRate-API](https://www.exchangerate-api.com/docs/free). Er unterstützt
-EUR und EGP, liefert einen täglichen Aktualisierungszeitpunkt und erlaubt das
-lokale Zwischenspeichern der Antwort.
+frei wählbare Basis- und Zielwährungen, liefert einen täglichen
+Aktualisierungszeitpunkt und erlaubt das lokale Zwischenspeichern der Antwort.
 
 Die Anbietergrenze ist durch `ExchangeRateProvider` vom restlichen
 Domänenmodell getrennt. Damit können später weitere oder selbst gehostete
@@ -15,12 +15,12 @@ Quellen ergänzt werden.
 
 ## Verhalten
 
-- Beim Anlegen einer Reise wird der Kurs automatisch abgefragt und bleibt
+- Beim Hinzufügen einer Reisewährung wird der Kurs automatisch abgefragt und bleibt
   manuell überschreibbar.
 - Im Modus `DAILY` wird vor jedem neuen Beleg ein aktueller Tageskurs
   angefordert.
-- Der Endpunkt wird bis zu seinem gelieferten nächsten Aktualisierungszeitpunkt
-  gecacht.
+- Der Endpunkt wird pro Basis-/Zielpaar bis zu seinem gelieferten nächsten
+  Aktualisierungszeitpunkt gecacht.
 - Netzwerk- und Anbieterfehler verhindern keine Erfassung; dann gilt der
   letzte zwischengespeicherte Online-Kurs oder, falls keiner existiert, der
   manuell gespeicherte Reisekurs.

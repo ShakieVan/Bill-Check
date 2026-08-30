@@ -12,14 +12,50 @@ data class TripEntity(
     @PrimaryKey val id: String,
     val sortPosition: Int,
     val name: String,
-    val foreignCurrencyCode: String,
-    val defaultExchangeRate: String,
-    val exchangeRateMode: String,
+    /** Currency in which this trip is evaluated and summarized. */
+    val homeCurrencyCode: String,
     val defaultTipMinor: Long,
     val defaultTipCurrencyCode: String,
     val defaultTipSelected: Boolean,
     val imageStorageMode: String,
     val createdAt: Long,
+)
+
+/**
+ * A currency that can be used by receipts of a trip.
+ *
+ * [homeToCurrencyRate] is deliberately stored as decimal text and always means
+ * `1 homeCurrencyCode = x currencyCode`.  This makes a rate unambiguous even
+ * when the user's home currency is not EUR.
+ */
+@Entity(
+    tableName = "trip_currencies",
+    primaryKeys = ["tripId", "currencyCode"],
+    foreignKeys = [
+        ForeignKey(
+            entity = TripEntity::class,
+            parentColumns = ["id"],
+            childColumns = ["tripId"],
+            onDelete = ForeignKey.CASCADE,
+        ),
+    ],
+    indices = [Index("tripId")],
+)
+data class TripCurrencyEntity(
+    val tripId: String,
+    val currencyCode: String,
+    val homeToCurrencyRate: String,
+    val exchangeRateMode: String,
+    val isDefault: Boolean,
+)
+
+data class TripWithCurrencies(
+    @Embedded val trip: TripEntity,
+    @Relation(
+        parentColumn = "id",
+        entityColumn = "tripId",
+    )
+    val currencies: List<TripCurrencyEntity>,
 )
 
 @Entity(
@@ -40,12 +76,15 @@ data class ReceiptEntity(
     val occurredAt: Long,
     val location: String,
     val checkNumber: String,
-    val foreignAmountMinor: Long,
-    val foreignCurrencyCode: String,
-    val exchangeRate: String,
-    val exactEuroCents: Long,
+    val amountMinor: Long,
+    val currencyCode: String,
+    /** Snapshot using the orientation `1 trip home currency = x receipt currency`. */
+    val exchangeRateSnapshot: String,
+    val exactHomeMinor: Long,
     val tipMinor: Long,
     val tipCurrencyCode: String,
+    /** Independent snapshot for a tip in a currency other than the receipt currency. */
+    val tipExchangeRateSnapshot: String,
     val imageUri: String?,
     val reviewState: String,
     val createdAt: Long,

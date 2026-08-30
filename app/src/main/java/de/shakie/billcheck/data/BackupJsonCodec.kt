@@ -15,7 +15,7 @@ object BackupJsonCodec {
         val root = JSONObject(text)
         require(root.optString("format") == "bill-check") { "Unsupported backup format" }
         val version = root.getInt("version")
-        require(version == 1) { "Unsupported backup version: $version" }
+        require(version == 2) { "Unsupported backup version: $version" }
         return TransferPackage(
             formatVersion = version,
             exportedAt = root.getLong("exportedAt"),
@@ -26,14 +26,13 @@ object BackupJsonCodec {
     private fun encodeTrip(value: TransferTrip) = JSONObject().apply {
         put("id", value.id)
         put("name", value.name)
-        put("foreignCurrencyCode", value.foreignCurrencyCode)
-        put("defaultExchangeRate", value.defaultExchangeRate)
-        put("exchangeRateMode", value.exchangeRateMode)
+        put("homeCurrencyCode", value.homeCurrencyCode)
         put("defaultTipMinor", value.defaultTipMinor)
         put("defaultTipCurrencyCode", value.defaultTipCurrencyCode)
         put("defaultTipSelected", value.defaultTipSelected)
         put("imageStorageMode", value.imageStorageMode)
         put("createdAt", value.createdAt)
+        put("currencies", JSONArray().apply { value.currencies.forEach { put(encodeTripCurrency(it)) } })
         put("receipts", JSONArray().apply { value.receipts.forEach { put(encodeReceipt(it)) } })
         put(
             "reconciliations",
@@ -44,16 +43,29 @@ object BackupJsonCodec {
     private fun decodeTrip(value: JSONObject) = TransferTrip(
         id = value.getString("id"),
         name = value.getString("name"),
-        foreignCurrencyCode = value.getString("foreignCurrencyCode"),
-        defaultExchangeRate = value.getString("defaultExchangeRate"),
-        exchangeRateMode = value.getString("exchangeRateMode"),
+        homeCurrencyCode = value.getString("homeCurrencyCode"),
         defaultTipMinor = value.getLong("defaultTipMinor"),
         defaultTipCurrencyCode = value.getString("defaultTipCurrencyCode"),
         defaultTipSelected = value.optBoolean("defaultTipSelected"),
         imageStorageMode = value.optString("imageStorageMode", "ORIGINAL"),
         createdAt = value.getLong("createdAt"),
+        currencies = value.getJSONArray("currencies").objects(::decodeTripCurrency),
         receipts = value.getJSONArray("receipts").objects(::decodeReceipt),
         reconciliations = value.getJSONArray("reconciliations").objects(::decodeReconciliation),
+    )
+
+    private fun encodeTripCurrency(value: TransferTripCurrency) = JSONObject().apply {
+        put("currencyCode", value.currencyCode)
+        put("homeToCurrencyRate", value.homeToCurrencyRate)
+        put("exchangeRateMode", value.exchangeRateMode)
+        put("isDefault", value.isDefault)
+    }
+
+    private fun decodeTripCurrency(value: JSONObject) = TransferTripCurrency(
+        currencyCode = value.getString("currencyCode"),
+        homeToCurrencyRate = value.getString("homeToCurrencyRate"),
+        exchangeRateMode = value.getString("exchangeRateMode"),
+        isDefault = value.getBoolean("isDefault"),
     )
 
     private fun encodeReceipt(value: TransferReceipt) = JSONObject().apply {
@@ -61,12 +73,13 @@ object BackupJsonCodec {
         put("occurredAt", value.occurredAt)
         put("location", value.location)
         put("checkNumber", value.checkNumber)
-        put("foreignAmountMinor", value.foreignAmountMinor)
-        put("foreignCurrencyCode", value.foreignCurrencyCode)
-        put("exchangeRate", value.exchangeRate)
-        put("exactEuroCents", value.exactEuroCents)
+        put("amountMinor", value.amountMinor)
+        put("currencyCode", value.currencyCode)
+        put("exchangeRateSnapshot", value.exchangeRateSnapshot)
+        put("exactHomeMinor", value.exactHomeMinor)
         put("tipMinor", value.tipMinor)
         put("tipCurrencyCode", value.tipCurrencyCode)
+        put("tipExchangeRateSnapshot", value.tipExchangeRateSnapshot)
         putNullable("imageEntry", value.imageEntry)
         putNullable("imageMimeType", value.imageMimeType)
         put("reviewState", value.reviewState)
@@ -79,12 +92,13 @@ object BackupJsonCodec {
         occurredAt = value.getLong("occurredAt"),
         location = value.getString("location"),
         checkNumber = value.getString("checkNumber"),
-        foreignAmountMinor = value.getLong("foreignAmountMinor"),
-        foreignCurrencyCode = value.getString("foreignCurrencyCode"),
-        exchangeRate = value.getString("exchangeRate"),
-        exactEuroCents = value.getLong("exactEuroCents"),
+        amountMinor = value.getLong("amountMinor"),
+        currencyCode = value.getString("currencyCode"),
+        exchangeRateSnapshot = value.getString("exchangeRateSnapshot"),
+        exactHomeMinor = value.getLong("exactHomeMinor"),
         tipMinor = value.getLong("tipMinor"),
         tipCurrencyCode = value.getString("tipCurrencyCode"),
+        tipExchangeRateSnapshot = value.getString("tipExchangeRateSnapshot"),
         imageEntry = value.nullableString("imageEntry"),
         imageMimeType = value.nullableString("imageMimeType"),
         reviewState = value.optString("reviewState", "CONFIRMED"),

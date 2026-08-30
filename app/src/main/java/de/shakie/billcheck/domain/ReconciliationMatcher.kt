@@ -53,7 +53,7 @@ object ReconciliationMatcher {
         .map { receipt -> RankedReceiptCandidate(receipt, score(line, receipt)) }
         .sortedWith(
             compareByDescending<RankedReceiptCandidate> { it.score }
-                .thenBy { absoluteDifference(it.receipt.foreignAmountMinor, line.amountMinor) }
+                .thenBy { absoluteDifference(it.receipt.amountMinor, line.amountMinor) }
                 .thenByDescending { it.receipt.occurredAt },
         )
 
@@ -70,8 +70,8 @@ object ReconciliationMatcher {
 
     fun suggestedStatus(line: StatementLineEntity, receipt: ReceiptEntity): String {
         val checkMatches = hasSameCheckNumber(line, receipt)
-        val amountMatches = line.amountMinor == receipt.foreignAmountMinor
-        val currencyMatches = line.currencyCode.equals(receipt.foreignCurrencyCode, ignoreCase = true)
+        val amountMatches = line.amountMinor == receipt.amountMinor
+        val currencyMatches = line.currencyCode.equals(receipt.currencyCode, ignoreCase = true)
         val dateMismatch = dateDistanceDays(line.occurredOn, receipt.occurredAt)?.let { it > 2 } == true
         val numericSuffixLength = numericSuffixLength(line.checkNumber, receipt.checkNumber)
         return when {
@@ -87,8 +87,8 @@ object ReconciliationMatcher {
     }
 
     fun isStrongAutomaticMatch(line: StatementLineEntity, receipt: ReceiptEntity): Boolean {
-        val amountMatches = line.amountMinor == receipt.foreignAmountMinor &&
-            line.currencyCode.equals(receipt.foreignCurrencyCode, ignoreCase = true)
+        val amountMatches = line.amountMinor == receipt.amountMinor &&
+            line.currencyCode.equals(receipt.currencyCode, ignoreCase = true)
         if (!amountMatches) return false
         if (hasSameCheckNumber(line, receipt)) return true
 
@@ -151,10 +151,10 @@ object ReconciliationMatcher {
     }
 
     private fun amountScore(line: StatementLineEntity, receipt: ReceiptEntity): Int {
-        if (!line.currencyCode.equals(receipt.foreignCurrencyCode, ignoreCase = true)) return 0
-        val difference = absoluteDifference(line.amountMinor, receipt.foreignAmountMinor)
+        if (!line.currencyCode.equals(receipt.currencyCode, ignoreCase = true)) return 0
+        val difference = absoluteDifference(line.amountMinor, receipt.amountMinor)
         if (difference.signum() == 0) return AMOUNT_WEIGHT
-        val largerAmount = BigInteger.valueOf(maxOf(line.amountMinor, receipt.foreignAmountMinor))
+        val largerAmount = BigInteger.valueOf(maxOf(line.amountMinor, receipt.amountMinor))
         return when {
             largerAmount.signum() > 0 && difference <= largerAmount.divide(BigInteger.valueOf(100)) -> 20
             largerAmount.signum() > 0 && difference <= largerAmount.divide(BigInteger.valueOf(20)) -> 10

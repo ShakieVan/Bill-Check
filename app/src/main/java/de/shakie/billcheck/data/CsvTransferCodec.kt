@@ -6,9 +6,9 @@ import java.time.format.DateTimeFormatter
 
 object CsvTransferCodec {
     private val columns = listOf(
-        "recordType", "tripId", "tripName", "tripCurrency", "tripRate", "exchangeRateMode",
-        "defaultTipMinor", "defaultTipCurrency", "createdAt", "receiptId", "occurredAt", "date",
-        "location", "checkNumber", "amountMinor", "currency", "exactEuroCents", "tipMinor", "tipCurrency",
+        "recordType", "tripId", "tripName", "homeCurrency", "currencyRate", "exchangeRateMode", "isDefaultCurrency",
+        "defaultTipMinor", "defaultTipCurrency", "defaultTipSelected", "createdAt", "receiptId", "occurredAt", "date",
+        "location", "checkNumber", "amountMinor", "currency", "receiptRate", "exactHomeMinor", "tipMinor", "tipCurrency", "tipRate",
         "reconciliationId", "reconciliationTitle", "lineId", "description", "status", "accepted",
         "matchedReceiptId", "matchedManually", "analysisSummary", "analysisUpdatedAt",
         "aiSuggestedReceiptId", "aiConfidence", "aiReason",
@@ -17,10 +17,11 @@ object CsvTransferCodec {
 
     fun encode(value: TransferPackage): String = buildString {
         append('\uFEFF')
-        appendRow(listOf("Bill Check", "CSV", "1"))
+        appendRow(listOf("Bill Check", "CSV", "2"))
         appendRow(columns)
         value.trips.forEach { trip ->
             appendRecord("TRIP", trip = trip)
+            trip.currencies.forEach { currency -> appendRecord("CURRENCY", trip, tripCurrency = currency) }
             trip.receipts.forEach { receipt -> appendRecord("RECEIPT", trip, receipt = receipt) }
             trip.reconciliations.forEach { reconciliation ->
                 appendRecord("RECONCILIATION", trip, reconciliation = reconciliation)
@@ -33,7 +34,7 @@ object CsvTransferCodec {
 
     fun decode(text: String): TransferPackage {
         val rows = parseRows(text.removePrefix("\uFEFF"))
-        require(rows.firstOrNull()?.take(3) == listOf("Bill Check", "CSV", "1")) {
+        require(rows.firstOrNull()?.take(3) == listOf("Bill Check", "CSV", "2")) {
             "Unsupported Bill Check CSV"
         }
         val header = rows.getOrNull(1).orEmpty()
@@ -50,31 +51,43 @@ object CsvTransferCodec {
             val reconciliationRows = records.filter {
                 it.value("recordType") == "RECONCILIATION" && it.value("tripId") == tripId
             }
+            val currencyRows = records.filter {
+                it.value("recordType") == "CURRENCY" && it.value("tripId") == tripId
+            }
             TransferTrip(
                 id = tripId,
                 name = tripRow.value("tripName"),
-                foreignCurrencyCode = tripRow.value("tripCurrency"),
-                defaultExchangeRate = tripRow.value("tripRate"),
-                exchangeRateMode = tripRow.value("exchangeRateMode").ifBlank { "FIXED" },
+                homeCurrencyCode = tripRow.value("homeCurrency"),
                 defaultTipMinor = tripRow.value("defaultTipMinor").toLongOrNull() ?: 100,
-                defaultTipCurrencyCode = tripRow.value("defaultTipCurrency").ifBlank { "EUR" },
-                defaultTipSelected = false,
+                defaultTipCurrencyCode = tripRow.value("defaultTipCurrency").ifBlank {
+                    tripRow.value("homeCurrency")
+                },
+                defaultTipSelected = tripRow.value("defaultTipSelected").toBooleanStrictOrNull() ?: false,
                 imageStorageMode = "ORIGINAL",
                 createdAt = tripRow.value("createdAt").toLongOrNull() ?: System.currentTimeMillis(),
+                currencies = currencyRows.map { row ->
+                    TransferTripCurrency(
+                        currencyCode = row.value("currency"),
+                        homeToCurrencyRate = row.value("currencyRate"),
+                        exchangeRateMode = row.value("exchangeRateMode").ifBlank { "FIXED" },
+                        isDefault = row.value("isDefaultCurrency").toBooleanStrictOrNull() ?: false,
+                    )
+                },
                 receipts = receiptRows.map { row ->
                     TransferReceipt(
                         id = row.value("receiptId"),
                         occurredAt = row.value("occurredAt").toLongOrNull() ?: 0,
                         location = row.value("location"),
                         checkNumber = row.value("checkNumber"),
-                        foreignAmountMinor = row.value("amountMinor").toLongOrNull() ?: 0,
-                        foreignCurrencyCode = row.value("currency"),
-                        exchangeRate = row.value("tripRate"),
-                        exactEuroCents = row.value("exactEuroCents").toLongOrNull() ?: 0,
+                        amountMinor = row.value("amountMinor").toLongOrNull() ?: 0,
+                        currencyCode = row.value("currency"),
+                        exchangeRateSnapshot = row.value("receiptRate"),
+                        exactHomeMinor = row.value("exactHomeMinor").toLongOrNull() ?: 0,
                         tipMinor = row.value("tipMinor").toLongOrNull() ?: 0,
                         tipCurrencyCode = row.value("tipCurrency").ifBlank {
-                            row.value("defaultTipCurrency").ifBlank { "EUR" }
+                            row.value("defaultTipCurrency").ifBlank { tripRow.value("homeCurrency") }
                         },
+                        tipExchangeRateSnapshot = row.value("tipRate").ifBlank { "1" },
                         imageEntry = null,
                         imageMimeType = null,
                         reviewState = "CONFIRMED",
@@ -128,6 +141,7 @@ object CsvTransferCodec {
     private fun StringBuilder.appendRecord(
         type: String,
         trip: TransferTrip,
+        tripCurrency: TransferTripCurrency? = null,
         receipt: TransferReceipt? = null,
         reconciliation: TransferReconciliation? = null,
         line: TransferStatementLine? = null,
@@ -136,22 +150,26 @@ object CsvTransferCodec {
             "recordType" to type,
             "tripId" to trip.id,
             "tripName" to trip.name,
-            "tripCurrency" to trip.foreignCurrencyCode,
-            "tripRate" to (receipt?.exchangeRate ?: trip.defaultExchangeRate),
-            "exchangeRateMode" to trip.exchangeRateMode,
+            "homeCurrency" to trip.homeCurrencyCode,
+            "currencyRate" to tripCurrency?.homeToCurrencyRate.orEmpty(),
+            "exchangeRateMode" to tripCurrency?.exchangeRateMode.orEmpty(),
+            "isDefaultCurrency" to tripCurrency?.isDefault?.toString().orEmpty(),
             "defaultTipMinor" to trip.defaultTipMinor.toString(),
             "defaultTipCurrency" to trip.defaultTipCurrencyCode,
+            "defaultTipSelected" to trip.defaultTipSelected.toString(),
             "createdAt" to (receipt?.createdAt ?: reconciliation?.createdAt ?: trip.createdAt).toString(),
             "receiptId" to receipt?.id.orEmpty(),
             "occurredAt" to (receipt?.occurredAt ?: line?.occurredOn)?.toString().orEmpty(),
             "date" to formatDate(receipt?.occurredAt ?: line?.occurredOn),
             "location" to receipt?.location.orEmpty(),
             "checkNumber" to (receipt?.checkNumber ?: line?.checkNumber).orEmpty(),
-            "amountMinor" to (receipt?.foreignAmountMinor ?: line?.amountMinor)?.toString().orEmpty(),
-            "currency" to (receipt?.foreignCurrencyCode ?: line?.currencyCode).orEmpty(),
-            "exactEuroCents" to receipt?.exactEuroCents?.toString().orEmpty(),
+            "amountMinor" to (receipt?.amountMinor ?: line?.amountMinor)?.toString().orEmpty(),
+            "currency" to (tripCurrency?.currencyCode ?: receipt?.currencyCode ?: line?.currencyCode).orEmpty(),
+            "receiptRate" to receipt?.exchangeRateSnapshot.orEmpty(),
+            "exactHomeMinor" to receipt?.exactHomeMinor?.toString().orEmpty(),
             "tipMinor" to receipt?.tipMinor?.toString().orEmpty(),
             "tipCurrency" to receipt?.tipCurrencyCode.orEmpty(),
+            "tipRate" to receipt?.tipExchangeRateSnapshot.orEmpty(),
             "reconciliationId" to reconciliation?.id.orEmpty(),
             "reconciliationTitle" to reconciliation?.title.orEmpty(),
             "lineId" to line?.id.orEmpty(),

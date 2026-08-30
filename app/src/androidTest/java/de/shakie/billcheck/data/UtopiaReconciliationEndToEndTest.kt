@@ -27,21 +27,29 @@ class UtopiaReconciliationEndToEndTest {
             .build()
         try {
             val repository = BillCheckRepository(database)
-            val trip = repository.createTrip("Utopia", "EGP", "55.5", "FIXED")
+            val trip = repository.createTestTrip("Utopia")
             repository.addReceipt(
                 trip = trip,
                 location = "Sultana Restaurant",
                 checkNumber = "5512",
-                foreignAmountMinor = 31_332,
-                addDefaultTip = false,
+                amountMinor = 31_332,
+                currencyCode = "EGP",
+                exchangeRateSnapshot = "55.5",
+                tipMinor = 0,
+                tipCurrencyCode = "EUR",
+                tipExchangeRateSnapshot = "1",
                 occurredAt = date("2024-12-26"),
             )
             repository.addReceipt(
                 trip = trip,
                 location = "Wrong date trap",
                 checkNumber = "9999",
-                foreignAmountMinor = 1,
-                addDefaultTip = false,
+                amountMinor = 1,
+                currencyCode = "EGP",
+                exchangeRateSnapshot = "55.5",
+                tipMinor = 0,
+                tipCurrencyCode = "EUR",
+                tipExchangeRateSnapshot = "1",
                 occurredAt = date("2020-01-01"),
             )
             val reconciliation = repository.createReconciliation(trip, "Endrechnung")
@@ -73,9 +81,9 @@ class UtopiaReconciliationEndToEndTest {
             .allowMainThreadQueries().build()
         try {
             val repository = BillCheckRepository(database)
-            val trip = repository.createTrip("Trap", "EGP", "55.5", "FIXED")
+            val trip = repository.createTestTrip("Trap")
             repository.addReceipt(
-                trip, "Beach Bar", "5512", 10_000, false,
+                trip, "Beach Bar", "5512", 10_000, "EGP", "55.5", 0, "EUR", "1",
                 occurredAt = date("2025-01-02"),
             )
             val reconciliation = repository.createReconciliation(trip, "Greedy trap")
@@ -113,13 +121,17 @@ class UtopiaReconciliationEndToEndTest {
             .allowMainThreadQueries().build()
         try {
             val repository = BillCheckRepository(database)
-            val trip = repository.createTrip("Utopia", "EGP", "55.5", "FIXED")
+            val trip = repository.createTestTrip("Utopia")
             repository.addReceipt(
                 trip = trip,
                 location = "Sunset Lobby",
                 checkNumber = "783",
-                foreignAmountMinor = 116_006,
-                addDefaultTip = false,
+                amountMinor = 116_006,
+                currencyCode = "EGP",
+                exchangeRateSnapshot = "55.5",
+                tipMinor = 0,
+                tipCurrencyCode = "EUR",
+                tipExchangeRateSnapshot = "1",
                 occurredAt = date("2025-01-02"),
             )
             val captured = repository.receipts(trip.id).first().single()
@@ -193,6 +205,17 @@ class UtopiaReconciliationEndToEndTest {
         .atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
 
     private data class Row(val date: String, val description: String, val check: String, val amount: String)
+
+    private suspend fun BillCheckRepository.createTestTrip(name: String) = createTrip(
+        name = name,
+        homeCurrencyCode = "EUR",
+        currencies = listOf(
+            TripCurrencyInput("EUR", "1", "FIXED", isDefault = false),
+            TripCurrencyInput("EGP", "55.5", "FIXED", isDefault = true),
+        ),
+        defaultTipMinor = 0,
+        defaultTipCurrencyCode = "EUR",
+    )
 
     private fun extractedLine(date: String, check: String, amount: String) = ExtractedStatementLine(
         description = "Beach Bar",

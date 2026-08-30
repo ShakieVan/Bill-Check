@@ -10,6 +10,9 @@ import android.net.Uri
 import android.os.Environment
 import android.provider.MediaStore
 import de.shakie.billcheck.domain.ReconciliationStatus
+import de.shakie.billcheck.domain.CurrencyAmount
+import de.shakie.billcheck.domain.MoneyCalculator
+import java.math.BigDecimal
 import java.io.BufferedInputStream
 import java.io.ByteArrayOutputStream
 import java.time.Instant
@@ -62,6 +65,8 @@ class DataTransferManager(
         val pending = pendingImport ?: error("No import has been opened")
         require(sourceTripIds.isNotEmpty()) { "Select at least one trip" }
         val selected = pending.transfer.trips.filter { it.id in sourceTripIds }
+        require(selected.size == sourceTripIds.size) { "An unknown trip was selected" }
+        selected.forEach(TransferValidator::validate)
         val imageUris = if (pending.format == TransferFormat.BILL_CHECK) {
             restoreSelectedImages(pending.uri, selected)
         } else {
@@ -83,14 +88,20 @@ class DataTransferManager(
             TransferTrip(
                 id = trip.id,
                 name = trip.name,
-                foreignCurrencyCode = trip.foreignCurrencyCode,
-                defaultExchangeRate = trip.defaultExchangeRate,
-                exchangeRateMode = trip.exchangeRateMode,
+                homeCurrencyCode = trip.homeCurrencyCode,
                 defaultTipMinor = trip.defaultTipMinor,
                 defaultTipCurrencyCode = trip.defaultTipCurrencyCode,
                 defaultTipSelected = trip.defaultTipSelected,
                 imageStorageMode = trip.imageStorageMode,
                 createdAt = trip.createdAt,
+                currencies = dao.getTripCurrencies(trip.id).map { currency ->
+                    TransferTripCurrency(
+                        currencyCode = currency.currencyCode,
+                        homeToCurrencyRate = currency.homeToCurrencyRate,
+                        exchangeRateMode = currency.exchangeRateMode,
+                        isDefault = currency.isDefault,
+                    )
+                },
                 receipts = receipts.map { related ->
                     val receipt = related.receipt
                     TransferReceipt(
@@ -98,12 +109,13 @@ class DataTransferManager(
                         occurredAt = receipt.occurredAt,
                         location = receipt.location,
                         checkNumber = receipt.checkNumber,
-                        foreignAmountMinor = receipt.foreignAmountMinor,
-                        foreignCurrencyCode = receipt.foreignCurrencyCode,
-                        exchangeRate = receipt.exchangeRate,
-                        exactEuroCents = receipt.exactEuroCents,
+                        amountMinor = receipt.amountMinor,
+                        currencyCode = receipt.currencyCode,
+                        exchangeRateSnapshot = receipt.exchangeRateSnapshot,
+                        exactHomeMinor = receipt.exactHomeMinor,
                         tipMinor = receipt.tipMinor,
                         tipCurrencyCode = receipt.tipCurrencyCode,
+                        tipExchangeRateSnapshot = receipt.tipExchangeRateSnapshot,
                         imageEntry = receipt.imageUri?.let { "images/receipts/${receipt.id}" },
                         imageMimeType = receipt.imageUri?.let(::mimeType),
                         reviewState = receipt.reviewState,
@@ -283,15 +295,22 @@ class DataTransferManager(
             id = tripId,
             sortPosition = dao.nextTripPosition(),
             name = importedName,
-            foreignCurrencyCode = source.foreignCurrencyCode,
-            defaultExchangeRate = source.defaultExchangeRate,
-            exchangeRateMode = source.exchangeRateMode,
+            homeCurrencyCode = source.homeCurrencyCode,
             defaultTipMinor = source.defaultTipMinor,
             defaultTipCurrencyCode = source.defaultTipCurrencyCode,
             defaultTipSelected = source.defaultTipSelected,
             imageStorageMode = source.imageStorageMode,
             createdAt = source.createdAt,
         )
+        val currencies = source.currencies.map { currency ->
+            TripCurrencyEntity(
+                tripId = tripId,
+                currencyCode = currency.currencyCode,
+                homeToCurrencyRate = currency.homeToCurrencyRate,
+                exchangeRateMode = currency.exchangeRateMode,
+                isDefault = currency.isDefault,
+            )
+        }
         val receipts = source.receipts.map { receipt ->
             ReceiptEntity(
                 id = receiptIds.getValue(receipt.id),
@@ -299,12 +318,13 @@ class DataTransferManager(
                 occurredAt = receipt.occurredAt,
                 location = receipt.location,
                 checkNumber = receipt.checkNumber,
-                foreignAmountMinor = receipt.foreignAmountMinor,
-                foreignCurrencyCode = receipt.foreignCurrencyCode,
-                exchangeRate = receipt.exchangeRate,
-                exactEuroCents = receipt.exactEuroCents,
+                amountMinor = receipt.amountMinor,
+                currencyCode = receipt.currencyCode,
+                exchangeRateSnapshot = receipt.exchangeRateSnapshot,
+                exactHomeMinor = receipt.exactHomeMinor,
                 tipMinor = receipt.tipMinor,
                 tipCurrencyCode = receipt.tipCurrencyCode,
+                tipExchangeRateSnapshot = receipt.tipExchangeRateSnapshot,
                 imageUri = receipt.imageEntry?.let(imageUris::get),
                 reviewState = receipt.reviewState,
                 createdAt = receipt.createdAt,
@@ -359,7 +379,15 @@ class DataTransferManager(
             val receiptId = line.matchedReceiptId?.let(receiptIds::get) ?: return@mapNotNull null
             ReceiptMatchEntity(lineIds.getValue(line.id), receiptId, line.matchedManually)
         }
-        dao.insertTransferredTrip(trip, receipts, items, reconciliations, lines, matches)
+        dao.insertTransferredTrip(
+            trip = trip,
+            currencies = currencies,
+            receipts = receipts,
+            items = items,
+            reconciliations = reconciliations,
+            lines = lines,
+            matches = matches,
+        )
         return tripId
     }
 
@@ -424,8 +452,35 @@ class DataTransferManager(
         transfer.trips.forEach { trip ->
             add("TRIP: ${trip.name}")
             add("Receipts: ${trip.receipts.size}   Statements: ${trip.reconciliations.size}")
-            val exact = trip.receipts.sumOf { it.exactEuroCents }
-            add("Exact total: ${formatMinor(exact)} EUR   Rounded up: ${(exact + 99) / 100} EUR")
+            val exact = trip.receipts.fold(0L) { total, receipt ->
+                Math.addExact(total, receipt.exactHomeMinor)
+            }
+            add(
+                "Exact total: ${formatMinor(exact, trip.homeCurrencyCode)}   " +
+                    "Rounded up: ${MoneyCalculator.roundedUpHomeMajor(exact, trip.homeCurrencyCode)} " +
+                    trip.homeCurrencyCode,
+            )
+            add("")
+            add("RECEIPTS:")
+            trip.receipts.forEach { receipt ->
+                add(
+                    "${formatDate(receipt.occurredAt).padEnd(10)} " +
+                        "${receipt.checkNumber.padEnd(12).take(12)} " +
+                        "${formatMinor(receipt.amountMinor, receipt.currencyCode).padEnd(14)} " +
+                        receipt.location,
+                )
+                add(
+                    "  Rate: 1 ${trip.homeCurrencyCode} = ${receipt.exchangeRateSnapshot} " +
+                        receipt.currencyCode,
+                )
+                if (receipt.tipMinor > 0) {
+                    add(
+                        "  Tip: ${formatMinor(receipt.tipMinor, receipt.tipCurrencyCode)}   " +
+                            "Rate: 1 ${trip.homeCurrencyCode} = ${receipt.tipExchangeRateSnapshot} " +
+                            receipt.tipCurrencyCode,
+                    )
+                }
+            }
             add("")
             trip.reconciliations.forEach { reconciliation ->
                 add("STATEMENT: ${reconciliation.title}")
@@ -440,7 +495,7 @@ class DataTransferManager(
                         "${line.status.padEnd(12).take(12)} " +
                             "${formatDate(line.occurredOn).padEnd(10)} " +
                             "${line.checkNumber.padEnd(12).take(12)} " +
-                            "${(formatMinor(line.amountMinor) + " " + line.currencyCode).padEnd(12)} " +
+                            "${formatMinor(line.amountMinor, line.currencyCode).padEnd(12)} " +
                             line.description,
                     )
                 }
@@ -453,7 +508,8 @@ class DataTransferManager(
     private fun mimeType(uri: String): String =
         context.contentResolver.getType(Uri.parse(uri))?.takeIf { it.startsWith("image/") } ?: "image/jpeg"
 
-    private fun formatMinor(value: Long): String = "%d.%02d".format(Locale.ROOT, value / 100, value % 100)
+    private fun formatMinor(value: Long, currencyCode: String): String =
+        "${BigDecimal.valueOf(value).movePointLeft(CurrencyAmount.fractionDigits(currencyCode)).toPlainString()} $currencyCode"
 
     private fun formatDate(value: Long?): String = value?.let {
         DateTimeFormatter.ISO_LOCAL_DATE.format(Instant.ofEpochMilli(it).atZone(ZoneId.systemDefault()))

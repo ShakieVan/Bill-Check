@@ -7,6 +7,8 @@
     <string name="first_trip_text">Create a trip to record receipts and keep track of your spending.</string>
     <string name="create_trip">Create trip</string>
     <string name="edit_trip">Edit trip</string>
+    <string name="delete_trip">Delete trip</string>
+    <string name="delete_trip_confirm">Delete “%1$s”? This removes %2$d receipts and %3$d reconciliations from the app. Original images in the “Bill Check” gallery album remain available.</string>
     <string name="edit_trip_named">Edit %1$s</string>
     <string name="reorder_trip_named">Hold and drag %1$s to reorder</string>
     <string name="trip_name">Trip name</string>
@@ -71,7 +73,8 @@
     <string name="receipt_date">Receipt date (DD.MM.YYYY)</string>
     <string name="date_example">e.g. 26.12.2024</string>
     <string name="amount_in_currency">Amount (%1$s)</string>
-    <string name="receipt_exchange_rate">1 EUR = %1$s %2$s</string>
+    <string name="receipt_exchange_rate">1 %1$s = %2$s %3$s</string>
+    <string name="receipt_tip">Tip: %1$s</string>
     <string name="receipt_items">Individual items</string>
     <string name="item_number">Item %1$d</string>
     <string name="item_name">Description</string>
@@ -79,6 +82,7 @@
     <string name="previous_values">Previously used (%1$d)</string>
     <string name="field_suggestions">Suggestions (%1$d)</string>
     <string name="ai_suggestion_source">AI suggestion · confidence: %1$s</string>
+    <string name="ai_result_review_required">The AI result could not be applied automatically. Please review the currency and suggestions.</string>
     <string name="history_suggestion_source">Previously used</string>
     <string name="local_ocr_suggestion_source">On-device text recognition</string>
     <string name="image_selection_suggestion_source">Selected in image</string>
@@ -301,7 +305,7 @@
     <string name="transfer_error_message">The selected file could not be processed.</string>
     <string name="widget_description">Trip overview and quick receipt capture</string>
     <string name="widget_no_trip">No trip yet</string>
-    <string name="widget_rounded_total">€%1$d</string>
+    <string name="widget_rounded_total">%1$d %2$s</string>
     <string name="widget_exact_and_count">Exact %1$s · %2$d receipts</string>
     <string name="widget_photo">Photo</string>
     <string name="widget_image">Image</string>
@@ -331,4 +335,35 @@
     <string name="update_release_notes">What’s new</string>
     <string name="update_release_notes_empty">No notes were provided for this release.</string>
     <string name="update_download_failed">Download failed: %1$s</string>
+    <string name="currency_picker_title">Select currency</string>
+    <string name="currency_search_label">Search currencies</string>
+    <string name="currency_search_hint">Code, name, or country/region</string>
+    <string name="currency_search_clear">Clear search</string>
+    <string name="currency_search_empty">No matching currency found.</string>
+    <string name="currency_quick_access">Quick access</string>
+    <string name="currency_all">All currencies</string>
+    <string name="currency_code">Code</string>
+    <string name="currency_name">Name</string>
+    <string name="currency_region">Country/region</string>
+    <string name="currency_regions_more">%1$s and %2$d more</string>
+    <string name="currency_many_regions">Multiple countries/regions (%1$d)</string>
+    <string name="currency_euro_region">Euro area · %1$d countries/regions</string>
+    <string name="currency_selected">Selected</string>
+    <string name="trip_currencies_title">Currencies for this trip</string>
+    <string name="trip_currencies_hint">All rates use the same direction: 1 %1$s equals x units of the selected currency.</string>
+    <string name="trip_currency_add">Add currency</string>
+    <string name="trip_currency_add_other">Add another currency…</string>
+    <string name="trip_currency_home_badge">Home currency</string>
+    <string name="trip_currency_rate_formula">1 %1$s = x %2$s</string>
+    <string name="trip_currency_rate_fixed">Fixed rate</string>
+    <string name="trip_currency_rate_daily">Daily rate</string>
+    <string name="trip_currency_make_default">Use as default for new receipts</string>
+    <string name="trip_currency_delete">Remove %1$s from the trip</string>
+    <string name="trip_currency_home_protected">The home currency always belongs to the trip; its rate is 1.</string>
+    <string name="trip_currency_default_protected">Choose another default currency before removing this currency.</string>
+    <string name="trip_currency_tip_protected">This currency is used for the default tip and therefore cannot be removed.</string>
+    <string name="trip_currency_used_protected">This currency is already used by a receipt or tip and therefore cannot be removed.</string>
+    <string name="receipt_currency">Receipt currency</string>
+    <string name="home_currency">Home currency</string>
+    <string name="home_currency_new_trips_hint">Used only as the default for new trips. Existing trips and their totals remain unchanged.</string>
 </resources>

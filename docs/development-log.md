@@ -1,5 +1,25 @@
 # Entwicklungsprotokoll
 
+## 29.08.2026 – Generisches Mehrwährungsmodell
+
+- Heimatwährung als Vorgabe in den Einstellungen und unveränderlicher Snapshot
+  pro Reise eingeführt.
+- Mehrere Reisewährungen mit festem oder täglichem Kurs, Standardauswahl und
+  Schutz bereits verwendeter Währungen umgesetzt.
+- Belegbetrag und Trinkgeld besitzen getrennte Kurs-Snapshots; JPY, KWD und
+  andere ISO-Nachkommastellen werden ohne feste Cent-Annahme verarbeitet.
+- Belegkarten und PDF-Berichte weisen tatsächliches Trinkgeld einschließlich
+  seines unabhängigen Kurses aus. Null-Trinkgeld wird als Heimatwährung/Kurs 1
+  kanonisiert und sperrt dadurch keine unbenutzte Reisewährung.
+- Offline-Suchdialog nach Kürzel, Name und Land/Region in Reise-, Beleg- und
+  Rechnungsabläufe integriert; KI-Abweichungen werden sichtbar behandelt.
+- Room-Schema 6, Backup/CSV 2, PDF und Widget auf die Reise-Heimatwährung
+  umgestellt. Der nicht produktive Entwicklungsdatenbestand wird beim Upgrade
+  bewusst verworfen.
+- Reisen lassen sich im Bearbeitungsdialog nach einer Bestätigung vollständig
+  löschen. Room entfernt Belege, Posten und Abgleiche kaskadierend; unabhängige
+  Galerieoriginale werden ausdrücklich nicht gelöscht.
+
 ## 29.08.2026 – Mengen, Feldkandidaten und räumliche Textauswahl
 
 - Belegantworten um getrennte Mengen, maximal drei bildgestützte Kandidaten je

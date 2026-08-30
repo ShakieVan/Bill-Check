@@ -14,6 +14,38 @@ interface BillCheckDao {
     @Query("SELECT * FROM trips ORDER BY sortPosition")
     fun observeTrips(): Flow<List<TripEntity>>
 
+    @Transaction
+    @Query("SELECT * FROM trips ORDER BY sortPosition")
+    fun observeTripsWithCurrencies(): Flow<List<TripWithCurrencies>>
+
+    @Transaction
+    @Query("SELECT * FROM trips WHERE id = :tripId LIMIT 1")
+    suspend fun getTripWithCurrencies(tripId: String): TripWithCurrencies?
+
+    @Query("SELECT * FROM trip_currencies WHERE tripId = :tripId ORDER BY isDefault DESC, currencyCode")
+    fun observeTripCurrencies(tripId: String): Flow<List<TripCurrencyEntity>>
+
+    @Query("SELECT * FROM trip_currencies WHERE tripId = :tripId ORDER BY isDefault DESC, currencyCode")
+    suspend fun getTripCurrencies(tripId: String): List<TripCurrencyEntity>
+
+    @Insert(onConflict = OnConflictStrategy.ABORT)
+    suspend fun insertTripCurrencies(currencies: List<TripCurrencyEntity>)
+
+    @Query("DELETE FROM trip_currencies WHERE tripId = :tripId")
+    suspend fun deleteTripCurrencies(tripId: String)
+
+    @Transaction
+    suspend fun replaceTripCurrencies(
+        tripId: String,
+        homeCurrencyCode: String,
+        currencies: List<TripCurrencyEntity>,
+    ) {
+        require(currencies.all { it.tripId == tripId }) { "Currency belongs to another trip" }
+        de.shakie.billcheck.domain.TripCurrencyRules.requireValid(homeCurrencyCode, currencies)
+        deleteTripCurrencies(tripId)
+        insertTripCurrencies(currencies)
+    }
+
     @Query("SELECT COALESCE(MAX(sortPosition), -1) + 1 FROM trips")
     suspend fun nextTripPosition(): Int
 
@@ -29,8 +61,28 @@ interface BillCheckDao {
     @Insert(onConflict = OnConflictStrategy.ABORT)
     suspend fun insertTrip(trip: TripEntity)
 
+    @Transaction
+    suspend fun insertTripWithCurrencies(
+        trip: TripEntity,
+        currencies: List<TripCurrencyEntity>,
+    ) {
+        require(currencies.all { it.tripId == trip.id }) { "Currency belongs to another trip" }
+        de.shakie.billcheck.domain.TripCurrencyRules.requireValid(trip.homeCurrencyCode, currencies)
+        insertTrip(trip)
+        insertTripCurrencies(currencies)
+    }
+
     @Update
     suspend fun updateTrip(trip: TripEntity)
+
+    @Transaction
+    suspend fun updateTripWithCurrencies(
+        trip: TripEntity,
+        currencies: List<TripCurrencyEntity>,
+    ) {
+        updateTrip(trip)
+        replaceTripCurrencies(trip.id, trip.homeCurrencyCode, currencies)
+    }
 
     @Delete
     suspend fun deleteTrip(trip: TripEntity)
@@ -50,6 +102,12 @@ interface BillCheckDao {
     @Transaction
     @Query("SELECT * FROM receipts WHERE tripId = :tripId ORDER BY occurredAt DESC, createdAt DESC")
     fun observeReceipts(tripId: String): Flow<List<ReceiptWithItems>>
+
+    @Query(
+        "SELECT currencyCode FROM receipts WHERE tripId = :tripId " +
+            "UNION SELECT tipCurrencyCode FROM receipts WHERE tripId = :tripId AND tipMinor > 0",
+    )
+    fun observeUsedReceiptCurrencyCodes(tripId: String): Flow<List<String>>
 
     @Transaction
     @Query("SELECT * FROM receipts WHERE tripId = :tripId ORDER BY occurredAt, createdAt")
@@ -225,8 +283,12 @@ interface BillCheckDao {
         reconciliations: List<ReconciliationEntity>,
         lines: List<StatementLineEntity>,
         matches: List<ReceiptMatchEntity>,
+        currencies: List<TripCurrencyEntity>,
     ) {
+        require(currencies.all { it.tripId == trip.id }) { "Currency belongs to another trip" }
+        de.shakie.billcheck.domain.TripCurrencyRules.requireValid(trip.homeCurrencyCode, currencies)
         insertTrip(trip)
+        insertTripCurrencies(currencies)
         if (receipts.isNotEmpty()) insertReceipts(receipts)
         if (items.isNotEmpty()) insertReceiptItems(items)
         if (reconciliations.isNotEmpty()) insertReconciliations(reconciliations)

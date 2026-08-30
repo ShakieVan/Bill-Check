@@ -1,9 +1,15 @@
 package de.shakie.billcheck.data
 
+import de.shakie.billcheck.domain.MoneyCalculator
 import org.junit.Assert.assertThrows
 import org.junit.Test
 
 class TransferValidatorTest {
+    @Test
+    fun `valid non-euro home with JPY receipt and third-currency tip is accepted`() {
+        TransferValidator.validate(trip())
+    }
+
     @Test
     fun `import rejects zero negative and extreme negative receipt amounts`() {
         listOf(0L, -1L, Long.MIN_VALUE).forEach { amount ->
@@ -51,22 +57,101 @@ class TransferValidatorTest {
         TransferValidator.validate(base.copy(reconciliations = base.reconciliations + second))
     }
 
+    @Test
+    fun `reconciliation IDs must be unique within a trip`() {
+        val base = trip()
+
+        assertThrows(IllegalArgumentException::class.java) {
+            TransferValidator.validate(base.copy(reconciliations = base.reconciliations + base.reconciliations.single()))
+        }
+    }
+
+    @Test
+    fun `statement line IDs must be unique across reconciliations`() {
+        val base = trip()
+        val second = base.reconciliations.single().copy(id = "final")
+
+        assertThrows(IllegalArgumentException::class.java) {
+            TransferValidator.validate(base.copy(reconciliations = base.reconciliations + second))
+        }
+    }
+
+    @Test
+    fun `declared statement total and currency must be present together`() {
+        val base = trip()
+        val reconciliation = base.reconciliations.single()
+
+        assertThrows(IllegalArgumentException::class.java) {
+            TransferValidator.validate(
+                base.copy(reconciliations = listOf(reconciliation.copy(declaredTotalCurrencyCode = null))),
+            )
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            TransferValidator.validate(
+                base.copy(
+                    reconciliations = listOf(
+                        reconciliation.copy(declaredTotalMinor = null, declaredTotalCurrencyCode = "JPY"),
+                    ),
+                ),
+            )
+        }
+    }
+
+    @Test
+    fun `home currency must use fixed rate one`() {
+        val base = trip()
+        val currencies = base.currencies.map {
+            if (it.currencyCode == base.homeCurrencyCode) it.copy(exchangeRateMode = "DAILY") else it
+        }
+
+        assertThrows(IllegalArgumentException::class.java) {
+            TransferValidator.validate(base.copy(currencies = currencies))
+        }
+    }
+
+    @Test
+    fun `tampered home-currency receipt snapshot is rejected`() {
+        val base = trip()
+        val tampered = base.receipts.single().copy(
+            amountMinor = 1_000,
+            currencyCode = "KWD",
+            exchangeRateSnapshot = "1.01",
+            exactHomeMinor = 2_000,
+        )
+
+        assertThrows(IllegalArgumentException::class.java) {
+            TransferValidator.validate(base.copy(receipts = listOf(tampered)))
+        }
+    }
+
     private fun trip(
-        receiptAmount: Long = 31_332,
-        lineAmount: Long = 31_332,
-        declaredTotal: Long? = 31_332,
+        receiptAmount: Long = 1_000,
+        lineAmount: Long = 1_000,
+        declaredTotal: Long? = 1_000,
     ): TransferTrip {
+        val exactHomeMinor = runCatching {
+            MoneyCalculator.calculateExactHomeMinor(
+                amountMinor = receiptAmount,
+                currencyCode = "JPY",
+                exchangeRateSnapshot = "500",
+                tipMinor = 325,
+                tipCurrencyCode = "USD",
+                tipExchangeRateSnapshot = "3.25",
+                homeCurrencyCode = "KWD",
+            )
+        }.getOrDefault(0)
         val receipt = TransferReceipt(
             id = "receipt",
             occurredAt = 0,
             location = "Sultana",
             checkNumber = "5512",
-            foreignAmountMinor = receiptAmount,
-            foreignCurrencyCode = "EGP",
-            exchangeRate = "55.5",
-            exactEuroCents = 0,
-            tipMinor = 0,
-            tipCurrencyCode = "EUR",
+            amountMinor = receiptAmount,
+            currencyCode = "JPY",
+            exchangeRateSnapshot = "500",
+            exactHomeMinor = exactHomeMinor,
+            tipMinor = 325,
+            tipCurrencyCode = "USD",
+            tipExchangeRateSnapshot = "3.25",
             imageEntry = null,
             imageMimeType = null,
             reviewState = "CONFIRMED",
@@ -79,7 +164,7 @@ class TransferValidatorTest {
             description = "Sultana",
             checkNumber = "0015512",
             amountMinor = lineAmount,
-            currencyCode = "EGP",
+            currencyCode = "JPY",
             status = "CORRECT",
             acceptedWithoutReceipt = false,
             matchedReceiptId = "receipt",
@@ -88,14 +173,17 @@ class TransferValidatorTest {
         return TransferTrip(
             id = "trip",
             name = "Trip",
-            foreignCurrencyCode = "EGP",
-            defaultExchangeRate = "55.5",
-            exchangeRateMode = "FIXED",
-            defaultTipMinor = 0,
-            defaultTipCurrencyCode = "EUR",
-            defaultTipSelected = false,
+            homeCurrencyCode = "KWD",
+            defaultTipMinor = 325,
+            defaultTipCurrencyCode = "USD",
+            defaultTipSelected = true,
             imageStorageMode = "ORIGINAL",
             createdAt = 0,
+            currencies = listOf(
+                TransferTripCurrency("KWD", "1", "FIXED", false),
+                TransferTripCurrency("JPY", "500", "DAILY", true),
+                TransferTripCurrency("USD", "3.25", "FIXED", false),
+            ),
             receipts = listOf(receipt),
             reconciliations = listOf(
                 TransferReconciliation(
@@ -106,7 +194,7 @@ class TransferValidatorTest {
                     createdAt = 0,
                     lines = listOf(line),
                     declaredTotalMinor = declaredTotal,
-                    declaredTotalCurrencyCode = declaredTotal?.let { "EGP" },
+                    declaredTotalCurrencyCode = declaredTotal?.let { "JPY" },
                 ),
             ),
         )

@@ -1,11 +1,12 @@
 package de.shakie.billcheck.data
 
 import de.shakie.billcheck.domain.MoneyCalculator
+import de.shakie.billcheck.domain.CurrencyAmount
+import de.shakie.billcheck.domain.CurrencyCatalog
 import de.shakie.billcheck.domain.RankedReceiptCandidate
 import de.shakie.billcheck.domain.ReconciliationMatcher
 import de.shakie.billcheck.domain.ReconciliationStatus
 import de.shakie.billcheck.domain.ExtractedStatement
-import de.shakie.billcheck.domain.ReceiptSnapshotRules
 import de.shakie.billcheck.domain.StatementExtractionValidator
 import de.shakie.billcheck.domain.VerifiedReconciliationEntry
 import de.shakie.billcheck.domain.VerifiedReconciliationReport
@@ -15,6 +16,13 @@ import java.util.Locale
 data class NewReceiptItem(
     val name: String,
     val amountMinor: Long,
+)
+
+data class TripCurrencyInput(
+    val currencyCode: String,
+    val homeToCurrencyRate: String,
+    val exchangeRateMode: String,
+    val isDefault: Boolean,
 )
 
 data class NewStatementLine(
@@ -30,6 +38,10 @@ class BillCheckRepository(database: BillCheckDatabase) {
 
     val trips = dao.observeTrips()
 
+    fun tripCurrencies(tripId: String) = dao.observeTripCurrencies(tripId)
+
+    fun usedTripCurrencyCodes(tripId: String) = dao.observeUsedReceiptCurrencyCodes(tripId)
+
     fun receipts(tripId: String) = dao.observeReceipts(tripId)
 
     fun locationSuggestions(tripId: String) = dao.observeLocationSuggestions(tripId)
@@ -40,68 +52,104 @@ class BillCheckRepository(database: BillCheckDatabase) {
 
     suspend fun createTrip(
         name: String,
-        currencyCode: String,
-        exchangeRate: String,
-        exchangeRateMode: String,
+        homeCurrencyCode: String,
+        currencies: List<TripCurrencyInput>,
         defaultTipMinor: Long = 100,
-        defaultTipCurrencyCode: String = "EUR",
+        defaultTipCurrencyCode: String = homeCurrencyCode,
         defaultTipSelected: Boolean = false,
     ): TripEntity {
+        require(defaultTipMinor >= 0) { "Default tip must not be negative" }
         val now = System.currentTimeMillis()
-        return TripEntity(
-            id = UUID.randomUUID().toString(),
+        val tripId = UUID.randomUUID().toString()
+        val normalizedHome = requireSupportedCurrency(homeCurrencyCode)
+        val trip = TripEntity(
+            id = tripId,
             sortPosition = dao.nextTripPosition(),
             name = name.trim().ifBlank { "Reise 1" },
-            foreignCurrencyCode = currencyCode,
-            defaultExchangeRate = exchangeRate,
-            exchangeRateMode = exchangeRateMode,
+            homeCurrencyCode = normalizedHome,
             defaultTipMinor = defaultTipMinor,
-            defaultTipCurrencyCode = defaultTipCurrencyCode,
+            defaultTipCurrencyCode = requireSupportedCurrency(defaultTipCurrencyCode),
             defaultTipSelected = defaultTipSelected,
             imageStorageMode = "ORIGINAL",
             createdAt = now,
-        ).also { dao.insertTrip(it) }
+        )
+        val entities = normalizedTripCurrencies(tripId, normalizedHome, currencies)
+        require(trip.defaultTipCurrencyCode in entities.map { it.currencyCode }) {
+            "Default tip currency must be available on the trip"
+        }
+        dao.insertTripWithCurrencies(trip, entities)
+        return trip
     }
 
     suspend fun updateTrip(
         existing: TripEntity,
         name: String,
-        currencyCode: String,
-        exchangeRate: String,
-        exchangeRateMode: String,
+        currencies: List<TripCurrencyInput>,
         defaultTipMinor: Long,
         defaultTipCurrencyCode: String,
         defaultTipSelected: Boolean,
     ) {
-        dao.updateTrip(
+        require(defaultTipMinor >= 0) { "Default tip must not be negative" }
+        val entities = normalizedTripCurrencies(existing.id, existing.homeCurrencyCode, currencies)
+        val tipCode = requireSupportedCurrency(defaultTipCurrencyCode)
+        require(tipCode in entities.map { it.currencyCode }) {
+            "Default tip currency must be available on the trip"
+        }
+        val configuredCodes = entities.mapTo(hashSetOf()) { it.currencyCode }
+        val usedCodes = dao.getReceipts(existing.id).flatMapTo(hashSetOf()) {
+            if (it.tipMinor > 0) listOf(it.currencyCode, it.tipCurrencyCode) else listOf(it.currencyCode)
+        }
+        require(configuredCodes.containsAll(usedCodes)) {
+            "Currencies used by existing receipts cannot be removed"
+        }
+        dao.updateTripWithCurrencies(
             existing.copy(
                 name = name.trim().ifBlank { existing.name },
-                foreignCurrencyCode = currencyCode,
-                defaultExchangeRate = exchangeRate,
-                exchangeRateMode = exchangeRateMode,
                 defaultTipMinor = defaultTipMinor,
-                defaultTipCurrencyCode = defaultTipCurrencyCode,
+                defaultTipCurrencyCode = tipCode,
                 defaultTipSelected = defaultTipSelected,
             ),
+            entities,
         )
     }
 
     suspend fun reorderTrips(orderedTripIds: List<String>) =
         dao.replaceTripOrder(orderedTripIds)
 
+    suspend fun deleteTrip(trip: TripEntity) {
+        dao.deleteTrip(trip)
+    }
+
     suspend fun addReceipt(
         trip: TripEntity,
         location: String,
         checkNumber: String,
-        foreignAmountMinor: Long,
-        addDefaultTip: Boolean,
+        amountMinor: Long,
+        currencyCode: String,
+        exchangeRateSnapshot: String,
+        tipMinor: Long,
+        tipCurrencyCode: String,
+        tipExchangeRateSnapshot: String,
         items: List<NewReceiptItem> = emptyList(),
-        exchangeRate: String = trip.defaultExchangeRate,
         imageUri: String? = null,
         occurredAt: Long = System.currentTimeMillis(),
     ) {
+        require(amountMinor > 0) { "Receipt amount must be positive" }
+        require(tipMinor >= 0) { "Tip must not be negative" }
+        require(items.all { it.amountMinor >= 0 }) { "Item amounts must not be negative" }
         val now = System.currentTimeMillis()
-        val tipMinor = if (addDefaultTip) trip.defaultTipMinor else 0
+        val receiptCurrency = requireTripCurrency(trip, currencyCode)
+        val receiptRate = requireRateSnapshot(trip.homeCurrencyCode, receiptCurrency, exchangeRateSnapshot)
+        val tipCurrency = if (tipMinor == 0L) {
+            trip.homeCurrencyCode
+        } else {
+            requireTripCurrency(trip, tipCurrencyCode)
+        }
+        val tipRate = if (tipMinor == 0L) {
+            "1"
+        } else {
+            requireRateSnapshot(trip.homeCurrencyCode, tipCurrency, tipExchangeRateSnapshot)
+        }
         val receiptId = UUID.randomUUID().toString()
         val receipt = ReceiptEntity(
                 id = receiptId,
@@ -109,17 +157,21 @@ class BillCheckRepository(database: BillCheckDatabase) {
                 occurredAt = occurredAt,
                 location = location.trim(),
                 checkNumber = checkNumber.trim(),
-                foreignAmountMinor = foreignAmountMinor,
-                foreignCurrencyCode = trip.foreignCurrencyCode,
-                exchangeRate = exchangeRate,
-                exactEuroCents = MoneyCalculator.calculateExactEuroCents(
-                    foreignAmountMinor = foreignAmountMinor,
-                    exchangeRate = exchangeRate,
+                amountMinor = amountMinor,
+                currencyCode = receiptCurrency,
+                exchangeRateSnapshot = receiptRate,
+                exactHomeMinor = MoneyCalculator.calculateExactHomeMinor(
+                    amountMinor = amountMinor,
+                    currencyCode = receiptCurrency,
+                    exchangeRateSnapshot = receiptRate,
                     tipMinor = tipMinor,
-                    tipCurrencyCode = trip.defaultTipCurrencyCode,
+                    tipCurrencyCode = tipCurrency,
+                    tipExchangeRateSnapshot = tipRate,
+                    homeCurrencyCode = trip.homeCurrencyCode,
                 ),
                 tipMinor = tipMinor,
-                tipCurrencyCode = trip.defaultTipCurrencyCode,
+                tipCurrencyCode = tipCurrency,
+                tipExchangeRateSnapshot = tipRate,
                 imageUri = imageUri,
                 reviewState = "CONFIRMED",
                 createdAt = now,
@@ -131,7 +183,7 @@ class BillCheckRepository(database: BillCheckDatabase) {
                 sortPosition = index,
                 name = item.name.trim(),
                 amountMinor = item.amountMinor,
-                currencyCode = trip.foreignCurrencyCode,
+                currencyCode = receiptCurrency,
             )
         }
         dao.insertReceiptWithItems(
@@ -157,31 +209,59 @@ class BillCheckRepository(database: BillCheckDatabase) {
         existing: ReceiptEntity,
         location: String,
         checkNumber: String,
-        foreignAmountMinor: Long,
+        amountMinor: Long,
+        currencyCode: String,
+        /** Required only when [currencyCode] differs from the stored currency. */
+        exchangeRateSnapshot: String?,
         occurredAt: Long,
-        addDefaultTip: Boolean,
+        tipMinor: Long,
+        tipCurrencyCode: String,
+        /** Required only when [tipCurrencyCode] differs from the stored tip currency. */
+        tipExchangeRateSnapshot: String?,
         items: List<NewReceiptItem>,
     ) {
-        val tip = ReceiptSnapshotRules.tipForEdit(
-            existingTipMinor = existing.tipMinor,
-            existingTipCurrencyCode = existing.tipCurrencyCode,
-            currentDefaultTipMinor = trip.defaultTipMinor,
-            currentDefaultTipCurrencyCode = trip.defaultTipCurrencyCode,
-            selected = addDefaultTip,
-        )
+        require(amountMinor > 0) { "Receipt amount must be positive" }
+        require(tipMinor >= 0) { "Tip must not be negative" }
+        require(items.all { it.amountMinor >= 0 }) { "Item amounts must not be negative" }
+        val receiptCurrency = requireTripCurrency(trip, currencyCode)
+        val receiptRate = if (receiptCurrency == existing.currencyCode) {
+            existing.exchangeRateSnapshot
+        } else {
+            requireNotNull(exchangeRateSnapshot) { "A changed receipt currency needs an exchange rate" }
+        }.let { requireRateSnapshot(trip.homeCurrencyCode, receiptCurrency, it) }
+        val tipCurrency = if (tipMinor == 0L) {
+            trip.homeCurrencyCode
+        } else {
+            requireTripCurrency(trip, tipCurrencyCode)
+        }
+        val tipRate = if (tipMinor == 0L) {
+            "1"
+        } else {
+            if (tipCurrency == existing.tipCurrencyCode) {
+                existing.tipExchangeRateSnapshot
+            } else {
+                requireNotNull(tipExchangeRateSnapshot) { "A changed tip currency needs an exchange rate" }
+            }.let { requireRateSnapshot(trip.homeCurrencyCode, tipCurrency, it) }
+        }
         val receipt = existing.copy(
             occurredAt = occurredAt,
             location = location.trim(),
             checkNumber = checkNumber.trim(),
-            foreignAmountMinor = foreignAmountMinor,
-            exactEuroCents = MoneyCalculator.calculateExactEuroCents(
-                foreignAmountMinor = foreignAmountMinor,
-                exchangeRate = existing.exchangeRate,
-                tipMinor = tip.minor,
-                tipCurrencyCode = tip.currencyCode,
+            amountMinor = amountMinor,
+            currencyCode = receiptCurrency,
+            exchangeRateSnapshot = receiptRate,
+            exactHomeMinor = MoneyCalculator.calculateExactHomeMinor(
+                amountMinor = amountMinor,
+                currencyCode = receiptCurrency,
+                exchangeRateSnapshot = receiptRate,
+                tipMinor = tipMinor,
+                tipCurrencyCode = tipCurrency,
+                tipExchangeRateSnapshot = tipRate,
+                homeCurrencyCode = trip.homeCurrencyCode,
             ),
-            tipMinor = tip.minor,
-            tipCurrencyCode = tip.currencyCode,
+            tipMinor = tipMinor,
+            tipCurrencyCode = tipCurrency,
+            tipExchangeRateSnapshot = tipRate,
         )
         val receiptItems = items.mapIndexed { index, item ->
             ReceiptItemEntity(
@@ -190,7 +270,7 @@ class BillCheckRepository(database: BillCheckDatabase) {
                 sortPosition = index,
                 name = item.name.trim(),
                 amountMinor = item.amountMinor,
-                currencyCode = existing.foreignCurrencyCode,
+                currencyCode = receiptCurrency,
             )
         }
         dao.updateReceiptWithItems(receipt, receiptItems)
@@ -240,6 +320,7 @@ class BillCheckRepository(database: BillCheckDatabase) {
         reconciliationId: String,
         input: NewStatementLine,
     ) {
+        val currencyCode = requireSupportedCurrency(input.currencyCode)
         dao.insertStatementLine(
             StatementLineEntity(
                 id = UUID.randomUUID().toString(),
@@ -248,7 +329,7 @@ class BillCheckRepository(database: BillCheckDatabase) {
                 description = input.description.trim(),
                 checkNumber = input.checkNumber.trim(),
                 amountMinor = input.amountMinor,
-                currencyCode = input.currencyCode,
+                currencyCode = currencyCode,
                 status = ReconciliationStatus.NOT_FOUND,
                 acceptedWithoutReceipt = false,
             ),
@@ -260,6 +341,7 @@ class BillCheckRepository(database: BillCheckDatabase) {
         existing: StatementLineEntity,
         input: NewStatementLine,
     ) {
+        val currencyCode = requireSupportedCurrency(input.currencyCode)
         dao.deleteStatementLineMatch(existing.id)
         dao.updateStatementLine(
             existing.copy(
@@ -267,7 +349,7 @@ class BillCheckRepository(database: BillCheckDatabase) {
                 description = input.description.trim(),
                 checkNumber = input.checkNumber.trim(),
                 amountMinor = input.amountMinor,
-                currencyCode = input.currencyCode,
+                currencyCode = currencyCode,
                 status = ReconciliationStatus.NOT_FOUND,
                 acceptedWithoutReceipt = false,
                 aiSuggestedReceiptId = null,
@@ -410,7 +492,8 @@ class BillCheckRepository(database: BillCheckDatabase) {
         extracted: ExtractedStatement,
         fallbackCurrencyCode: String,
     ) {
-        val validated = StatementExtractionValidator.validate(extracted, fallbackCurrencyCode)
+        val fallbackCurrency = requireSupportedCurrency(fallbackCurrencyCode)
+        val validated = StatementExtractionValidator.validate(extracted, fallbackCurrency)
         val lines = validated.lines.map { line ->
             StatementLineEntity(
                 id = UUID.randomUUID().toString(),
@@ -419,7 +502,7 @@ class BillCheckRepository(database: BillCheckDatabase) {
                 description = line.description,
                 checkNumber = line.checkNumber,
                 amountMinor = line.amountMinor,
-                currencyCode = line.currencyCode,
+                currencyCode = requireSupportedCurrency(line.currencyCode),
                 status = ReconciliationStatus.NOT_FOUND,
                 acceptedWithoutReceipt = false,
                 sourceDateText = line.sourceDateText,
@@ -432,7 +515,8 @@ class BillCheckRepository(database: BillCheckDatabase) {
                 analysisSummary = null,
                 analysisUpdatedAt = null,
                 declaredTotalMinor = validated.declaredTotalMinor,
-                declaredTotalCurrencyCode = validated.declaredTotalCurrencyCode,
+                declaredTotalCurrencyCode = validated.declaredTotalCurrencyCode
+                    ?.let(::requireSupportedCurrency),
             ),
             lines = lines,
         )
@@ -468,7 +552,7 @@ class BillCheckRepository(database: BillCheckDatabase) {
                 statementCheckNumber = line.checkNumber.takeIf(String::isNotBlank),
                 receiptCheckNumber = receipt?.checkNumber,
                 statementAmountMinor = line.amountMinor,
-                receiptAmountMinor = receipt?.foreignAmountMinor,
+                receiptAmountMinor = receipt?.amountMinor,
                 currencyCode = line.currencyCode,
                 status = when {
                     line.acceptedWithoutReceipt -> ReconciliationStatus.ACCEPTED
@@ -487,8 +571,8 @@ class BillCheckRepository(database: BillCheckDatabase) {
                 statementCheckNumber = null,
                 receiptCheckNumber = receipt.checkNumber,
                 statementAmountMinor = null,
-                receiptAmountMinor = receipt.foreignAmountMinor,
-                currencyCode = receipt.foreignCurrencyCode,
+                receiptAmountMinor = receipt.amountMinor,
+                currencyCode = receipt.currencyCode,
                 status = ReconciliationStatus.NOT_FOUND,
             )
         }
@@ -526,4 +610,64 @@ class BillCheckRepository(database: BillCheckDatabase) {
         val score: Int,
         val margin: Int,
     )
+
+    private suspend fun requireTripCurrency(trip: TripEntity, currencyCode: String): String {
+        val normalized = requireSupportedCurrency(currencyCode)
+        require(dao.getTripCurrencies(trip.id).any { it.currencyCode == normalized }) {
+            "Currency $normalized is not configured for this trip"
+        }
+        return normalized
+    }
+
+    private fun requireRateSnapshot(
+        homeCurrencyCode: String,
+        currencyCode: String,
+        rate: String,
+    ): String {
+        val decimal = rate.trim().toBigDecimalOrNull()
+        require(decimal?.signum() == 1) { "Exchange rate must be positive" }
+        if (currencyCode == homeCurrencyCode) {
+            require(decimal.compareTo(java.math.BigDecimal.ONE) == 0) {
+                "Home currency exchange rate must be 1"
+            }
+        }
+        return decimal.stripTrailingZeros().toPlainString()
+    }
+
+    private fun normalizedTripCurrencies(
+        tripId: String,
+        homeCurrencyCode: String,
+        currencies: List<TripCurrencyInput>,
+    ): List<TripCurrencyEntity> = currencies.map { input ->
+        val code = requireSupportedCurrency(input.currencyCode)
+        TripCurrencyEntity(
+            tripId = tripId,
+            currencyCode = code,
+            homeToCurrencyRate = requireRateSnapshot(
+                homeCurrencyCode,
+                code,
+                input.homeToCurrencyRate,
+            ),
+            exchangeRateMode = if (code == homeCurrencyCode) {
+                "FIXED"
+            } else {
+                input.exchangeRateMode.trim().uppercase(Locale.ROOT)
+            },
+            isDefault = input.isDefault,
+        )
+    }.also { de.shakie.billcheck.domain.TripCurrencyRules.requireValid(homeCurrencyCode, it) }
+
+    private fun requireSupportedCurrency(currencyCode: String): String {
+        val normalized = CurrencyAmount.normalizeCode(currencyCode)
+        require(normalized in SUPPORTED_CURRENCY_CODES) {
+            "Unsupported currency: $normalized"
+        }
+        return normalized
+    }
+
+    private companion object {
+        val SUPPORTED_CURRENCY_CODES: Set<String> by lazy {
+            CurrencyCatalog.entries(Locale.ROOT).mapTo(hashSetOf()) { it.code }
+        }
+    }
 }

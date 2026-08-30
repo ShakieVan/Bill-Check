@@ -14,8 +14,8 @@ class MainViewModelTest {
     }
 
     @Test
-    fun `decimal input rounds to currency minor units`() {
-        assertEquals(124L, MainViewModel.parseMinor("1,235"))
+    fun `decimal input rejects precision beyond currency minor units`() {
+        assertNull(MainViewModel.parseMinor("1,235"))
     }
 
     @Test

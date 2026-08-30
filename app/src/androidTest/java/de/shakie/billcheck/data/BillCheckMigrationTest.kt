@@ -56,10 +56,48 @@ class BillCheckMigrationTest {
         }
         helper.close()
 
+    }
+
+    @Test
+    fun version5DatabaseIsDeliberatelyRecreatedWithGenericCurrencySchema() {
+        val helper = FrameworkSQLiteOpenHelperFactory().create(
+            SupportSQLiteOpenHelper.Configuration.builder(context)
+                .name(DATABASE_NAME)
+                .callback(object : SupportSQLiteOpenHelper.Callback(5) {
+                    override fun onCreate(db: SupportSQLiteDatabase) {
+                        createVersion4Schema(db)
+                        BillCheckDatabase.MIGRATION_4_5.migrate(db)
+                    }
+
+                    override fun onUpgrade(
+                        db: SupportSQLiteDatabase,
+                        oldVersion: Int,
+                        newVersion: Int,
+                    ) = Unit
+                })
+                .build(),
+        )
+        helper.writableDatabase.execSQL(
+            "INSERT INTO trips VALUES ('legacy',0,'Legacy','EGP','55.5','FIXED',0,'EUR',0,'ORIGINAL',0)",
+        )
+        helper.close()
+
         val roomDatabase = Room.databaseBuilder(context, BillCheckDatabase::class.java, DATABASE_NAME)
-            .addMigrations(BillCheckDatabase.MIGRATION_4_5)
+            .fallbackToDestructiveMigration(dropAllTables = true)
             .build()
-        roomDatabase.openHelper.writableDatabase
+        roomDatabase.openHelper.writableDatabase.apply {
+            query("SELECT COUNT(*) FROM trips").use { cursor ->
+                cursor.moveToFirst()
+                assertEquals(0, cursor.getInt(0))
+            }
+            query("PRAGMA table_info(receipts)").use { cursor ->
+                val names = buildSet {
+                    while (cursor.moveToNext()) add(cursor.getString(cursor.getColumnIndexOrThrow("name")))
+                }
+                assertEquals(true, "exactHomeMinor" in names)
+                assertEquals(true, "tipExchangeRateSnapshot" in names)
+            }
+        }
         roomDatabase.close()
     }
 

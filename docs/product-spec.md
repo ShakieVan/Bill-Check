@@ -22,11 +22,15 @@ Stand: 16.08.2026
 
 ## Reisen
 
-- Reisen haben einen Namen, eine unsichtbare Sortierposition, eine
-  Fremdwährung, einen Standardwechselkurs sowie Standardtrinkgeld mit Währung.
+- Reisen haben einen Namen, eine unsichtbare Sortierposition, einen
+  unveränderlichen Heimatwährungs-Snapshot, mehrere Reisewährungen samt Kurs
+  und Modus sowie Standardtrinkgeld mit Währung.
 - Jede Reise kann über das Stift-Symbol in der Reiseliste bearbeitet werden.
   Geänderte Währungs-, Kurs- und Trinkgeldvorgaben gelten für neue Belege;
   bestehende Belege behalten ihre historischen Snapshots.
+- Im Bearbeitungsdialog kann die Reise nach einer ausdrücklichen Bestätigung
+  vollständig aus der App gelöscht werden. Die Bestätigung nennt die Zahl der
+  betroffenen Belege und Abgleiche; Galerieoriginale bleiben erhalten.
 - Die Reihenfolge ist per Drag-and-drop veränderbar. Sortierpositionen werden
   anschließend lückenlos neu vergeben.
 - Der Drag-Griff ist vom Stift für die Reisebearbeitung getrennt, damit
@@ -35,16 +39,19 @@ Stand: 16.08.2026
 
 ## Geld und Rundung
 
-- Version 1 unterstützt EGP und EUR; das Modell ist für weitere ISO-Währungen
-  vorbereitet.
-- Ein Beleg speichert Fremdbetrag, Kurs-Snapshot, exakten Eurobetrag und
-  optionales Trinkgeld.
-- Eine Reise wählt zwischen festem Kurs und täglicher Online-Aktualisierung.
+- Die Einstellungen legen die Heimatwährung für neue Reisen fest. Bestehende
+  Reisen behalten ihre Heimatwährung.
+- Aktuelle ISO-Währungen sind offline nach Kürzel, Name und Land/Region
+  durchsuchbar. Jede Reise enthält die Heimatwährung und beliebig viele weitere
+  Reisewährungen; genau eine ist Standard für neue Belege.
+- Ein Beleg speichert Betrag, Währung, Kurs-Snapshot, exakten Betrag in der
+  Heimatwährung und optionales Trinkgeld mit eigenem Kurs-Snapshot.
+- Jede Reisewährung wählt zwischen festem Kurs und täglicher Online-Aktualisierung.
   Schlägt die Online-Abfrage fehl, bleibt der manuell eingestellte Kurs der
   Offline-Fallback.
-- Exakte Eurobeträge werden kaufmännisch auf Cent gerundet.
+- Exakte Beträge werden kaufmännisch auf die ISO-Minor-Unit der Heimatwährung gerundet.
 - Die prominente Beleganzeige rundet den exakten Gesamtbetrag inklusive
-  Trinkgeld immer nach oben auf volle Euro.
+  Trinkgeld immer nach oben auf volle Haupteinheiten der Heimatwährung.
 - Die prominente Reisesumme addiert zuerst die centgenauen Beträge und rundet
   erst das Ergebnis nach oben.
 

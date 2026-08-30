@@ -125,6 +125,8 @@ import de.shakie.billcheck.data.ReceiptEntity
 import de.shakie.billcheck.data.ReceiptImageStorage
 import de.shakie.billcheck.data.ReceiptWithItems
 import de.shakie.billcheck.data.TripEntity
+import de.shakie.billcheck.data.TripCurrencyEntity
+import de.shakie.billcheck.data.TripCurrencyInput
 import de.shakie.billcheck.data.HybridOcrPageBuilder
 import de.shakie.billcheck.domain.MoneyCalculator
 import de.shakie.billcheck.domain.AiSuggestionCertainty
@@ -153,11 +155,19 @@ import de.shakie.billcheck.ui.AppUpdateStatus
 import de.shakie.billcheck.ui.UpdateManagerDialog
 import de.shakie.billcheck.ui.ReconciliationManagerDialog
 import de.shakie.billcheck.ui.ReconciliationAnalysisState
+import de.shakie.billcheck.ui.CurrencyPickerDialog
+import de.shakie.billcheck.ui.EditableExchangeRateMode
+import de.shakie.billcheck.ui.EditableTripCurrency
+import de.shakie.billcheck.ui.TripCurrencyEditorSection
+import de.shakie.billcheck.ui.TripCurrencySelector
+import de.shakie.billcheck.domain.CurrencyAmount
+import de.shakie.billcheck.domain.CurrencyCatalog
 import de.shakie.billcheck.data.ExportFormat
 import de.shakie.billcheck.data.ImportPreview
 import de.shakie.billcheck.ui.theme.BillCheckTheme
 import androidx.compose.foundation.isSystemInDarkTheme
 import java.math.BigDecimal
+import java.text.DecimalFormatSymbols
 import java.text.NumberFormat
 import java.time.Instant
 import java.time.LocalDate
@@ -244,6 +254,7 @@ private fun BillCheckApp(
     val imageStorage = remember { ReceiptImageStorage(context) }
     var showCreateTrip by remember { mutableStateOf(false) }
     var editingTrip by remember { mutableStateOf<TripEntity?>(null) }
+    var deletingTrip by remember { mutableStateOf<TripEntity?>(null) }
     var showManualReceipt by remember { mutableStateOf(false) }
     var editingReceipt by remember { mutableStateOf<ReceiptWithItems?>(null) }
     var showAppMenu by remember { mutableStateOf(false) }
@@ -404,6 +415,7 @@ private fun BillCheckApp(
                             scope.launch { drawerState.close() }
                         },
                         onEdit = {
+                            viewModel.selectTrip(trip.id)
                             editingTrip = trip
                             scope.launch { drawerState.close() }
                         },
@@ -599,32 +611,51 @@ private fun BillCheckApp(
     if (showCreateTrip) {
         TripEditorDialog(
             suggestedName = stringResource(R.string.trip_default_name),
+            homeCurrencyCode = state.defaultHomeCurrencyCode,
+            recentCurrencyCodes = state.recentCurrencyCodes,
             exchangeRateLookup = exchangeRateLookup,
             onLookupRate = viewModel::requestExchangeRate,
             onDismiss = {
                 showCreateTrip = false
                 viewModel.clearExchangeRateLookup()
             },
-            onSave = { name, currency, rate, useDailyRate, tipMinor, tipCurrency, tipSelected ->
+            onSave = { name, currencies, tipMinor, tipCurrency, tipSelected ->
                 viewModel.createTrip(
-                    name,
-                    currency,
-                    rate,
-                    useDailyRate,
-                    tipMinor,
-                    tipCurrency,
-                    tipSelected,
-                )
-                showCreateTrip = false
-                viewModel.clearExchangeRateLookup()
-                true
+                    name = name,
+                    homeCurrencyCode = state.defaultHomeCurrencyCode,
+                    currencies = currencies,
+                    defaultTipMinor = tipMinor,
+                    defaultTipCurrencyCode = tipCurrency,
+                    defaultTipSelected = tipSelected,
+                ).also { saved ->
+                    if (saved) {
+                        showCreateTrip = false
+                        viewModel.clearExchangeRateLookup()
+                    }
+                }
             },
         )
     }
 
-    editingTrip?.let { trip ->
+    editingTrip?.takeIf { trip ->
+        state.selectedTrip?.id == trip.id &&
+            state.tripCurrencies.isNotEmpty() &&
+            state.tripCurrencies.all { it.tripId == trip.id } &&
+            state.receipts.all { it.receipt.tripId == trip.id } &&
+            state.reconciliations.all { it.reconciliation.tripId == trip.id }
+    }?.let { trip ->
         TripEditorDialog(
             existing = trip,
+            existingCurrencies = state.tripCurrencies,
+            homeCurrencyCode = trip.homeCurrencyCode,
+            recentCurrencyCodes = state.recentCurrencyCodes,
+            usedCurrencyCodes = state.receipts.flatMap {
+                if (it.receipt.tipMinor > 0) {
+                    listOf(it.receipt.currencyCode, it.receipt.tipCurrencyCode)
+                } else {
+                    listOf(it.receipt.currencyCode)
+                }
+            }.toSet(),
             suggestedName = stringResource(R.string.trip_default_name),
             exchangeRateLookup = exchangeRateLookup,
             onLookupRate = viewModel::requestExchangeRate,
@@ -632,13 +663,12 @@ private fun BillCheckApp(
                 editingTrip = null
                 viewModel.clearExchangeRateLookup()
             },
-            onSave = { name, currency, rate, useDailyRate, tipMinor, tipCurrency, tipSelected ->
+            onDeleteRequested = { deletingTrip = trip },
+            onSave = { name, currencies, tipMinor, tipCurrency, tipSelected ->
                 viewModel.updateTrip(
                     existing = trip,
                     name = name,
-                    currencyCode = currency,
-                    exchangeRate = rate,
-                    useDailyRate = useDailyRate,
+                    currencies = currencies,
                     defaultTipMinor = tipMinor,
                     defaultTipCurrencyCode = tipCurrency,
                     defaultTipSelected = tipSelected,
@@ -652,10 +682,47 @@ private fun BillCheckApp(
         )
     }
 
+    deletingTrip?.let { trip ->
+        AlertDialog(
+            onDismissRequest = { deletingTrip = null },
+            title = { Text(stringResource(R.string.delete_trip)) },
+            text = {
+                Text(
+                    stringResource(
+                        R.string.delete_trip_confirm,
+                        trip.name,
+                        state.receipts.size,
+                        state.reconciliations.size,
+                    ),
+                )
+            },
+            dismissButton = {
+                TextButton(onClick = { deletingTrip = null }) {
+                    Text(stringResource(R.string.cancel))
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        viewModel.deleteTrip(trip)
+                        deletingTrip = null
+                        editingTrip = null
+                        viewModel.clearExchangeRateLookup()
+                    },
+                ) {
+                    Text(stringResource(R.string.delete), color = MaterialTheme.colorScheme.error)
+                }
+            },
+        )
+    }
+
     if (showSettings) {
         AppearanceSettingsDialog(
             darkTheme = darkTheme,
             onDarkThemeChange = onDarkThemeChange,
+            homeCurrencyCode = state.defaultHomeCurrencyCode,
+            recentCurrencyCodes = state.recentCurrencyCodes,
+            onHomeCurrencyChange = viewModel::saveHomeCurrency,
             aiSettings = aiSettings,
             geminiModels = geminiModels,
             localAiSettings = localAiSettings,
@@ -732,6 +799,10 @@ private fun BillCheckApp(
         if (showManualReceipt) {
             ReceiptEditorDialog(
                 trip = trip,
+                tripCurrencies = state.tripCurrencies,
+                recentCurrencyCodes = state.recentCurrencyCodes,
+                exchangeRateLookup = exchangeRateLookup,
+                onLookupRate = viewModel::requestExchangeRate,
                 visible = pendingImageUri == null,
                 imageUri = draftReceiptImageUriString,
                 locationSuggestions = state.locationSuggestions,
@@ -765,16 +836,18 @@ private fun BillCheckApp(
                     draftReceiptImageUriString?.let(viewModel::analyzeLocally)
                 },
                 onClearLocalOcr = viewModel::clearLocalOcr,
+                onAddTripCurrency = viewModel::addCurrencyToSelectedTrip,
                 onDismiss = {
                     showManualReceipt = false
                     draftReceiptImageUriString = null
                     viewModel.clearLocalOcr()
                 },
-                onSave = { location, check, amount, occurredOn, tip, itemDrafts ->
+                onSave = { location, check, amount, currency, occurredOn, tip, itemDrafts ->
                     viewModel.addReceipt(
                         location,
                         check,
                         amount,
+                        currency,
                         occurredOn,
                         tip,
                         itemDrafts,
@@ -796,6 +869,10 @@ private fun BillCheckApp(
             } ?: selectedReceipt
             ReceiptEditorDialog(
                 trip = trip,
+                tripCurrencies = state.tripCurrencies,
+                recentCurrencyCodes = state.recentCurrencyCodes,
+                exchangeRateLookup = exchangeRateLookup,
+                onLookupRate = viewModel::requestExchangeRate,
                 existing = existing,
                 visible = pendingImageUri == null,
                 imageUri = existing.receipt.imageUri,
@@ -825,23 +902,25 @@ private fun BillCheckApp(
                 },
                 onAnalyzeImage = {
                     existing.receipt.imageUri?.let {
-                        viewModel.analyzeReceipt(it, existing.receipt.foreignCurrencyCode)
+                        viewModel.analyzeReceipt(it, existing.receipt.currencyCode)
                     }
                 },
                 onAnalyzeLocally = {
                     existing.receipt.imageUri?.let(viewModel::analyzeLocally)
                 },
                 onClearLocalOcr = viewModel::clearLocalOcr,
+                onAddTripCurrency = viewModel::addCurrencyToSelectedTrip,
                 onDismiss = {
                     editingReceipt = null
                     viewModel.clearLocalOcr()
                 },
-                onSave = { location, check, amount, occurredOn, tip, itemDrafts ->
+                onSave = { location, check, amount, currency, occurredOn, tip, itemDrafts ->
                     viewModel.updateReceipt(
                         existing = existing,
                         location = location,
                         checkNumber = check,
-                        foreignAmountText = amount,
+                        amountText = amount,
+                        currencyCode = currency,
                         occurredOnText = occurredOn,
                         addDefaultTip = tip,
                         itemDrafts = itemDrafts,
@@ -888,14 +967,7 @@ private fun BillCheckApp(
                 TextButton(onClick = viewModel::clearAiExtraction) { Text(stringResource(R.string.ok)) }
             },
         )
-        is AiExtractionState.ReceiptSuccess -> AlertDialog(
-            onDismissRequest = {},
-            title = { Text(stringResource(R.string.image_analysis)) },
-            text = { Text(stringResource(R.string.ai_result_ready)) },
-            confirmButton = {
-                TextButton(onClick = viewModel::clearAiExtraction) { Text(stringResource(R.string.ok)) }
-            },
-        )
+        is AiExtractionState.ReceiptSuccess -> Unit
         is AiExtractionState.StatementSuccess -> AlertDialog(
             onDismissRequest = {},
             title = { Text(stringResource(R.string.image_analysis)) },
@@ -927,7 +999,9 @@ private fun BillCheckApp(
                 initialSelectedId = reconciliationReturnId,
                 reconciliations = state.reconciliations,
                 receipts = state.receipts,
-                defaultCurrencyCode = trip.foreignCurrencyCode,
+                defaultCurrencyCode = state.tripCurrencies.firstOrNull { it.isDefault }?.currencyCode
+                    ?: trip.homeCurrencyCode,
+                currencyCodes = state.tripCurrencies.map { it.currencyCode },
                 candidateSelection = candidateSelection,
                 analysisState = reconciliationAnalysis,
                 onDismiss = {
@@ -969,6 +1043,11 @@ private fun BillCheckApp(
                         viewModel.analyzeStatement(reconciliation.reconciliation.id, imageUri)
                     }
                 },
+                homeCurrencyCode = trip.homeCurrencyCode,
+                recentCurrencyCodes = state.recentCurrencyCodes,
+                exchangeRateLookup = exchangeRateLookup,
+                onLookupRate = viewModel::requestExchangeRate,
+                onAddTripCurrency = viewModel::addCurrencyToSelectedTrip,
             )
         }
     }
@@ -1172,6 +1251,9 @@ private fun TransferMessageDialog(title: String, message: String, onDismiss: () 
 private fun AppearanceSettingsDialog(
     darkTheme: Boolean,
     onDarkThemeChange: (Boolean) -> Unit,
+    homeCurrencyCode: String,
+    recentCurrencyCodes: List<String>,
+    onHomeCurrencyChange: (String) -> Unit,
     aiSettings: de.shakie.billcheck.data.AiSettings,
     geminiModels: GeminiModelsState,
     localAiSettings: de.shakie.billcheck.data.LocalAiSettings,
@@ -1197,6 +1279,8 @@ private fun AppearanceSettingsDialog(
         mutableStateOf(localAiSettings.username)
     }
     var localAiCredential by remember { mutableStateOf("") }
+    var selectedHomeCurrency by remember(homeCurrencyCode) { mutableStateOf(homeCurrencyCode) }
+    var showHomeCurrencyPicker by remember { mutableStateOf(false) }
     val uriHandler = LocalUriHandler.current
     Dialog(onDismissRequest = onDismiss) {
         Surface(
@@ -1230,6 +1314,23 @@ private fun AppearanceSettingsDialog(
                 )
                 Text(
                     stringResource(R.string.initial_theme_hint),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                HorizontalDivider(Modifier.padding(vertical = 12.dp))
+                Text(
+                    stringResource(R.string.home_currency),
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                OutlinedButton(
+                    onClick = { showHomeCurrencyPicker = true },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(selectedHomeCurrency)
+                }
+                Text(
+                    stringResource(R.string.home_currency_new_trips_hint),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -1543,12 +1644,26 @@ private fun AppearanceSettingsDialog(
                             localAiUsername,
                             localAiCredential.takeIf(String::isNotBlank),
                         )
+                        onHomeCurrencyChange(selectedHomeCurrency)
                         onDismiss()
                     }) { Text(stringResource(R.string.save)) }
                 }
             }
         }
     }
+    if (showHomeCurrencyPicker) {
+        CurrencyPickerDialog(
+            selectedCurrencyCode = selectedHomeCurrency,
+            preferredCurrencyCodes = listOf(homeCurrencyCode),
+            recentCurrencyCodes = recentCurrencyCodes,
+            onCurrencySelected = {
+                selectedHomeCurrency = it.code
+                showHomeCurrencyPicker = false
+            },
+            onDismiss = { showHomeCurrencyPicker = false },
+        )
+    }
+
 }
 
 @Composable
@@ -1743,7 +1858,13 @@ private fun Dashboard(
             }
         } else {
             items(state.receipts, key = { it.receipt.id }) { receipt ->
-                ReceiptCard(receipt, onDeleteReceipt, onOpenReceiptImage, onEditReceipt)
+                ReceiptCard(
+                    receipt,
+                    state.selectedTrip?.homeCurrencyCode ?: state.defaultHomeCurrencyCode,
+                    onDeleteReceipt,
+                    onOpenReceiptImage,
+                    onEditReceipt,
+                )
             }
         }
     }
@@ -1771,7 +1892,7 @@ private fun Summary(state: MainUiState) {
                 color = MaterialTheme.colorScheme.onPrimaryContainer,
             )
             Text(
-                "${state.roundedEuro} €",
+                "${state.roundedHomeMajor} ${state.selectedTrip?.homeCurrencyCode ?: state.defaultHomeCurrencyCode}",
                 fontSize = 42.sp,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onPrimaryContainer,
@@ -1785,7 +1906,10 @@ private fun Summary(state: MainUiState) {
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 SmallSummary(
                     label = stringResource(R.string.exact_total),
-                    value = formatEuroCents(state.exactEuroCents),
+                    value = formatMinor(
+                        state.exactHomeMinor,
+                        state.selectedTrip?.homeCurrencyCode ?: state.defaultHomeCurrencyCode,
+                    ),
                     modifier = Modifier.weight(1f),
                 )
                 SmallSummary(
@@ -1846,13 +1970,14 @@ private fun ReceiptActions(
 @Composable
 private fun ReceiptCard(
     receiptWithItems: ReceiptWithItems,
+    homeCurrencyCode: String,
     onDelete: (ReceiptEntity) -> Unit,
     onOpenImage: (String) -> Unit,
     onEdit: (ReceiptWithItems) -> Unit,
 ) {
     val receipt = receiptWithItems.receipt
-    val exactCents = MoneyCalculator.exactEuroCents(receipt)
-    val rounded = MoneyCalculator.roundedUpEuro(exactCents)
+    val exactHomeMinor = MoneyCalculator.exactHomeMinor(receipt)
+    val rounded = MoneyCalculator.roundedUpHomeMajor(exactHomeMinor, homeCurrencyCode)
     Card(
         onClick = { onEdit(receiptWithItems) },
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
@@ -1885,18 +2010,38 @@ private fun ReceiptCard(
                 )
                 Spacer(Modifier.height(8.dp))
                 Text(
-                    formatMinor(receipt.foreignAmountMinor, receipt.foreignCurrencyCode),
+                    formatMinor(receipt.amountMinor, receipt.currencyCode),
                     style = MaterialTheme.typography.bodyMedium,
                 )
                 Text(
                     stringResource(
                         R.string.receipt_exchange_rate,
-                        receipt.exchangeRate,
-                        receipt.foreignCurrencyCode,
+                        homeCurrencyCode,
+                        receipt.exchangeRateSnapshot,
+                        receipt.currencyCode,
                     ),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+                if (receipt.tipMinor > 0) {
+                    Text(
+                        stringResource(
+                            R.string.receipt_tip,
+                            formatMinor(receipt.tipMinor, receipt.tipCurrencyCode),
+                        ),
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    Text(
+                        stringResource(
+                            R.string.receipt_exchange_rate,
+                            homeCurrencyCode,
+                            receipt.tipExchangeRateSnapshot,
+                            receipt.tipCurrencyCode,
+                        ),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
                 if (receiptWithItems.items.isNotEmpty()) {
                     Spacer(Modifier.height(10.dp))
                     HorizontalDivider()
@@ -1931,9 +2076,9 @@ private fun ReceiptCard(
                 }
             }
             Column(horizontalAlignment = Alignment.End) {
-                Text("$rounded €", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                Text("$rounded $homeCurrencyCode", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
                 Text(
-                    formatEuroCents(exactCents),
+                    formatMinor(exactHomeMinor, homeCurrencyCode),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -1952,189 +2097,208 @@ private fun ReceiptCard(
 @Composable
 private fun TripEditorDialog(
     existing: TripEntity? = null,
+    existingCurrencies: List<TripCurrencyEntity> = emptyList(),
     suggestedName: String,
+    homeCurrencyCode: String,
+    recentCurrencyCodes: List<String> = emptyList(),
+    usedCurrencyCodes: Set<String> = emptySet(),
     exchangeRateLookup: ExchangeRateLookupState,
-    onLookupRate: (String) -> Unit,
+    onLookupRate: (String, String) -> Unit,
     onDismiss: () -> Unit,
-    onSave: (String, String, String, Boolean, Long, String, Boolean) -> Boolean,
+    onDeleteRequested: (() -> Unit)? = null,
+    onSave: (String, List<TripCurrencyInput>, Long, String, Boolean) -> Boolean,
 ) {
     val stateKey = existing?.id
     var name by remember(stateKey) { mutableStateOf(existing?.name ?: suggestedName) }
-    var currency by remember(stateKey) { mutableStateOf(existing?.foreignCurrencyCode ?: "EGP") }
-    var rate by remember(stateKey) { mutableStateOf(existing?.defaultExchangeRate ?: "55,5") }
-    var tip by remember(stateKey) {
-        mutableStateOf(existing?.defaultTipMinor?.let(::formatInputMinor) ?: "1,00")
+    var currencies by remember(stateKey, existingCurrencies) {
+        mutableStateOf(
+            existingCurrencies.map {
+                EditableTripCurrency(
+                    code = it.currencyCode,
+                    rate = it.homeToCurrencyRate,
+                    mode = if (it.exchangeRateMode == "DAILY") {
+                        EditableExchangeRateMode.DAILY
+                    } else {
+                        EditableExchangeRateMode.FIXED
+                    },
+                    isDefault = it.isDefault,
+                )
+            }.ifEmpty {
+                listOf(
+                    EditableTripCurrency(
+                        code = homeCurrencyCode,
+                        rate = "1",
+                        mode = EditableExchangeRateMode.FIXED,
+                        isDefault = true,
+                    ),
+                )
+            },
+        )
     }
     var tipCurrency by remember(stateKey) {
-        mutableStateOf(existing?.defaultTipCurrencyCode ?: "EUR")
+        mutableStateOf(existing?.defaultTipCurrencyCode ?: homeCurrencyCode)
+    }
+    var tip by remember(stateKey) {
+        mutableStateOf(
+            existing?.defaultTipMinor?.let { formatInputMinor(it, tipCurrency) }
+                ?: formatInputMinor(CurrencyAmount.minorFactor(tipCurrency).longValueExact(), tipCurrency),
+        )
     }
     var tipSelected by remember(stateKey) {
         mutableStateOf(existing?.defaultTipSelected ?: false)
     }
-    var rateWasEdited by remember(stateKey) { mutableStateOf(false) }
-    var useDailyRate by remember(stateKey) {
-        mutableStateOf(existing?.exchangeRateMode == "DAILY")
-    }
-    var previousCurrency by remember(stateKey) { mutableStateOf(currency) }
+    var invalidTip by remember(stateKey) { mutableStateOf(false) }
     var invalidRate by remember(stateKey) { mutableStateOf(false) }
     val uriHandler = LocalUriHandler.current
 
-    LaunchedEffect(currency) {
-        if (currency.length == 3 && (existing == null || currency != previousCurrency)) {
-            rateWasEdited = false
-            delay(500)
-            onLookupRate(currency)
-        }
-        previousCurrency = currency
-    }
     LaunchedEffect(exchangeRateLookup) {
         val success = exchangeRateLookup as? ExchangeRateLookupState.Success
-        if (success?.quote?.targetCurrencyCode == currency && !rateWasEdited) {
-            rate = success.quote.foreignPerEuro
+        if (success?.quote?.baseCurrencyCode == homeCurrencyCode) {
+            currencies = currencies.map { currency ->
+                if (currency.code == success.quote.targetCurrencyCode) {
+                    currency.copy(rate = success.quote.targetUnitsPerBase)
+                } else {
+                    currency
+                }
+            }
         }
     }
 
     ScrollableEditorDialog(
         title = stringResource(if (existing == null) R.string.create_trip else R.string.edit_trip),
         onDismiss = onDismiss,
+        destructiveAction = onDeleteRequested?.let { requestDelete ->
+            {
+                TextButton(onClick = requestDelete) {
+                    Icon(Icons.Default.DeleteOutline, contentDescription = null)
+                    Spacer(Modifier.width(6.dp))
+                    Text(
+                        stringResource(R.string.delete_trip),
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+            }
+        },
         onSave = {
+            val parsedTip = MainViewModel.parseMinor(tip, tipCurrency)
+            if (parsedTip == null) {
+                invalidTip = true
+                return@ScrollableEditorDialog
+            }
             val saved = onSave(
                 name,
-                currency.ifBlank { "EGP" },
-                rate,
-                useDailyRate,
-                MainViewModel.parseMinor(tip) ?: 100,
-                tipCurrency.ifBlank { "EUR" },
+                currencies.map {
+                    TripCurrencyInput(
+                        currencyCode = it.code,
+                        homeToCurrencyRate = it.rate,
+                        exchangeRateMode = it.mode.name,
+                        isDefault = it.isDefault,
+                    )
+                },
+                parsedTip,
+                tipCurrency,
                 tipSelected,
             )
             invalidRate = !saved
         },
     ) {
-                OutlinedTextField(name, { name = it }, label = { Text(stringResource(R.string.trip_name)) })
-                OutlinedTextField(currency, { currency = it.uppercase().take(3) }, label = { Text(stringResource(R.string.foreign_currency)) })
-                OutlinedTextField(
-                    rate,
-                    {
-                        rate = it
-                        rateWasEdited = true
-                        invalidRate = false
-                    },
-                    label = { Text(stringResource(R.string.exchange_rate)) },
-                    placeholder = { Text(stringResource(R.string.rate_example)) },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                    isError = invalidRate,
-                    trailingIcon = {
-                        if (exchangeRateLookup is ExchangeRateLookupState.Loading &&
-                            exchangeRateLookup.target == currency
-                        ) {
-                            CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp)
-                        } else {
-                            IconButton(onClick = { onLookupRate(currency) }) {
-                                Icon(
-                                    Icons.Default.Refresh,
-                                    contentDescription = stringResource(R.string.refresh_rate),
-                                )
-                            }
-                        }
-                    },
-                    supportingText = {
-                        when (exchangeRateLookup) {
-                            is ExchangeRateLookupState.Success -> if (
-                                exchangeRateLookup.quote.targetCurrencyCode == currency
-                            ) {
-                                Text(
-                                    stringResource(
-                                        if (exchangeRateLookup.quote.fromCache) {
-                                            R.string.exchange_rate_cached
-                                        } else {
-                                            R.string.exchange_rate_updated
-                                        },
-                                        formatRateDate(exchangeRateLookup.quote.updatedAt),
-                                    ),
-                                )
-                            }
-                            is ExchangeRateLookupState.Error -> if (
-                                exchangeRateLookup.target == currency
-                            ) {
-                                Text(
-                                    stringResource(R.string.rate_lookup_failed),
-                                    color = MaterialTheme.colorScheme.error,
-                                )
-                            }
-                            else -> Unit
-                        }
-                    },
+        OutlinedTextField(
+            name,
+            { name = it },
+            label = { Text(stringResource(R.string.trip_name)) },
+            modifier = Modifier.fillMaxWidth(),
+        )
+        TripCurrencyEditorSection(
+            homeCurrencyCode = homeCurrencyCode,
+            currencies = currencies,
+            tipCurrencyCode = tipCurrency,
+            usedCurrencyCodes = usedCurrencyCodes,
+            recentCurrencyCodes = recentCurrencyCodes,
+            onRateChange = { code, value ->
+                currencies = currencies.map { if (it.code == code) it.copy(rate = value) else it }
+                invalidRate = false
+            },
+            onModeChange = { code, mode ->
+                currencies = currencies.map { if (it.code == code) it.copy(mode = mode) else it }
+            },
+            onSetDefault = { code ->
+                currencies = currencies.map { it.copy(isDefault = it.code == code) }
+            },
+            onDelete = { code -> currencies = currencies.filterNot { it.code == code } },
+            onAdd = { entry ->
+                currencies = currencies + EditableTripCurrency(
+                    code = entry.code,
+                    rate = "",
+                    mode = EditableExchangeRateMode.FIXED,
+                    isDefault = false,
                 )
-                TextButton(
-                    onClick = { uriHandler.openUri("https://www.exchangerate-api.com") },
-                    contentPadding = PaddingValues(0.dp),
-                ) {
-                    Text(
-                        stringResource(R.string.rate_attribution),
-                        style = MaterialTheme.typography.labelSmall,
-                    )
-                }
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(16.dp))
-                        .clickable { useDailyRate = !useDailyRate }
-                        .padding(10.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Column(Modifier.weight(1f)) {
-                        Text(stringResource(R.string.daily_exchange_rate))
-                        Text(
-                            stringResource(R.string.daily_exchange_rate_hint),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text(
-                            stringResource(if (useDailyRate) R.string.switch_on else R.string.switch_off),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.primary,
-                        )
-                        Switch(
-                            checked = useDailyRate,
-                            onCheckedChange = null,
-                            colors = SwitchDefaults.colors(
-                                uncheckedThumbColor = MaterialTheme.colorScheme.primary,
-                                uncheckedTrackColor = MaterialTheme.colorScheme.surfaceVariant,
-                                uncheckedBorderColor = MaterialTheme.colorScheme.primary,
-                            ),
-                        )
-                    }
-                }
-                OutlinedTextField(
-                    tip,
-                    { tip = it },
-                    label = { Text(stringResource(R.string.default_tip)) },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                onLookupRate(homeCurrencyCode, entry.code)
+            },
+            onRefreshRate = { code -> onLookupRate(homeCurrencyCode, code) },
+        )
+        TextButton(
+            onClick = { uriHandler.openUri("https://www.exchangerate-api.com") },
+            contentPadding = PaddingValues(0.dp),
+        ) {
+            Text(stringResource(R.string.rate_attribution), style = MaterialTheme.typography.labelSmall)
+        }
+        if (invalidRate) {
+            Text(stringResource(R.string.invalid_amount), color = MaterialTheme.colorScheme.error)
+        }
+        HorizontalDivider(Modifier.padding(vertical = 6.dp))
+        Text(stringResource(R.string.default_tip), style = MaterialTheme.typography.titleMedium)
+        OutlinedTextField(
+            tip,
+            {
+                tip = it
+                invalidTip = false
+            },
+            label = { Text(stringResource(R.string.default_tip)) },
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+            isError = invalidTip,
+            supportingText = if (invalidTip) {
+                { Text(stringResource(R.string.invalid_amount)) }
+            } else null,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        TripCurrencySelector(
+            selectedCurrencyCode = tipCurrency,
+            currencyCodes = currencies.map { it.code },
+            onCurrencySelected = {
+                tip = tip.trim().replace(',', '.').toBigDecimalOrNull()
+                    ?.stripTrailingZeros()?.toPlainString() ?: tip
+                tipCurrency = it
+                invalidTip = MainViewModel.parseMinor(tip, it) == null
+            },
+            onAddCurrencyRequested = {},
+            label = stringResource(R.string.tip_currency),
+            showAddCurrencyOption = false,
+        )
+        Row(
+            modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp))
+                .clickable { tipSelected = !tipSelected }.padding(10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text(stringResource(R.string.default_tip_preselected))
+                Text(
+                    stringResource(R.string.default_tip_preselected_hint),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                OutlinedTextField(tipCurrency, { tipCurrency = it.uppercase().take(3) }, label = { Text(stringResource(R.string.tip_currency)) })
-                Row(
-                    modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp))
-                        .clickable { tipSelected = !tipSelected }.padding(10.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Column(Modifier.weight(1f)) {
-                        Text(stringResource(R.string.default_tip_preselected))
-                        Text(
-                            stringResource(R.string.default_tip_preselected_hint),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                    Switch(checked = tipSelected, onCheckedChange = null)
-                }
+            }
+            Switch(checked = tipSelected, onCheckedChange = null)
+        }
     }
 }
 
 @Composable
 private fun ReceiptEditorDialog(
     trip: TripEntity,
+    tripCurrencies: List<TripCurrencyEntity>,
+    recentCurrencyCodes: List<String>,
+    exchangeRateLookup: ExchangeRateLookupState,
+    onLookupRate: (String, String) -> Unit,
     existing: ReceiptWithItems? = null,
     visible: Boolean = true,
     imageUri: String? = null,
@@ -2149,18 +2313,25 @@ private fun ReceiptEditorDialog(
     onAnalyzeImage: () -> Unit,
     onAnalyzeLocally: () -> Unit,
     onClearLocalOcr: () -> Unit,
+    onAddTripCurrency: (String, String, Boolean) -> Boolean,
     onDismiss: () -> Unit,
-    onSave: (String, String, String, String, Boolean, List<ReceiptItemDraft>) -> Boolean,
+    onSave: (String, String, String, String, String, Boolean, List<ReceiptItemDraft>) -> Boolean,
 ) {
     val stateKey = existing?.receipt?.id
-    val receiptCurrencyCode = existing?.receipt?.foreignCurrencyCode ?: trip.foreignCurrencyCode
+    val defaultCurrencyCode = tripCurrencies.firstOrNull { it.isDefault }?.currencyCode
+        ?: trip.homeCurrencyCode
+    var receiptCurrencyCode by remember(stateKey) {
+        mutableStateOf(existing?.receipt?.currencyCode ?: defaultCurrencyCode)
+    }
     val existingTip = existing?.receipt?.takeIf { it.tipMinor > 0 }
     val tipPreviewMinor = existingTip?.tipMinor ?: trip.defaultTipMinor
     val tipPreviewCurrencyCode = existingTip?.tipCurrencyCode ?: trip.defaultTipCurrencyCode
     var location by remember(stateKey) { mutableStateOf(existing?.receipt?.location.orEmpty()) }
     var check by remember(stateKey) { mutableStateOf(existing?.receipt?.checkNumber.orEmpty()) }
     var amount by remember(stateKey) {
-        mutableStateOf(existing?.receipt?.foreignAmountMinor?.let(::formatInputMinor).orEmpty())
+        mutableStateOf(
+            existing?.receipt?.amountMinor?.let { formatInputMinor(it, receiptCurrencyCode) }.orEmpty(),
+        )
     }
     var occurredOn by remember(stateKey) {
         mutableStateOf(
@@ -2185,16 +2356,26 @@ private fun ReceiptEditorDialog(
             EditableReceiptItem(
                 id = index.toLong(),
                 name = item.name,
-                amountText = formatInputMinor(item.amountMinor),
+                amountText = formatInputMinor(item.amountMinor, receiptCurrencyCode),
             )
         }
         .orEmpty()
         .ifEmpty { listOf(EditableReceiptItem(id = 0)) }
     var nextItemId by remember(stateKey) { mutableStateOf(initialItems.size.toLong()) }
     var items by remember(stateKey) { mutableStateOf(initialItems) }
-    val itemSumMinor = items.mapNotNull { MainViewModel.parseMinor(it.amountText) }.sum()
-    val receiptMinor = MainViewModel.parseMinor(amount)
+    val itemSumMinor = items.mapNotNull {
+        MainViewModel.parseMinor(it.amountText, receiptCurrencyCode)
+    }.sum()
+    val receiptMinor = MainViewModel.parseMinor(amount, receiptCurrencyCode)
+    var showCurrencyPicker by remember(stateKey) { mutableStateOf(false) }
+    var pendingNewCurrencyCode by remember(stateKey) { mutableStateOf<String?>(null) }
+    var pendingCurrencyRate by remember(stateKey) { mutableStateOf("") }
+    var pendingCurrencyDaily by remember(stateKey) { mutableStateOf(false) }
+    var pendingCurrencyRateInvalid by remember(stateKey) { mutableStateOf(false) }
     var retainedExtractedReceipt by remember(stateKey, imageUri) {
+        mutableStateOf<ExtractedReceipt?>(null)
+    }
+    var pendingCurrencyExtraction by remember(stateKey, imageUri) {
         mutableStateOf<ExtractedReceipt?>(null)
     }
     val incomingExtractedReceipt = (aiExtraction as? AiExtractionState.ReceiptSuccess)
@@ -2220,9 +2401,34 @@ private fun ReceiptEditorDialog(
         location = location,
         checkNumber = check,
         amountText = amount,
+        currencyCode = receiptCurrencyCode,
         occurredOn = occurredOn,
         items = items.map { it.name to it.amountText },
     )
+    fun applyExtractedReceipt(extracted: ExtractedReceipt) {
+        location = extracted.location
+        check = extracted.checkNumber
+        amount = extracted.totalAmountText
+        extracted.occurredOn.takeIf(String::isNotBlank)?.let { extractedDate ->
+            occurredOn = normalizeEditorDate(extractedDate) ?: occurredOn
+        }
+        if (extracted.items.isNotEmpty()) {
+            items = extracted.items.mapIndexed { index, item ->
+                EditableReceiptItem(
+                    id = index.toLong(),
+                    name = formatExtractedItemName(item.quantityText, item.name),
+                    amountText = item.amountText,
+                    aiSourceIndex = index,
+                    nameAiSuggestions = itemNameAiSuggestions(item),
+                    amountAiSuggestions = item.amountSuggestions.toEditorSuggestions(),
+                )
+            }
+            nextItemId = items.size.toLong()
+        }
+        invalidAmount = false
+        invalidDate = false
+        aiResultConflicted = false
+    }
 
     LaunchedEffect(localOcr, openTextSelectionWhenReady) {
         when {
@@ -2247,29 +2453,33 @@ private fun ReceiptEditorDialog(
         analysisBaseline = null
         aiResultConflicted = !mayApplyAutomatically
         if (!mayApplyAutomatically) return@LaunchedEffect
-        location = extracted.location
-        check = extracted.checkNumber
-        amount = extracted.totalAmountText
-        extracted.occurredOn.takeIf(String::isNotBlank)?.let { extractedDate ->
-            occurredOn = normalizeEditorDate(extractedDate) ?: occurredOn
-        }
-        if (extracted.items.isNotEmpty()) {
-            items = extracted.items.mapIndexed { index, item ->
-                val displayedName = formatExtractedItemName(item.quantityText, item.name)
-                EditableReceiptItem(
-                    id = index.toLong(),
-                    name = displayedName,
-                    amountText = item.amountText,
-                    aiSourceIndex = index,
-                    nameAiSuggestions = itemNameAiSuggestions(item),
-                    amountAiSuggestions = item.amountSuggestions.toEditorSuggestions(),
-                )
+        val supportedCurrencyCodes = CurrencyCatalog.entries(Locale.ROOT).mapTo(hashSetOf()) { it.code }
+        val detectedCode = extracted.currencyCode.trim().uppercase(Locale.ROOT)
+        when {
+            detectedCode.isBlank() -> applyExtractedReceipt(extracted)
+            detectedCode !in supportedCurrencyCodes -> aiResultConflicted = true
+            tripCurrencies.any { it.currencyCode == detectedCode } -> {
+                receiptCurrencyCode = detectedCode
+                applyExtractedReceipt(extracted)
             }
-            nextItemId = items.size.toLong()
+            else -> {
+                pendingCurrencyExtraction = extracted
+                pendingNewCurrencyCode = detectedCode
+                pendingCurrencyRate = ""
+                pendingCurrencyDaily = false
+                onLookupRate(trip.homeCurrencyCode, detectedCode)
+            }
         }
-        invalidAmount = false
-        invalidDate = false
-        aiResultConflicted = false
+    }
+
+    LaunchedEffect(exchangeRateLookup, pendingNewCurrencyCode) {
+        val success = exchangeRateLookup as? ExchangeRateLookupState.Success ?: return@LaunchedEffect
+        if (success.quote.baseCurrencyCode == trip.homeCurrencyCode &&
+            success.quote.targetCurrencyCode == pendingNewCurrencyCode
+        ) {
+            pendingCurrencyRate = success.quote.targetUnitsPerBase
+            pendingCurrencyRateInvalid = false
+        }
     }
 
     if (!visible) return
@@ -2284,6 +2494,7 @@ private fun ReceiptEditorDialog(
                 location,
                 check,
                 amount,
+                receiptCurrencyCode,
                 occurredOn,
                 addTip,
                 items.map { ReceiptItemDraft(it.name, it.amountText) },
@@ -2338,6 +2549,25 @@ private fun ReceiptEditorDialog(
                         },
                         onDismiss = { aiResultConflicted = false },
                     )
+                } else if (aiResultConflicted) {
+                    Card(
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                        ),
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                stringResource(R.string.ai_result_review_required),
+                                modifier = Modifier.weight(1f),
+                            )
+                            TextButton(onClick = { aiResultConflicted = false }) {
+                                Text(stringResource(R.string.close))
+                            }
+                        }
+                    }
                 }
                 ImageTextTarget(
                     pendingText = pendingImageText,
@@ -2420,11 +2650,23 @@ private fun ReceiptEditorDialog(
                         invalidDate = false
                     },
                 )
+                TripCurrencySelector(
+                    selectedCurrencyCode = receiptCurrencyCode,
+                    currencyCodes = tripCurrencies.map { it.currencyCode },
+                    onCurrencySelected = { selected ->
+                        receiptCurrencyCode = selected
+                        invalidAmount = false
+                    },
+                    onAddCurrencyRequested = {
+                        pendingCurrencyExtraction = null
+                        showCurrencyPicker = true
+                    },
+                )
                 ImageTextTarget(
                     pendingText = pendingImageText,
                     fieldLabel = stringResource(R.string.amount_in_currency, receiptCurrencyCode),
                     onApply = {
-                        amount = normalizeOcrAmount(it)
+                        amount = CurrencyAmount.normalizeOcrMajorText(it, receiptCurrencyCode)
                         invalidAmount = false
                         pendingImageText = null
                     },
@@ -2436,7 +2678,7 @@ private fun ReceiptEditorDialog(
                             invalidAmount = false
                         },
                         label = { Text(stringResource(R.string.amount_in_currency, receiptCurrencyCode)) },
-                        placeholder = { Text(stringResource(R.string.amount_example)) },
+                        placeholder = { Text(amountInputPlaceholder(receiptCurrencyCode)) },
                         isError = invalidAmount,
                         supportingText = if (invalidAmount) {
                             { Text(stringResource(R.string.invalid_amount)) }
@@ -2522,7 +2764,12 @@ private fun ReceiptEditorDialog(
                                 fieldLabel = stringResource(R.string.item_amount_with_number, index + 1),
                                 onApply = { selected ->
                                     items = items.toMutableList().also {
-                                        it[index] = item.copy(amountText = normalizeOcrAmount(selected))
+                                        it[index] = item.copy(
+                                            amountText = CurrencyAmount.normalizeOcrMajorText(
+                                                selected,
+                                                receiptCurrencyCode,
+                                            ),
+                                        )
                                     }
                                     invalidAmount = false
                                     pendingImageText = null
@@ -2631,6 +2878,90 @@ private fun ReceiptEditorDialog(
                 showTextSelection = false
             },
             onDismiss = { showTextSelection = false },
+        )
+    }
+    if (showCurrencyPicker) {
+        CurrencyPickerDialog(
+            selectedCurrencyCode = receiptCurrencyCode,
+            preferredCurrencyCodes = tripCurrencies.map { it.currencyCode },
+            recentCurrencyCodes = recentCurrencyCodes,
+            excludedCurrencyCodes = tripCurrencies.mapTo(hashSetOf()) { it.currencyCode },
+            onCurrencySelected = { entry ->
+                showCurrencyPicker = false
+                pendingNewCurrencyCode = entry.code
+                pendingCurrencyRate = ""
+                pendingCurrencyDaily = false
+                pendingCurrencyRateInvalid = false
+                onLookupRate(trip.homeCurrencyCode, entry.code)
+            },
+            onDismiss = { showCurrencyPicker = false },
+        )
+    }
+    pendingNewCurrencyCode?.let { newCode ->
+        AlertDialog(
+            onDismissRequest = {
+                if (pendingCurrencyExtraction != null) aiResultConflicted = true
+                pendingCurrencyExtraction = null
+                pendingNewCurrencyCode = null
+            },
+            title = { Text(stringResource(R.string.trip_currency_add_other)) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(stringResource(R.string.trip_currency_rate_formula, trip.homeCurrencyCode, newCode))
+                    OutlinedTextField(
+                        value = pendingCurrencyRate,
+                        onValueChange = {
+                            pendingCurrencyRate = it
+                            pendingCurrencyRateInvalid = false
+                        },
+                        isError = pendingCurrencyRateInvalid,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        singleLine = true,
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth().clickable {
+                            pendingCurrencyDaily = !pendingCurrencyDaily
+                        },
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(stringResource(R.string.daily_exchange_rate), modifier = Modifier.weight(1f))
+                        Switch(checked = pendingCurrencyDaily, onCheckedChange = null)
+                    }
+                    if (exchangeRateLookup is ExchangeRateLookupState.Error &&
+                        exchangeRateLookup.target == newCode
+                    ) {
+                        Text(
+                            stringResource(R.string.rate_lookup_failed),
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    if (pendingCurrencyExtraction != null) aiResultConflicted = true
+                    pendingCurrencyExtraction = null
+                    pendingNewCurrencyCode = null
+                }) {
+                    Text(stringResource(R.string.cancel))
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    val validRate = pendingCurrencyRate.trim().replace(',', '.')
+                        .toBigDecimalOrNull()?.takeIf { it > BigDecimal.ZERO }
+                        ?.stripTrailingZeros()?.toPlainString()
+                    if (validRate == null) {
+                        pendingCurrencyRateInvalid = true
+                    } else if (onAddTripCurrency(newCode, validRate, pendingCurrencyDaily)) {
+                        receiptCurrencyCode = newCode
+                        pendingCurrencyExtraction?.let(::applyExtractedReceipt)
+                        pendingCurrencyExtraction = null
+                        pendingNewCurrencyCode = null
+                    }
+                }) { Text(stringResource(R.string.trip_currency_add)) }
+            },
         )
     }
 }
@@ -3051,6 +3382,7 @@ private fun ScrollableEditorDialog(
     title: String,
     onDismiss: () -> Unit,
     onSave: () -> Unit,
+    destructiveAction: (@Composable () -> Unit)? = null,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     Dialog(onDismissRequest = onDismiss) {
@@ -3081,6 +3413,10 @@ private fun ScrollableEditorDialog(
                     horizontalArrangement = Arrangement.End,
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
+                    destructiveAction?.let { action ->
+                        action()
+                        Spacer(Modifier.weight(1f))
+                    }
                     TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
                     TextButton(onClick = onSave) { Text(stringResource(R.string.save)) }
                 }
@@ -3102,6 +3438,7 @@ private data class ReceiptEditorBaseline(
     val location: String,
     val checkNumber: String,
     val amountText: String,
+    val currencyCode: String,
     val occurredOn: String,
     val items: List<Pair<String, String>>,
 )
@@ -3175,11 +3512,17 @@ internal fun formatExtractedItemName(quantityText: String, name: String): String
     }
 }
 
-private fun formatEuroCents(cents: Long): String = formatMinor(cents, "EUR")
-
-private fun formatInputMinor(minor: Long): String = BigDecimal.valueOf(minor, 2)
+private fun formatInputMinor(minor: Long, currencyCode: String): String = BigDecimal.valueOf(minor)
+    .movePointLeft(CurrencyAmount.fractionDigits(currencyCode))
     .stripTrailingZeros()
     .toPlainString()
+
+private fun amountInputPlaceholder(currencyCode: String): String {
+    val fractionDigits = CurrencyAmount.fractionDigits(currencyCode)
+    if (fractionDigits == 0) return "0"
+    val separator = DecimalFormatSymbols.getInstance(Locale.getDefault()).decimalSeparator
+    return "0$separator${"0".repeat(fractionDigits)}"
+}
 
 private val editorDateFormatter: DateTimeFormatter = DateTimeFormatter.ofPattern("dd.MM.uuuu")
 
@@ -3192,11 +3535,8 @@ private fun normalizeEditorDate(value: String): String? = runCatching {
     LocalDate.parse(value.trim(), DateTimeFormatter.ISO_LOCAL_DATE).format(editorDateFormatter)
 }.getOrNull()
 
-private fun formatMinor(minor: Long, currencyCode: String): String = runCatching {
-    NumberFormat.getCurrencyInstance().apply {
-        currency = Currency.getInstance(currencyCode)
-    }.format(BigDecimal.valueOf(minor, 2))
-}.getOrElse { "${BigDecimal.valueOf(minor, 2)} $currencyCode" }
+private fun formatMinor(minor: Long, currencyCode: String): String =
+    CurrencyAmount.formatMinor(minor, currencyCode)
 
 private fun formatDate(epochMillis: Long): String = DateTimeFormatter
     .ofPattern("dd.MM., HH:mm", Locale.getDefault())
@@ -3210,18 +3550,6 @@ private fun formatRateDate(epochMillis: Long): String = DateTimeFormatter
 
 private fun appendToken(existing: String, token: String): String =
     listOf(existing.trim(), token.trim()).filter(String::isNotEmpty).joinToString(" ")
-
-private fun normalizeOcrAmount(token: String): String {
-    val candidate = token.filter { it.isDigit() || it == ',' || it == '.' }
-    if (candidate.isEmpty()) return token
-    val lastComma = candidate.lastIndexOf(',')
-    val lastDot = candidate.lastIndexOf('.')
-    val decimalIndex = maxOf(lastComma, lastDot)
-    if (decimalIndex < 0) return candidate
-    val whole = candidate.substring(0, decimalIndex).filter(Char::isDigit).ifBlank { "0" }
-    val decimals = candidate.substring(decimalIndex + 1).filter(Char::isDigit)
-    return if (decimals.length in 1..2) "$whole.$decimals" else candidate.filter(Char::isDigit)
-}
 
 private fun formatTokenLimit(value: Int): String = when {
     value >= 1_000_000 -> "${value / 1_000_000}M"

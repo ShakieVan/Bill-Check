@@ -13,6 +13,8 @@ Fehlschläge dauerhaft außerhalb einzelner Chats fest.
   verbindliche Plattform- und Datenbasis
 - [`decisions/exchange-rate-provider.md`](decisions/exchange-rate-provider.md):
   Online-Kursquelle, Tagescache und Offline-Fallback
+- [`decisions/multi-currency-model.md`](decisions/multi-currency-model.md):
+  Heimatwährung, mehrere Reisewährungen und getrennte Kurs-Snapshots
 - [`decisions/receipt-image-storage.md`](decisions/receipt-image-storage.md):
   Kamera, Photo Picker und getrennte Lebenszyklen von Galerie und App-Datensatz
 - [`decisions/reconciliation-matching.md`](decisions/reconciliation-matching.md):

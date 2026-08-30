@@ -1,7 +1,7 @@
 package de.shakie.billcheck.data
 
 data class TransferPackage(
-    val formatVersion: Int = 1,
+    val formatVersion: Int = 2,
     val exportedAt: Long,
     val trips: List<TransferTrip>,
 )
@@ -9,16 +9,22 @@ data class TransferPackage(
 data class TransferTrip(
     val id: String,
     val name: String,
-    val foreignCurrencyCode: String,
-    val defaultExchangeRate: String,
-    val exchangeRateMode: String,
+    val homeCurrencyCode: String,
     val defaultTipMinor: Long,
     val defaultTipCurrencyCode: String,
     val defaultTipSelected: Boolean,
     val imageStorageMode: String,
     val createdAt: Long,
+    val currencies: List<TransferTripCurrency>,
     val receipts: List<TransferReceipt>,
     val reconciliations: List<TransferReconciliation>,
+)
+
+data class TransferTripCurrency(
+    val currencyCode: String,
+    val homeToCurrencyRate: String,
+    val exchangeRateMode: String,
+    val isDefault: Boolean,
 )
 
 data class TransferReceipt(
@@ -26,12 +32,13 @@ data class TransferReceipt(
     val occurredAt: Long,
     val location: String,
     val checkNumber: String,
-    val foreignAmountMinor: Long,
-    val foreignCurrencyCode: String,
-    val exchangeRate: String,
-    val exactEuroCents: Long,
+    val amountMinor: Long,
+    val currencyCode: String,
+    val exchangeRateSnapshot: String,
+    val exactHomeMinor: Long,
     val tipMinor: Long,
     val tipCurrencyCode: String,
+    val tipExchangeRateSnapshot: String,
     val imageEntry: String?,
     val imageMimeType: String?,
     val reviewState: String,

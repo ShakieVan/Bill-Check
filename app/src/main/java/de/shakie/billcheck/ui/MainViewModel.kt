@@ -13,8 +13,12 @@ import de.shakie.billcheck.data.ReceiptWithItems
 import de.shakie.billcheck.data.ReconciliationWithLines
 import de.shakie.billcheck.data.StatementLineEntity
 import de.shakie.billcheck.data.TripEntity
+import de.shakie.billcheck.data.TripCurrencyEntity
+import de.shakie.billcheck.data.TripCurrencyInput
 import de.shakie.billcheck.data.NewStatementLine
 import de.shakie.billcheck.domain.MoneyCalculator
+import de.shakie.billcheck.domain.CurrencyAmount
+import de.shakie.billcheck.domain.CurrencyCatalog
 import de.shakie.billcheck.domain.ExchangeRateQuote
 import de.shakie.billcheck.domain.RankedReceiptCandidate
 import de.shakie.billcheck.domain.AiDocumentType
@@ -35,7 +39,6 @@ import de.shakie.billcheck.BillCheckWidget
 import de.shakie.billcheck.update.UpdateCheckStatus
 import de.shakie.billcheck.update.UpdateRelease
 import java.math.BigDecimal
-import java.math.RoundingMode
 import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -78,8 +81,11 @@ data class MainUiState(
     val trips: List<TripEntity> = emptyList(),
     val selectedTrip: TripEntity? = null,
     val receipts: List<ReceiptWithItems> = emptyList(),
-    val exactEuroCents: Long = 0,
-    val roundedEuro: Long = 0,
+    val tripCurrencies: List<TripCurrencyEntity> = emptyList(),
+    val exactHomeMinor: Long = 0,
+    val roundedHomeMajor: Long = 0,
+    val defaultHomeCurrencyCode: String = "EUR",
+    val recentCurrencyCodes: List<String> = emptyList(),
     val locationSuggestions: List<String> = emptyList(),
     val itemNameSuggestions: List<String> = emptyList(),
     val reconciliations: List<ReconciliationWithLines> = emptyList(),
@@ -110,6 +116,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val localAiConnectionTester = billCheckApplication.localAiConnectionTester
     private val dataTransferManager = billCheckApplication.dataTransferManager
     private val appUpdateManager = billCheckApplication.appUpdateManager
+    private val homeCurrencySettingsStore = billCheckApplication.homeCurrencySettingsStore
     private val widgetPreferences = application.getSharedPreferences(
         BillCheckWidget.SELECTED_TRIP_PREFERENCES,
         Context.MODE_PRIVATE,
@@ -140,6 +147,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _appUpdate = MutableStateFlow(AppUpdateState())
     val appUpdate = _appUpdate.asStateFlow()
     private var updateDownloadJob: Job? = null
+    private val currencyPreferences = MutableStateFlow(
+        CurrencyPreferences(
+            homeCurrencyCode = homeCurrencySettingsStore.read(),
+            recentCurrencyCodes = homeCurrencySettingsStore.recentCurrencyCodes(),
+        ),
+    )
 
     private val trips = repository.trips.stateIn(
         viewModelScope,
@@ -155,6 +168,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         trip?.let { repository.receipts(it.id) } ?: flowOf(emptyList())
     }
 
+    private val tripCurrencies = selectedTrip.flatMapLatest { trip ->
+        trip?.let { repository.tripCurrencies(it.id) } ?: flowOf(emptyList())
+    }
+
     private val textSuggestions = selectedTrip.flatMapLatest { trip ->
         trip?.let {
             combine(
@@ -168,22 +185,33 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         trip?.let { repository.reconciliations(it.id) } ?: flowOf(emptyList())
     }
 
-    val uiState = combine(
+    private val uiCore = combine(
         trips,
         selectedTrip,
         receipts,
         textSuggestions,
         reconciliations,
     ) { currentTrips, currentTrip, currentReceipts, suggestions, currentReconciliations ->
+        MainUiCore(currentTrips, currentTrip, currentReceipts, suggestions, currentReconciliations)
+    }
+
+    val uiState = combine(uiCore, tripCurrencies, currencyPreferences) { core, currencies, preferences ->
+        val homeCode = core.selectedTrip?.homeCurrencyCode ?: preferences.homeCurrencyCode
         MainUiState(
-            trips = currentTrips,
-            selectedTrip = currentTrip,
-            receipts = currentReceipts,
-            exactEuroCents = MoneyCalculator.exactTripEuroCents(currentReceipts.map { it.receipt }),
-            roundedEuro = MoneyCalculator.roundedUpTripEuro(currentReceipts.map { it.receipt }),
-            locationSuggestions = suggestions.locations,
-            itemNameSuggestions = suggestions.itemNames,
-            reconciliations = currentReconciliations,
+            trips = core.trips,
+            selectedTrip = core.selectedTrip,
+            receipts = core.receipts,
+            tripCurrencies = currencies,
+            exactHomeMinor = MoneyCalculator.exactTripHomeMinor(core.receipts.map { it.receipt }),
+            roundedHomeMajor = MoneyCalculator.roundedUpTripHomeMajor(
+                core.receipts.map { it.receipt },
+                homeCode,
+            ),
+            defaultHomeCurrencyCode = preferences.homeCurrencyCode,
+            recentCurrencyCodes = preferences.recentCurrencyCodes,
+            locationSuggestions = core.suggestions.locations,
+            itemNameSuggestions = core.suggestions.itemNames,
+            reconciliations = core.reconciliations,
         )
     }.stateIn(
         viewModelScope,
@@ -201,27 +229,38 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         setSelectedTrip(id)
     }
 
+    fun saveHomeCurrency(currencyCode: String) {
+        runCatching { homeCurrencySettingsStore.save(currencyCode) }.onSuccess {
+            currencyPreferences.value = CurrencyPreferences(
+                homeCurrencyCode = homeCurrencySettingsStore.read(),
+                recentCurrencyCodes = homeCurrencySettingsStore.recentCurrencyCodes(),
+            )
+        }
+    }
+
     fun createTrip(
         name: String,
-        currencyCode: String,
-        exchangeRate: String,
-        useDailyRate: Boolean,
+        homeCurrencyCode: String,
+        currencies: List<TripCurrencyInput>,
         defaultTipMinor: Long,
         defaultTipCurrencyCode: String,
         defaultTipSelected: Boolean,
-    ) {
+    ): Boolean {
+        val normalizedCurrencies = normalizeTripCurrencies(homeCurrencyCode, currencies) ?: return false
         viewModelScope.launch {
             val trip = repository.createTrip(
                 name = name,
-                currencyCode = currencyCode,
-                exchangeRate = normalizeDecimal(exchangeRate) ?: "55.5",
-                exchangeRateMode = if (useDailyRate) "DAILY" else "FIXED",
+                homeCurrencyCode = homeCurrencyCode,
+                currencies = normalizedCurrencies,
                 defaultTipMinor = defaultTipMinor,
                 defaultTipCurrencyCode = defaultTipCurrencyCode,
                 defaultTipSelected = defaultTipSelected,
             )
+            normalizedCurrencies.forEach { homeCurrencySettingsStore.recordUsed(it.currencyCode) }
+            refreshCurrencyPreferences()
             setSelectedTrip(trip.id)
         }
+        return true
     }
 
     fun moveTrip(tripId: String, positions: Int) {
@@ -236,55 +275,91 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch { repository.reorderTrips(orderedTrips.map { it.id }) }
     }
 
+    fun deleteTrip(trip: TripEntity) {
+        val currentTrips = uiState.value.trips
+        val index = currentTrips.indexOfFirst { it.id == trip.id }
+        if (index < 0) return
+        val replacement = currentTrips.getOrNull(index + 1) ?: currentTrips.getOrNull(index - 1)
+        viewModelScope.launch {
+            repository.deleteTrip(trip)
+            if (replacement == null) {
+                selectedTripId.value = null
+                widgetPreferences.edit().remove(BillCheckWidget.SELECTED_TRIP_ID).apply()
+                BillCheckWidget.updateAll(getApplication())
+            } else {
+                setSelectedTrip(replacement.id)
+            }
+        }
+    }
+
     fun updateTrip(
         existing: TripEntity,
         name: String,
-        currencyCode: String,
-        exchangeRate: String,
-        useDailyRate: Boolean,
+        currencies: List<TripCurrencyInput>,
         defaultTipMinor: Long,
         defaultTipCurrencyCode: String,
         defaultTipSelected: Boolean,
     ): Boolean {
-        val normalizedRate = normalizeDecimal(exchangeRate)
-            ?.toBigDecimalOrNull()
-            ?.takeIf { it > BigDecimal.ZERO }
-            ?.stripTrailingZeros()
-            ?.toPlainString()
+        val normalizedCurrencies = normalizeTripCurrencies(existing.homeCurrencyCode, currencies)
             ?: return false
-        val normalizedCurrency = currencyCode.trim().uppercase(Locale.ROOT)
-        val normalizedTipCurrency = defaultTipCurrencyCode.trim().uppercase(Locale.ROOT)
-        if (normalizedCurrency.length != 3 || normalizedTipCurrency.length != 3) return false
 
         viewModelScope.launch {
             repository.updateTrip(
                 existing = existing,
                 name = name,
-                currencyCode = normalizedCurrency,
-                exchangeRate = normalizedRate,
-                exchangeRateMode = if (useDailyRate) "DAILY" else "FIXED",
+                currencies = normalizedCurrencies,
                 defaultTipMinor = defaultTipMinor,
-                defaultTipCurrencyCode = normalizedTipCurrency,
+                defaultTipCurrencyCode = defaultTipCurrencyCode,
                 defaultTipSelected = defaultTipSelected,
             )
+            normalizedCurrencies.forEach { homeCurrencySettingsStore.recordUsed(it.currencyCode) }
+            refreshCurrencyPreferences()
         }
         return true
     }
 
-    fun requestExchangeRate(currencyCode: String) {
-        val target = currencyCode.trim().uppercase(Locale.ROOT)
-        if (target.length != 3) return
-        _exchangeRateLookup.value = ExchangeRateLookupState.Loading(target)
+    fun addCurrencyToSelectedTrip(
+        currencyCode: String,
+        homeToCurrencyRate: String,
+        useDailyRate: Boolean,
+    ): Boolean {
+        val trip = uiState.value.selectedTrip ?: return false
+        if (uiState.value.tripCurrencies.any { it.currencyCode == currencyCode }) return true
+        val inputs = uiState.value.tripCurrencies.map {
+            TripCurrencyInput(it.currencyCode, it.homeToCurrencyRate, it.exchangeRateMode, it.isDefault)
+        } + TripCurrencyInput(
+            currencyCode = currencyCode,
+            homeToCurrencyRate = homeToCurrencyRate,
+            exchangeRateMode = if (useDailyRate) "DAILY" else "FIXED",
+            isDefault = false,
+        )
+        return updateTrip(
+            existing = trip,
+            name = trip.name,
+            currencies = inputs,
+            defaultTipMinor = trip.defaultTipMinor,
+            defaultTipCurrencyCode = trip.defaultTipCurrencyCode,
+            defaultTipSelected = trip.defaultTipSelected,
+        )
+    }
+
+    fun requestExchangeRate(baseCurrencyCode: String, targetCurrencyCode: String) {
+        val base = baseCurrencyCode.trim().uppercase(Locale.ROOT)
+        val target = targetCurrencyCode.trim().uppercase(Locale.ROOT)
+        if (base.length != 3 || target.length != 3) return
+        _exchangeRateLookup.value = ExchangeRateLookupState.Loading(base, target)
         viewModelScope.launch {
-            runCatching { exchangeRateProvider.latestForeignPerEuro(target) }
+            runCatching { exchangeRateProvider.latestRate(base, target) }
                 .onSuccess { quote ->
-                    if ((_exchangeRateLookup.value as? ExchangeRateLookupState.Loading)?.target == target) {
+                    val loading = _exchangeRateLookup.value as? ExchangeRateLookupState.Loading
+                    if (loading?.base == base && loading.target == target) {
                         _exchangeRateLookup.value = ExchangeRateLookupState.Success(quote)
                     }
                 }
                 .onFailure {
-                    if ((_exchangeRateLookup.value as? ExchangeRateLookupState.Loading)?.target == target) {
-                        _exchangeRateLookup.value = ExchangeRateLookupState.Error(target)
+                    val loading = _exchangeRateLookup.value as? ExchangeRateLookupState.Loading
+                    if (loading?.base == base && loading.target == target) {
+                        _exchangeRateLookup.value = ExchangeRateLookupState.Error(base, target)
                     }
                 }
         }
@@ -297,34 +372,45 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun addReceipt(
         location: String,
         checkNumber: String,
-        foreignAmountText: String,
+        amountText: String,
+        currencyCode: String,
         occurredOnText: String,
         addDefaultTip: Boolean,
         itemDrafts: List<ReceiptItemDraft>,
         imageUri: String? = null,
     ): Boolean {
         val trip = uiState.value.selectedTrip ?: return false
-        val input = parseReceiptInput(foreignAmountText, itemDrafts) ?: return false
+        val currency = uiState.value.tripCurrencies.firstOrNull { it.currencyCode == currencyCode }
+            ?: return false
+        val tipCurrency = if (addDefaultTip && trip.defaultTipMinor > 0) {
+            uiState.value.tripCurrencies.firstOrNull {
+                it.currencyCode == trip.defaultTipCurrencyCode
+            } ?: return false
+        } else {
+            null
+        }
+        val input = parseReceiptInput(amountText, itemDrafts, currency.currencyCode) ?: return false
         val occurredAt = parseReceiptDate(occurredOnText) ?: return false
         viewModelScope.launch {
-            val receiptRate = if (trip.exchangeRateMode == "DAILY") {
-                runCatching {
-                    exchangeRateProvider.latestForeignPerEuro(trip.foreignCurrencyCode).foreignPerEuro
-                }.getOrDefault(trip.defaultExchangeRate)
-            } else {
-                trip.defaultExchangeRate
-            }
+            val receiptRate = currentRate(trip, currency)
+            val tipMinor = if (addDefaultTip) trip.defaultTipMinor else 0
+            val tipRate = tipCurrency?.let { currentRate(trip, it) } ?: "1"
             repository.addReceipt(
                 trip = trip,
                 location = location,
                 checkNumber = checkNumber,
-                foreignAmountMinor = input.totalMinor,
-                addDefaultTip = addDefaultTip,
+                amountMinor = input.totalMinor,
+                currencyCode = currency.currencyCode,
+                exchangeRateSnapshot = receiptRate,
+                tipMinor = tipMinor,
+                tipCurrencyCode = tipCurrency?.currencyCode ?: trip.homeCurrencyCode,
+                tipExchangeRateSnapshot = tipRate,
                 items = input.items,
-                exchangeRate = receiptRate,
                 imageUri = imageUri,
                 occurredAt = occurredAt,
             )
+            homeCurrencySettingsStore.recordUsed(currency.currencyCode)
+            refreshCurrencyPreferences()
         }
         return true
     }
@@ -337,25 +423,50 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         existing: ReceiptWithItems,
         location: String,
         checkNumber: String,
-        foreignAmountText: String,
+        amountText: String,
+        currencyCode: String,
         occurredOnText: String,
         addDefaultTip: Boolean,
         itemDrafts: List<ReceiptItemDraft>,
     ): Boolean {
         val trip = uiState.value.selectedTrip ?: return false
-        val input = parseReceiptInput(foreignAmountText, itemDrafts) ?: return false
+        val currency = uiState.value.tripCurrencies.firstOrNull { it.currencyCode == currencyCode }
+            ?: return false
+        val input = parseReceiptInput(amountText, itemDrafts, currency.currencyCode) ?: return false
         val occurredAt = parseReceiptDate(occurredOnText) ?: return false
         viewModelScope.launch {
+            val old = existing.receipt
+            val tipMinor = when {
+                !addDefaultTip -> 0
+                old.tipMinor > 0 -> old.tipMinor
+                else -> trip.defaultTipMinor
+            }
+            val tipCurrencyCode = when {
+                tipMinor == 0L -> trip.homeCurrencyCode
+                old.tipMinor > 0 -> old.tipCurrencyCode
+                else -> trip.defaultTipCurrencyCode
+            }
+            val tipCurrency = uiState.value.tripCurrencies.first { it.currencyCode == tipCurrencyCode }
             repository.updateReceipt(
                 trip = trip,
-                existing = existing.receipt,
+                existing = old,
                 location = location,
                 checkNumber = checkNumber,
-                foreignAmountMinor = input.totalMinor,
+                amountMinor = input.totalMinor,
+                currencyCode = currency.currencyCode,
+                exchangeRateSnapshot = if (currency.currencyCode == old.currencyCode) null else currentRate(trip, currency),
                 occurredAt = occurredAt,
-                addDefaultTip = addDefaultTip,
+                tipMinor = tipMinor,
+                tipCurrencyCode = tipCurrency.currencyCode,
+                tipExchangeRateSnapshot = when {
+                    tipMinor == 0L -> if (old.tipCurrencyCode == trip.homeCurrencyCode) null else "1"
+                    tipCurrency.currencyCode == old.tipCurrencyCode -> null
+                    else -> currentRate(trip, tipCurrency)
+                },
                 items = input.items,
             )
+            homeCurrencySettingsStore.recordUsed(currency.currencyCode)
+            refreshCurrencyPreferences()
         }
         return true
     }
@@ -466,7 +577,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 runtime.provider.extract(
                     imageUri = Uri.parse(imageUri),
                     documentType = AiDocumentType.RECEIPT,
-                    expectedCurrencyCode = expectedCurrencyCode ?: trip.foreignCurrencyCode,
+                    expectedCurrencyCode = expectedCurrencyCode
+                        ?: uiState.value.tripCurrencies.firstOrNull { it.isDefault }?.currencyCode
+                        ?: trip.homeCurrencyCode,
                     apiKey = runtime.credential,
                     model = runtime.model,
                 ) as AiExtractionResult.Receipt
@@ -494,7 +607,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 runtime.provider.extract(
                     imageUri = Uri.parse(imageUri),
                     documentType = AiDocumentType.STATEMENT,
-                    expectedCurrencyCode = trip.foreignCurrencyCode,
+                    expectedCurrencyCode = uiState.value.tripCurrencies
+                        .firstOrNull { it.isDefault }?.currencyCode ?: trip.homeCurrencyCode,
                     apiKey = runtime.credential,
                     model = runtime.model,
                 ) as AiExtractionResult.Statement
@@ -524,7 +638,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 repository.applyExtractedStatement(
                     reconciliation,
                     extraction.statement,
-                    trip.foreignCurrencyCode,
+                    uiState.value.tripCurrencies.firstOrNull { it.isDefault }?.currencyCode
+                        ?: trip.homeCurrencyCode,
                 )
             }.onSuccess {
                 _aiExtraction.value = AiExtractionState.Idle
@@ -680,6 +795,27 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         _appUpdate.value = AppUpdateState(AppUpdateStatus.AVAILABLE, release)
     }
 
+    private suspend fun currentRate(
+        trip: TripEntity,
+        currency: TripCurrencyEntity,
+    ): String = when {
+        currency.currencyCode == trip.homeCurrencyCode -> "1"
+        currency.exchangeRateMode == "DAILY" -> runCatching {
+            exchangeRateProvider.latestRate(
+                trip.homeCurrencyCode,
+                currency.currencyCode,
+            ).targetUnitsPerBase
+        }.getOrDefault(currency.homeToCurrencyRate)
+        else -> currency.homeToCurrencyRate
+    }
+
+    private fun refreshCurrencyPreferences() {
+        currencyPreferences.value = CurrencyPreferences(
+            homeCurrencyCode = homeCurrencySettingsStore.read(),
+            recentCurrencyCodes = homeCurrencySettingsStore.recentCurrencyCodes(),
+        )
+    }
+
     private fun setSelectedTrip(id: String) {
         selectedTripId.value = id
         widgetPreferences.edit().putString(BillCheckWidget.SELECTED_TRIP_ID, id).apply()
@@ -703,7 +839,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         currencyCode: String,
         occurredOn: Long? = null,
     ): Boolean {
-        val amountMinor = parseMinor(amountText)?.takeIf { it > 0 } ?: return false
+        if (currencyCode.trim().uppercase(Locale.ROOT) !in supportedCurrencyCodes) return false
+        val amountMinor = parseMinor(amountText, currencyCode)?.takeIf { it > 0 } ?: return false
         viewModelScope.launch {
             repository.addStatementLine(
                 reconciliationId,
@@ -721,7 +858,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         currencyCode: String,
         occurredOn: Long? = null,
     ): Boolean {
-        val amountMinor = parseMinor(amountText)?.takeIf { it > 0 } ?: return false
+        if (currencyCode.trim().uppercase(Locale.ROOT) !in supportedCurrencyCodes) return false
+        val amountMinor = parseMinor(amountText, currencyCode)?.takeIf { it > 0 } ?: return false
         viewModelScope.launch {
             repository.updateStatementLine(
                 existing,
@@ -820,20 +958,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     companion object {
-        fun parseMinor(value: String): Long? = normalizeDecimal(value)
-            ?.toBigDecimalOrNull()
-            ?.takeIf { it >= BigDecimal.ZERO }
-            ?.movePointRight(2)
-            ?.setScale(0, RoundingMode.HALF_UP)
-            ?.longValueExact()
+        fun parseMinor(value: String, currencyCode: String = "EUR"): Long? =
+            CurrencyAmount.parseMajorToMinor(value, currencyCode)?.takeIf { it >= 0 }
 
         fun parseReceiptInput(
             totalText: String,
             drafts: List<ReceiptItemDraft>,
+            currencyCode: String = "EUR",
         ): ParsedReceiptInput? {
             val items = buildList {
                 drafts.filterNot { it.name.isBlank() && it.amountText.isBlank() }.forEach { draft ->
-                    val amountMinor = parseMinor(draft.amountText) ?: return null
+                    val amountMinor = parseMinor(draft.amountText, currencyCode) ?: return null
                     add(
                         NewReceiptItem(
                             name = draft.name.trim().ifBlank { "Posten" },
@@ -842,7 +977,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     )
                 }
             }
-            val totalMinor = parseMinor(totalText)
+            val totalMinor = parseMinor(totalText, currencyCode)
                 ?: items.takeIf { it.isNotEmpty() }?.let { parsedItems ->
                     runCatching {
                         parsedItems.fold(0L) { total, item -> Math.addExact(total, item.amountMinor) }
@@ -861,6 +996,41 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 runCatching { LocalDate.parse(trimmed, formatter) }.getOrNull()
             }.firstOrNull() ?: return null
             return date.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
+        }
+
+        private fun normalizeTripCurrencies(
+            homeCurrencyCode: String,
+            currencies: List<TripCurrencyInput>,
+        ): List<TripCurrencyInput>? = runCatching {
+            val home = CurrencyAmount.normalizeCode(homeCurrencyCode)
+            require(home in supportedCurrencyCodes)
+            val normalized = currencies.map { input ->
+                val code = CurrencyAmount.normalizeCode(input.currencyCode)
+                require(code in supportedCurrencyCodes)
+                val rate = if (code == home) {
+                    "1"
+                } else {
+                    normalizeDecimal(input.homeToCurrencyRate)
+                        ?.toBigDecimalOrNull()
+                        ?.takeIf { it > BigDecimal.ZERO }
+                        ?.stripTrailingZeros()
+                        ?.toPlainString()
+                        ?: error("Invalid exchange rate")
+                }
+                input.copy(
+                    currencyCode = code,
+                    homeToCurrencyRate = rate,
+                    exchangeRateMode = if (code == home) "FIXED" else input.exchangeRateMode,
+                )
+            }
+            require(normalized.map { it.currencyCode }.distinct().size == normalized.size)
+            require(normalized.any { it.currencyCode == home })
+            require(normalized.count { it.isDefault } == 1)
+            normalized
+        }.getOrNull()
+
+        private val supportedCurrencyCodes by lazy {
+            CurrencyCatalog.entries(Locale.ROOT).mapTo(hashSetOf()) { it.code }
         }
 
         private fun normalizeDecimal(value: String): String? = value
@@ -883,9 +1053,9 @@ data class ParsedReceiptInput(
 
 sealed interface ExchangeRateLookupState {
     data object Idle : ExchangeRateLookupState
-    data class Loading(val target: String) : ExchangeRateLookupState
+    data class Loading(val base: String, val target: String) : ExchangeRateLookupState
     data class Success(val quote: ExchangeRateQuote) : ExchangeRateLookupState
-    data class Error(val target: String) : ExchangeRateLookupState
+    data class Error(val base: String, val target: String) : ExchangeRateLookupState
 }
 
 sealed interface AiExtractionState {
@@ -926,6 +1096,19 @@ private data class AiRuntime(
     val provider: AiExtractionProvider,
     val credential: String,
     val model: String,
+)
+
+private data class CurrencyPreferences(
+    val homeCurrencyCode: String,
+    val recentCurrencyCodes: List<String>,
+)
+
+private data class MainUiCore(
+    val trips: List<TripEntity>,
+    val selectedTrip: TripEntity?,
+    val receipts: List<ReceiptWithItems>,
+    val suggestions: ReceiptTextSuggestions,
+    val reconciliations: List<ReconciliationWithLines>,
 )
 
 sealed interface LocalAiConnectionState {

@@ -8,10 +8,7 @@ import android.content.Context
 import android.content.Intent
 import android.widget.RemoteViews
 import de.shakie.billcheck.domain.MoneyCalculator
-import java.math.BigDecimal
-import java.text.NumberFormat
-import java.util.Currency
-import java.util.Locale
+import de.shakie.billcheck.domain.CurrencyAmount
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -55,13 +52,23 @@ class BillCheckWidget : AppWidgetProvider() {
                     setTextViewText(R.id.widget_trip_name, trip?.name ?: context.getString(R.string.widget_no_trip))
                     setTextViewText(
                         R.id.widget_rounded_total,
-                        context.getString(R.string.widget_rounded_total, MoneyCalculator.roundedUpTripEuro(entities)),
+                        context.getString(
+                            R.string.widget_rounded_total,
+                            MoneyCalculator.roundedUpTripHomeMajor(
+                                entities,
+                                trip?.homeCurrencyCode ?: "EUR",
+                            ),
+                            trip?.homeCurrencyCode ?: "EUR",
+                        ),
                     )
                     setTextViewText(
                         R.id.widget_exact_total,
                         context.getString(
                             R.string.widget_exact_and_count,
-                            formatEuroCents(MoneyCalculator.exactTripEuroCents(entities)),
+                            CurrencyAmount.formatMinor(
+                                MoneyCalculator.exactTripHomeMinor(entities),
+                                trip?.homeCurrencyCode ?: "EUR",
+                            ),
                             entities.size,
                         ),
                     )
@@ -86,10 +93,5 @@ class BillCheckWidget : AppWidgetProvider() {
                 },
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
             )
-
-        private fun formatEuroCents(cents: Long): String = runCatching {
-            NumberFormat.getCurrencyInstance().apply { currency = Currency.getInstance("EUR") }
-                .format(BigDecimal.valueOf(cents, 2))
-        }.getOrElse { "${BigDecimal.valueOf(cents, 2)} EUR" }
     }
 }

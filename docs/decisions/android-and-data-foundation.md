@@ -9,9 +9,10 @@ Bill Check wird als native Kotlin-/Compose-App ausschließlich für Android 16
 Galeriebilder werden über stabile `content://`-Referenzen mit Datensätzen
 verbunden; eine Datensatzlöschung löscht keine Galerieinhalte implizit.
 
-Geldwerte liegen in ganzzahligen Minor Units vor. Jeder Beleg hält
-Fremdwährung, Wechselkurs und das daraus berechnete centgenaue Euroergebnis
-als unveränderlichen Snapshot fest. Wechselkurse werden als Dezimaltext
+Geldwerte liegen in ganzzahligen, währungsspezifischen Minor Units vor. Jeder
+Beleg hält Währung, Kurs und das daraus berechnete exakte Ergebnis in der
+Heimatwährung seiner Reise als unveränderlichen Snapshot fest. Ein Trinkgeld
+hat einen unabhängigen Kurs-Snapshot. Wechselkurse werden als Dezimaltext
 persistiert und mit `BigDecimal` verarbeitet.
 
 ## Gründe

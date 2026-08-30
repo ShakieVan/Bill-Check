@@ -53,11 +53,11 @@ object ReconciliationAuditor {
             reconciliation.lines.map { it.line.currencyCode to it.line.amountMinor },
         )
         val receiptTotals = totalsByCurrency(
-            receipts.map { it.foreignCurrencyCode to it.foreignAmountMinor },
+            receipts.map { it.currencyCode to it.amountMinor },
         )
         val matchedReceiptTotals = totalsByCurrency(
             receipts.filter { it.id in currentMatchedIds }
-                .map { it.foreignCurrencyCode to it.foreignAmountMinor },
+                .map { it.currencyCode to it.amountMinor },
         )
         val declaredMinor = reconciliation.reconciliation.declaredTotalMinor?.let(BigInteger::valueOf)
         val declaredCurrency = reconciliation.reconciliation.declaredTotalCurrencyCode
@@ -92,8 +92,8 @@ object ReconciliationAuditor {
             listOf(
                 receipt.occurredAt.toString(),
                 ReconciliationMatcher.normalizeCheckNumber(receipt.checkNumber),
-                receipt.foreignAmountMinor.toString(),
-                receipt.foreignCurrencyCode.uppercase(),
+                receipt.amountMinor.toString(),
+                receipt.currencyCode.uppercase(),
             ).joinToString("|")
         }
         return ReconciliationAudit(
@@ -117,7 +117,7 @@ object ReconciliationAuditor {
             duplicateStatementLineCount = duplicateExcess(statementFingerprints),
             duplicateReceiptCount = duplicateExcess(receiptFingerprints),
             nonPositiveAmountCount = reconciliation.lines.count { it.line.amountMinor <= 0 } +
-                receipts.count { it.foreignAmountMinor <= 0 },
+                receipts.count { it.amountMinor <= 0 },
             statementTotals = statementTotals,
             receiptTotals = receiptTotals,
             matchedReceiptTotals = matchedReceiptTotals,

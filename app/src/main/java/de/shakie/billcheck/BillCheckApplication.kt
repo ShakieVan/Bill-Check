@@ -12,6 +12,7 @@ import de.shakie.billcheck.data.LocalAiConnectionTester
 import de.shakie.billcheck.data.LocalAiExtractionProvider
 import de.shakie.billcheck.data.LocalAiSettingsStore
 import de.shakie.billcheck.data.DataTransferManager
+import de.shakie.billcheck.data.HomeCurrencySettingsStore
 import de.shakie.billcheck.update.AppUpdateManager
 
 class BillCheckApplication : Application() {
@@ -26,5 +27,6 @@ class BillCheckApplication : Application() {
     val localTextRecognizer by lazy { LocalTextRecognizer(this) }
     val geminiModelCatalog by lazy { GeminiModelCatalog() }
     val dataTransferManager by lazy { DataTransferManager(this, database) }
+    val homeCurrencySettingsStore by lazy { HomeCurrencySettingsStore(this) }
     val appUpdateManager by lazy { AppUpdateManager(this) }
 }

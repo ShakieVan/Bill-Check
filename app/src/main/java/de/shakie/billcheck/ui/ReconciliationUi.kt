@@ -53,9 +53,11 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -78,6 +80,7 @@ import de.shakie.billcheck.data.ReconciliationWithLines
 import de.shakie.billcheck.data.StatementLineEntity
 import de.shakie.billcheck.data.StatementLineWithMatches
 import de.shakie.billcheck.domain.ReconciliationStatus
+import de.shakie.billcheck.domain.CurrencyAmount
 import de.shakie.billcheck.domain.ReconciliationAuditor
 import de.shakie.billcheck.domain.ReconciliationCoverage
 import de.shakie.billcheck.domain.ReconciliationMatcher
@@ -102,6 +105,7 @@ fun ReconciliationManagerDialog(
     reconciliations: List<ReconciliationWithLines>,
     receipts: List<ReceiptWithItems>,
     defaultCurrencyCode: String,
+    currencyCodes: List<String>,
     candidateSelection: CandidateSelectionState,
     analysisState: ReconciliationAnalysisState,
     onDismiss: () -> Unit,
@@ -121,6 +125,11 @@ fun ReconciliationManagerDialog(
     onOpenImage: (ReconciliationWithLines) -> Unit,
     onChooseImage: (ReconciliationWithLines) -> Unit,
     onAnalyzeImage: (ReconciliationWithLines) -> Unit,
+    homeCurrencyCode: String = defaultCurrencyCode,
+    recentCurrencyCodes: List<String> = emptyList(),
+    exchangeRateLookup: ExchangeRateLookupState = ExchangeRateLookupState.Idle,
+    onLookupRate: (String, String) -> Unit = { _, _ -> },
+    onAddTripCurrency: (String, String, Boolean) -> Boolean = { _, _, _ -> false },
 ) {
     var selectedId by remember(initialSelectedId) { mutableStateOf(initialSelectedId) }
     var showCreate by remember { mutableStateOf(false) }
@@ -204,6 +213,12 @@ fun ReconciliationManagerDialog(
     if (addingLine && selected != null) {
         StatementLineEditorDialog(
             currencyCode = defaultCurrencyCode,
+            currencyCodes = currencyCodes,
+            homeCurrencyCode = homeCurrencyCode,
+            recentCurrencyCodes = recentCurrencyCodes,
+            exchangeRateLookup = exchangeRateLookup,
+            onLookupRate = onLookupRate,
+            onAddTripCurrency = onAddTripCurrency,
             onDismiss = { addingLine = false },
             onSave = { description, check, amount, currency, date ->
                 onAddLine(selected.reconciliation.id, description, check, amount, currency, date)
@@ -215,6 +230,12 @@ fun ReconciliationManagerDialog(
         StatementLineEditorDialog(
             existing = line,
             currencyCode = defaultCurrencyCode,
+            currencyCodes = currencyCodes,
+            homeCurrencyCode = homeCurrencyCode,
+            recentCurrencyCodes = recentCurrencyCodes,
+            exchangeRateLookup = exchangeRateLookup,
+            onLookupRate = onLookupRate,
+            onAddTripCurrency = onAddTripCurrency,
             onDismiss = { editingLine = null },
             onSave = { description, check, amount, currency, date ->
                 onUpdateLine(line, description, check, amount, currency, date)
@@ -727,7 +748,7 @@ private fun ReceiptOnlyCard(receipt: ReceiptEntity) {
             )
             Text(receipt.location, style = MaterialTheme.typography.titleMedium)
             Text(
-                "#${receipt.checkNumber} · ${formatMinor(receipt.foreignAmountMinor, receipt.foreignCurrencyCode)} · " +
+                "#${receipt.checkNumber} · ${formatMinor(receipt.amountMinor, receipt.currencyCode)} · " +
                     formatDate(receipt.occurredAt),
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -779,7 +800,7 @@ private fun StatementLineCard(
             )
             matchedReceipt?.let {
                 Spacer(Modifier.height(8.dp))
-                Text("↳ ${it.location} · #${it.checkNumber} · ${formatMinor(it.foreignAmountMinor, it.foreignCurrencyCode)}")
+                Text("↳ ${it.location} · #${it.checkNumber} · ${formatMinor(it.amountMinor, it.currencyCode)}")
             }
             if (matchedReceipt == null && suggestedReceipt != null) {
                 Spacer(Modifier.height(8.dp))
@@ -884,7 +905,7 @@ private fun CandidateDialog(
                             Card(onClick = { onAssign(candidate.receipt) }) {
                                 Column(Modifier.fillMaxWidth().padding(14.dp)) {
                                     Text(candidate.receipt.location, fontWeight = FontWeight.SemiBold)
-                                    Text("#${candidate.receipt.checkNumber} · ${formatMinor(candidate.receipt.foreignAmountMinor, candidate.receipt.foreignCurrencyCode)}")
+                                    Text("#${candidate.receipt.checkNumber} · ${formatMinor(candidate.receipt.amountMinor, candidate.receipt.currencyCode)}")
                                     Text(
                                         "${formatDate(candidate.receipt.occurredAt)} · ${stringResource(R.string.candidate_score, candidate.score)}",
                                         style = MaterialTheme.typography.bodySmall,
@@ -934,15 +955,38 @@ private fun TitleEditorDialog(
 private fun StatementLineEditorDialog(
     existing: StatementLineEntity? = null,
     currencyCode: String,
+    currencyCodes: List<String>,
+    homeCurrencyCode: String,
+    recentCurrencyCodes: List<String>,
+    exchangeRateLookup: ExchangeRateLookupState,
+    onLookupRate: (String, String) -> Unit,
+    onAddTripCurrency: (String, String, Boolean) -> Boolean,
     onDismiss: () -> Unit,
     onSave: (String, String, String, String, Long?) -> Boolean,
 ) {
     var description by remember(existing?.id) { mutableStateOf(existing?.description.orEmpty()) }
     var check by remember(existing?.id) { mutableStateOf(existing?.checkNumber.orEmpty()) }
-    var amount by remember(existing?.id) { mutableStateOf(existing?.amountMinor?.let(::formatInputMinor).orEmpty()) }
+    var amount by remember(existing?.id) {
+        mutableStateOf(existing?.amountMinor?.let { formatInputMinor(it, existing.currencyCode) }.orEmpty())
+    }
     var currency by remember(existing?.id) { mutableStateOf(existing?.currencyCode ?: currencyCode) }
     var date by remember(existing?.id) { mutableStateOf(existing?.occurredOn?.let(::formatDate).orEmpty()) }
     var invalid by remember(existing?.id) { mutableStateOf(false) }
+    var showCurrencyPicker by remember(existing?.id) { mutableStateOf(false) }
+    var pendingNewCurrencyCode by remember(existing?.id) { mutableStateOf<String?>(null) }
+    var pendingCurrencyRate by remember(existing?.id) { mutableStateOf("") }
+    var pendingCurrencyDaily by remember(existing?.id) { mutableStateOf(false) }
+    var pendingCurrencyRateInvalid by remember(existing?.id) { mutableStateOf(false) }
+
+    LaunchedEffect(exchangeRateLookup, pendingNewCurrencyCode) {
+        val success = exchangeRateLookup as? ExchangeRateLookupState.Success ?: return@LaunchedEffect
+        if (success.quote.baseCurrencyCode == homeCurrencyCode &&
+            success.quote.targetCurrencyCode == pendingNewCurrencyCode
+        ) {
+            pendingCurrencyRate = success.quote.targetUnitsPerBase
+            pendingCurrencyRateInvalid = false
+        }
+    }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(if (existing == null) R.string.add_statement_line else R.string.edit_statement_line)) },
@@ -954,16 +998,24 @@ private fun StatementLineEditorDialog(
                 item { OutlinedTextField(description, { description = it }, label = { Text(stringResource(R.string.statement_description)) }) }
                 item { OutlinedTextField(check, { check = it }, label = { Text(stringResource(R.string.check_number)) }) }
                 item {
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         OutlinedTextField(
                             amount,
                             { amount = it; invalid = false },
                             label = { Text(stringResource(R.string.amount_in_currency, currency)) },
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                             isError = invalid,
-                            modifier = Modifier.weight(1f),
+                            modifier = Modifier.fillMaxWidth(),
                         )
-                        OutlinedTextField(currency, { currency = it.uppercase().take(3) }, label = { Text(stringResource(R.string.foreign_currency)) }, modifier = Modifier.width(92.dp))
+                        TripCurrencySelector(
+                            selectedCurrencyCode = currency,
+                            currencyCodes = currencyCodes,
+                            onCurrencySelected = {
+                                currency = it
+                                invalid = false
+                            },
+                            onAddCurrencyRequested = { showCurrencyPicker = true },
+                        )
                     }
                 }
                 item {
@@ -989,6 +1041,81 @@ private fun StatementLineEditorDialog(
             }) { Text(stringResource(R.string.save)) }
         },
     )
+    if (showCurrencyPicker) {
+        CurrencyPickerDialog(
+            selectedCurrencyCode = currency,
+            preferredCurrencyCodes = currencyCodes,
+            recentCurrencyCodes = recentCurrencyCodes,
+            excludedCurrencyCodes = currencyCodes.toSet(),
+            onCurrencySelected = { entry ->
+                showCurrencyPicker = false
+                pendingNewCurrencyCode = entry.code
+                pendingCurrencyRate = ""
+                pendingCurrencyDaily = false
+                pendingCurrencyRateInvalid = false
+                onLookupRate(homeCurrencyCode, entry.code)
+            },
+            onDismiss = { showCurrencyPicker = false },
+        )
+    }
+    pendingNewCurrencyCode?.let { newCode ->
+        AlertDialog(
+            onDismissRequest = { pendingNewCurrencyCode = null },
+            title = { Text(stringResource(R.string.trip_currency_add_other)) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(stringResource(R.string.trip_currency_rate_formula, homeCurrencyCode, newCode))
+                    OutlinedTextField(
+                        value = pendingCurrencyRate,
+                        onValueChange = {
+                            pendingCurrencyRate = it
+                            pendingCurrencyRateInvalid = false
+                        },
+                        isError = pendingCurrencyRateInvalid,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        singleLine = true,
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth().clickable {
+                            pendingCurrencyDaily = !pendingCurrencyDaily
+                        },
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(stringResource(R.string.daily_exchange_rate), modifier = Modifier.weight(1f))
+                        Switch(checked = pendingCurrencyDaily, onCheckedChange = null)
+                    }
+                    if (exchangeRateLookup is ExchangeRateLookupState.Error &&
+                        exchangeRateLookup.target == newCode
+                    ) {
+                        Text(
+                            stringResource(R.string.rate_lookup_failed),
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingNewCurrencyCode = null }) {
+                    Text(stringResource(R.string.cancel))
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    val validRate = pendingCurrencyRate.trim().replace(',', '.')
+                        .toBigDecimalOrNull()?.takeIf { it > BigDecimal.ZERO }
+                        ?.stripTrailingZeros()?.toPlainString()
+                    if (validRate == null) {
+                        pendingCurrencyRateInvalid = true
+                    } else if (onAddTripCurrency(newCode, validRate, pendingCurrencyDaily)) {
+                        currency = newCode
+                        invalid = false
+                        pendingNewCurrencyCode = null
+                    }
+                }) { Text(stringResource(R.string.trip_currency_add)) }
+            },
+        )
+    }
 }
 
 @Composable
@@ -1129,19 +1256,19 @@ private fun parseDate(value: String): Long? = try {
 private fun formatDate(value: Long): String =
     Instant.ofEpochMilli(value).atZone(ZoneId.systemDefault()).toLocalDate().format(dateFormatter)
 
-private fun formatInputMinor(value: Long): String =
+private fun formatInputMinor(value: Long, currencyCode: String): String =
     NumberFormat.getNumberInstance(Locale.GERMANY).apply {
-        minimumFractionDigits = 2
-        maximumFractionDigits = 2
+        minimumFractionDigits = CurrencyAmount.fractionDigits(currencyCode)
+        maximumFractionDigits = CurrencyAmount.fractionDigits(currencyCode)
         isGroupingUsed = false
-    }.format(BigDecimal.valueOf(value, 2))
+    }.format(BigDecimal.valueOf(value).movePointLeft(CurrencyAmount.fractionDigits(currencyCode)))
 
-private fun formatMinor(value: Long, currencyCode: String): String = runCatching {
-    NumberFormat.getCurrencyInstance().apply { currency = Currency.getInstance(currencyCode) }
-        .format(BigDecimal.valueOf(value, 2))
-}.getOrElse { "${formatInputMinor(value)} $currencyCode" }
+private fun formatMinor(value: Long, currencyCode: String): String =
+    CurrencyAmount.formatMinor(value, currencyCode)
 
 private fun formatBigMinor(value: BigInteger, currencyCode: String): String = runCatching {
     NumberFormat.getCurrencyInstance().apply { currency = Currency.getInstance(currencyCode) }
-        .format(BigDecimal(value, 2))
-}.getOrElse { "${BigDecimal(value, 2).toPlainString()} $currencyCode" }
+        .format(BigDecimal(value).movePointLeft(CurrencyAmount.fractionDigits(currencyCode)))
+}.getOrElse {
+    "${BigDecimal(value).movePointLeft(CurrencyAmount.fractionDigits(currencyCode)).toPlainString()} $currencyCode"
+}

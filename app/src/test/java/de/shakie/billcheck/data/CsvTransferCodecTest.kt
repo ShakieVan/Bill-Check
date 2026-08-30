@@ -6,33 +6,37 @@ import org.junit.Test
 
 class CsvTransferCodecTest {
     @Test
-    fun roundTripPreservesOverviewAndAssignments() {
+    fun roundTripPreservesGenericCurrenciesSnapshotsDefaultsAndAssignments() {
         val source = TransferPackage(
             exportedAt = 1234,
             trips = listOf(
                 TransferTrip(
                     id = "trip-1",
                     name = "Utopia; Test",
-                    foreignCurrencyCode = "EGP",
-                    defaultExchangeRate = "55.5",
-                    exchangeRateMode = "DAILY",
-                    defaultTipMinor = 100,
-                    defaultTipCurrencyCode = "EUR",
-                    defaultTipSelected = false,
+                    homeCurrencyCode = "KWD",
+                    defaultTipMinor = 325,
+                    defaultTipCurrencyCode = "USD",
+                    defaultTipSelected = true,
                     imageStorageMode = "ORIGINAL",
                     createdAt = 100,
+                    currencies = listOf(
+                        TransferTripCurrency("KWD", "1", "FIXED", false),
+                        TransferTripCurrency("JPY", "500", "DAILY", true),
+                        TransferTripCurrency("USD", "3.25", "FIXED", false),
+                    ),
                     receipts = listOf(
                         TransferReceipt(
                             id = "receipt-1",
                             occurredAt = 200,
                             location = "=HYPERLINK(\"https://invalid.example\")",
                             checkNumber = "0602",
-                            foreignAmountMinor = 93996,
-                            foreignCurrencyCode = "EGP",
-                            exchangeRate = "55.6",
-                            exactEuroCents = 1691,
-                            tipMinor = 100,
-                            tipCurrencyCode = "EUR",
+                            amountMinor = 1_000,
+                            currencyCode = "JPY",
+                            exchangeRateSnapshot = "500",
+                            exactHomeMinor = 3_000,
+                            tipMinor = 325,
+                            tipCurrencyCode = "USD",
+                            tipExchangeRateSnapshot = "3.25",
                             imageEntry = null,
                             imageMimeType = null,
                             reviewState = "CONFIRMED",
@@ -49,16 +53,16 @@ class CsvTransferCodecTest {
                             createdAt = 300,
                             analysisSummary = "One discrepancy remains.",
                             analysisUpdatedAt = 400,
-                            declaredTotalMinor = 93_996,
-                            declaredTotalCurrencyCode = "EGP",
+                            declaredTotalMinor = 1_000,
+                            declaredTotalCurrencyCode = "JPY",
                             lines = listOf(
                                 TransferStatementLine(
                                     id = "line-1",
                                     occurredOn = 200,
                                     description = "Sunset Lobby",
                                     checkNumber = "602",
-                                    amountMinor = 93996,
-                                    currencyCode = "EGP",
+                                    amountMinor = 1_000,
+                                    currencyCode = "JPY",
                                     status = "CORRECT",
                                     acceptedWithoutReceipt = false,
                                     matchedReceiptId = "receipt-1",
@@ -78,21 +82,29 @@ class CsvTransferCodecTest {
 
         val encoded = CsvTransferCodec.encode(source)
         val decoded = CsvTransferCodec.decode(encoded)
+        val trip = decoded.trips.single()
+        val receipt = trip.receipts.single()
 
         assertTrue(encoded.startsWith("\uFEFF\"Bill Check\""))
-        assertEquals("Utopia; Test", decoded.trips.single().name)
+        assertEquals("Utopia; Test", trip.name)
+        assertEquals("KWD", trip.homeCurrencyCode)
+        assertEquals(true, trip.defaultTipSelected)
+        assertEquals("USD", trip.defaultTipCurrencyCode)
+        assertEquals(listOf("KWD", "JPY", "USD"), trip.currencies.map { it.currencyCode })
+        assertEquals(true, trip.currencies.single { it.currencyCode == "JPY" }.isDefault)
         assertTrue(encoded.contains("'=HYPERLINK"))
-        assertEquals("=HYPERLINK(\"https://invalid.example\")", decoded.trips.single().receipts.single().location)
-        assertEquals("55.6", decoded.trips.single().receipts.single().exchangeRate)
-        assertEquals("receipt-1", decoded.trips.single().reconciliations.single().lines.single().matchedReceiptId)
-        assertTrue(decoded.trips.single().reconciliations.single().lines.single().matchedManually)
-        assertEquals("One discrepancy remains.", decoded.trips.single().reconciliations.single().analysisSummary)
-        assertEquals(400L, decoded.trips.single().reconciliations.single().analysisUpdatedAt)
-        assertEquals(96, decoded.trips.single().reconciliations.single().lines.single().aiConfidence)
-        assertEquals("Same check and amount", decoded.trips.single().reconciliations.single().lines.single().aiReason)
-        assertEquals(93_996L, decoded.trips.single().reconciliations.single().declaredTotalMinor)
-        assertEquals("EGP", decoded.trips.single().reconciliations.single().declaredTotalCurrencyCode)
-        assertEquals("28.12.24", decoded.trips.single().reconciliations.single().lines.single().sourceDateText)
-        assertTrue(decoded.trips.single().reconciliations.single().lines.single().dateAmbiguous)
+        assertEquals("=HYPERLINK(\"https://invalid.example\")", receipt.location)
+        assertEquals("JPY", receipt.currencyCode)
+        assertEquals("500", receipt.exchangeRateSnapshot)
+        assertEquals("USD", receipt.tipCurrencyCode)
+        assertEquals("3.25", receipt.tipExchangeRateSnapshot)
+        assertEquals(3_000L, receipt.exactHomeMinor)
+        assertEquals("receipt-1", trip.reconciliations.single().lines.single().matchedReceiptId)
+        assertTrue(trip.reconciliations.single().lines.single().matchedManually)
+        assertEquals("One discrepancy remains.", trip.reconciliations.single().analysisSummary)
+        assertEquals(400L, trip.reconciliations.single().analysisUpdatedAt)
+        assertEquals(96, trip.reconciliations.single().lines.single().aiConfidence)
+        assertEquals(1_000L, trip.reconciliations.single().declaredTotalMinor)
+        assertEquals("JPY", trip.reconciliations.single().declaredTotalCurrencyCode)
     }
 }

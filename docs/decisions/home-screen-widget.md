@@ -6,8 +6,9 @@ Bill Check stellt ein kompaktes, frei platzierbares Homescreen-Widget bereit.
 Es zeigt ausschließlich die Übersicht der zuletzt in der App gewählten Reise:
 
 - Reisebezeichnung
-- prominent die aus der centgenauen Gesamtsumme immer aufgerundeten Euro
-- centgenaue Euro-Gesamtsumme
+- prominent die aus der exakten Gesamtsumme immer aufgerundeten Haupteinheiten
+  der Reise-Heimatwährung
+- exakte Gesamtsumme in der Reise-Heimatwährung
 - Anzahl der Belege
 
 Die gesamte Fläche öffnet die App. Vier getrennte Schnellaktionen starten

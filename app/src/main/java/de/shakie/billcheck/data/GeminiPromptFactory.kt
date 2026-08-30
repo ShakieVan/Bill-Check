@@ -19,7 +19,11 @@ internal object GeminiPromptFactory {
         when (documentType) {
             AiDocumentType.RECEIPT -> """
                 Extract this hotel bar or restaurant receipt exactly. The expected currency is
-                $expectedCurrencyCode. Do not include room number, signature, or handwritten tip.
+                $expectedCurrencyCode, but the currency printed on the receipt is authoritative.
+                Return that printed ISO 4217 currency code even when it differs from the expected
+                currency. Use the expected currency only as a fallback when the receipt has no
+                visible currency evidence. Never silently convert amounts. Do not include room
+                number, signature, or handwritten tip.
                 For location return only the specific restaurant, bar, lounge, pool, or beach venue
                 where the charge occurred. Exclude the hotel or resort name, city, region, country,
                 street, and other address text. For example, prefer "Sunset Lobby" over

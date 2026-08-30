@@ -7,6 +7,8 @@
     <string name="first_trip_text">Lege eine Reise an, um Belege zu erfassen und deine Ausgaben im Blick zu behalten.</string>
     <string name="create_trip">Reise anlegen</string>
     <string name="edit_trip">Reise bearbeiten</string>
+    <string name="delete_trip">Reise löschen</string>
+    <string name="delete_trip_confirm">„%1$s“ wirklich löschen? Dabei werden %2$d Belege und %3$d Rechnungsabgleiche aus der App entfernt. Originalbilder im Galeriealbum „Bill Check“ bleiben erhalten.</string>
     <string name="edit_trip_named">%1$s bearbeiten</string>
     <string name="reorder_trip_named">%1$s gedrückt halten und verschieben</string>
     <string name="trip_name">Name der Reise</string>
@@ -71,7 +73,8 @@
     <string name="receipt_date">Belegdatum (TT.MM.JJJJ)</string>
     <string name="date_example">z. B. 26.12.2024</string>
     <string name="amount_in_currency">Betrag (%1$s)</string>
-    <string name="receipt_exchange_rate">1 EUR = %1$s %2$s</string>
+    <string name="receipt_exchange_rate">1 %1$s = %2$s %3$s</string>
+    <string name="receipt_tip">Trinkgeld: %1$s</string>
     <string name="receipt_items">Einzelne Posten</string>
     <string name="item_number">Posten %1$d</string>
     <string name="item_name">Bezeichnung</string>
@@ -79,6 +82,7 @@
     <string name="previous_values">Früher verwendet (%1$d)</string>
     <string name="field_suggestions">Vorschläge (%1$d)</string>
     <string name="ai_suggestion_source">KI-Vorschlag · Sicherheit: %1$s</string>
+    <string name="ai_result_review_required">Das KI-Ergebnis konnte nicht automatisch übernommen werden. Bitte Währung und Vorschläge prüfen.</string>
     <string name="history_suggestion_source">Früher verwendet</string>
     <string name="local_ocr_suggestion_source">Lokale Texterkennung</string>
     <string name="image_selection_suggestion_source">Im Bild ausgewählt</string>
@@ -301,7 +305,7 @@
     <string name="transfer_error_message">Die gewählte Datei konnte nicht verarbeitet werden.</string>
     <string name="widget_description">Reiseübersicht und schnelle Belegerfassung</string>
     <string name="widget_no_trip">Noch keine Reise</string>
-    <string name="widget_rounded_total">%1$d €</string>
+    <string name="widget_rounded_total">%1$d %2$s</string>
     <string name="widget_exact_and_count">Exakt %1$s · %2$d Belege</string>
     <string name="widget_photo">Foto</string>
     <string name="widget_image">Bild</string>
@@ -331,4 +335,35 @@
     <string name="update_release_notes">Neuerungen</string>
     <string name="update_release_notes_empty">Für dieses Release wurden keine Hinweise hinterlegt.</string>
     <string name="update_download_failed">Download fehlgeschlagen: %1$s</string>
+    <string name="currency_picker_title">Währung auswählen</string>
+    <string name="currency_search_label">Währung suchen</string>
+    <string name="currency_search_hint">Kürzel, Name oder Land/Region</string>
+    <string name="currency_search_clear">Suche leeren</string>
+    <string name="currency_search_empty">Keine passende Währung gefunden.</string>
+    <string name="currency_quick_access">Schnellauswahl</string>
+    <string name="currency_all">Alle Währungen</string>
+    <string name="currency_code">Kürzel</string>
+    <string name="currency_name">Name</string>
+    <string name="currency_region">Land/Region</string>
+    <string name="currency_regions_more">%1$s und %2$d weitere</string>
+    <string name="currency_many_regions">Mehrere Länder/Regionen (%1$d)</string>
+    <string name="currency_euro_region">Eurozone · %1$d Länder/Regionen</string>
+    <string name="currency_selected">Ausgewählt</string>
+    <string name="trip_currencies_title">Währungen dieser Reise</string>
+    <string name="trip_currencies_hint">Alle Kurse gelten einheitlich als: 1 %1$s entspricht x Einheiten der gewählten Währung.</string>
+    <string name="trip_currency_add">Währung hinzufügen</string>
+    <string name="trip_currency_add_other">Weitere Währung hinzufügen…</string>
+    <string name="trip_currency_home_badge">Heimatwährung</string>
+    <string name="trip_currency_rate_formula">1 %1$s = x %2$s</string>
+    <string name="trip_currency_rate_fixed">Fester Kurs</string>
+    <string name="trip_currency_rate_daily">Tageskurs</string>
+    <string name="trip_currency_make_default">Als Standard für neue Belege verwenden</string>
+    <string name="trip_currency_delete">%1$s aus der Reise entfernen</string>
+    <string name="trip_currency_home_protected">Die Heimatwährung gehört immer zur Reise; ihr Kurs ist 1.</string>
+    <string name="trip_currency_default_protected">Lege zuerst eine andere Standardwährung fest, um diese Währung zu entfernen.</string>
+    <string name="trip_currency_tip_protected">Diese Währung wird für das Standard-Trinkgeld verwendet und kann deshalb nicht entfernt werden.</string>
+    <string name="trip_currency_used_protected">Diese Währung wird bereits von einem Beleg oder Trinkgeld verwendet und kann deshalb nicht entfernt werden.</string>
+    <string name="receipt_currency">Währung des Belegs</string>
+    <string name="home_currency">Heimatwährung</string>
+    <string name="home_currency_new_trips_hint">Gilt nur als Vorgabe für neue Reisen. Bestehende Reisen und ihre Summen bleiben unverändert.</string>
 </resources>

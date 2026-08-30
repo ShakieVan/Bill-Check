@@ -10,13 +10,14 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 @Database(
     entities = [
         TripEntity::class,
+        TripCurrencyEntity::class,
         ReceiptEntity::class,
         ReceiptItemEntity::class,
         ReconciliationEntity::class,
         StatementLineEntity::class,
         ReceiptMatchEntity::class,
     ],
-    version = 5,
+    version = 6,
     exportSchema = true,
 )
 abstract class BillCheckDatabase : RoomDatabase() {
@@ -29,7 +30,16 @@ abstract class BillCheckDatabase : RoomDatabase() {
                 BillCheckDatabase::class.java,
                 "bill-check.db",
             )
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
+                .addMigrations(
+                    MIGRATION_1_2,
+                    MIGRATION_2_3,
+                    MIGRATION_3_4,
+                    MIGRATION_4_5,
+                )
+                // Version 6 deliberately replaces the pre-release single-currency
+                // schema. Bill Check was not yet live, so retaining a second legacy
+                // model and its ambiguous tip-rate semantics would be riskier.
+                .fallbackToDestructiveMigration(dropAllTables = true)
                 .build()
 
         val MIGRATION_1_2 = object : Migration(1, 2) {
@@ -78,5 +88,6 @@ abstract class BillCheckDatabase : RoomDatabase() {
                 )
             }
         }
+
     }
 }
