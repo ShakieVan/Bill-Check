@@ -2,8 +2,10 @@
 
 ## 30.08.2026 – Feldnahe KI-Ergebnisprüfung
 
-- Die bisherige allgemeine Konfliktkarte durch einen festen, umbruchsicheren
-  Aktionsbereich mit „Auswertung fertig“ und vollbreiten Schaltflächen ersetzt.
+- Die bisherige allgemeine Konfliktkarte durch einen umbruchsicheren
+  Review-Bereich mit „Auswertung fertig“ und vollbreiten Schaltflächen ersetzt.
+  Er liegt direkt unter „Text im Bild auswählen“ und verwendet zusammen mit
+  den feldnahen Vorschlägen eine klar zuordenbare orange Akzentfarbe.
 - Potenziell abweichende Kopf- und Postenwerte stehen in derselben Akzentfarbe
   ohne platzraubendes Präfix direkt unter ihrem Zielfeld. Ein Tipp übernimmt
   nur diesen Wert; die bisherigen Mehrfachvorschläge bleiben parallel nutzbar.
@@ -14,7 +16,11 @@
 - Bei konkurrierenden Postenlisten folgt eine eigene Entscheidung. Geschützte
   Namen und Beträge bleiben selbst bei der ausdrücklichen Listenübernahme
   erhalten; Hinzufügen oder Löschen eines Postens beendet die unsichere
-  positionsbasierte Zusammenführung.
+  positionsbasierte Zusammenführung. Posten, die bei einer Übernahme entfallen
+  würden, werden vorher orange und ausdrücklich als solche gekennzeichnet.
+- Ein im ViewModel verbliebenes älteres KI-Ergebnis öffnet beim erneuten
+  Bearbeiten keinen Review mehr. Nur eine im aktuellen Editor gestartete
+  Analyse darf neue Vorschläge und Aktionen einblenden.
 - Die destruktive Aktion „Reise löschen“ aus der gemeinsamen Zeile mit
   „Abbrechen/Speichern“ gelöst, damit keine Beschriftung mehr schmal umbricht.
 

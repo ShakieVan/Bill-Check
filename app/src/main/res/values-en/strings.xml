@@ -103,6 +103,7 @@
     <string name="apply_detected_items">Apply recognized items</string>
     <string name="apply_detected_value">Apply recognized value: %1$s</string>
     <string name="additional_detected_items">Additional recognized items</string>
+    <string name="detected_items_would_remove_item">Not recognized — would be removed when applying the recognized items.</string>
     <string name="spatial_text_accessibility">Receipt image. Recognized text: %1$s</string>
     <string name="item_amount">Amount (%1$s)</string>
     <string name="add_item">Add item</string>

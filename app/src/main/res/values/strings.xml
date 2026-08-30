@@ -103,6 +103,7 @@
     <string name="apply_detected_items">Erkannte Posten übernehmen</string>
     <string name="apply_detected_value">Erkannten Wert übernehmen: %1$s</string>
     <string name="additional_detected_items">Weitere erkannte Posten</string>
+    <string name="detected_items_would_remove_item">Nicht erkannt – würde beim Übernehmen der erkannten Posten entfernt.</string>
     <string name="spatial_text_accessibility">Belegbild. Erkannter Text: %1$s</string>
     <string name="item_amount">Betrag (%1$s)</string>
     <string name="add_item">Posten hinzufügen</string>

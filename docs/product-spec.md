@@ -82,8 +82,10 @@ Stand: 16.08.2026
 - Ein verknüpftes Bild bietet im Editor den neutralen Einstieg „Bild
   auswerten“. In einem neuen, unveränderten Eintrag werden die besten Treffer
   direkt in das weiterhin editierbare Formular übernommen. Andernfalls stehen
-  die erkannten Werte ohne Präfix farbig direkt unter den zugehörigen Feldern;
-  ein fester Aktionsbereich übernimmt oder verwirft die offenen Vorschläge.
+  die erkannten Werte ohne Präfix orange direkt unter den zugehörigen Feldern;
+  ein orange hervorgehobener Bereich unmittelbar unter „Text im Bild
+  auswählen“ übernimmt oder verwirft die offenen Vorschläge. Er erscheint nur
+  nach einer im aktuell geöffneten Editor gestarteten Auswertung.
 
 ## Belegposten
 
@@ -107,7 +109,9 @@ Stand: 16.08.2026
 - Die Auswahl eines alternativen KI-Kandidaten schützt das betreffende Feld
   vor der späteren Sammelübernahme. Bei konkurrierenden Postenlisten werden
   Kopfdaten und Liste getrennt bestätigt; manuelle Einzelwerte bleiben auch
-  bei einer ausdrücklich übernommenen KI-Liste erhalten.
+  bei einer ausdrücklich übernommenen KI-Liste erhalten. Aktuelle Posten, die
+  bei dieser Listenübernahme entfallen würden, werden vorher orange und
+  ausdrücklich als solche gekennzeichnet.
 
 ## Abgleich
 

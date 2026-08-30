@@ -22,8 +22,11 @@ Der ausgewählte Anbieter erhält das Bild ausschließlich nach der ausdrücklic
 Aktion „Bild auswerten“. In einem neuen, seit dem Öffnen unveränderten Beleg
 werden die besten Treffer direkt in den Editor übernommen. Bei bestehenden
 oder zwischenzeitlich bearbeiteten Belegen bleibt das Ergebnis zunächst als
-farbiger, feldnaher Vorschlag sichtbar und wird über einen festen Aktionsbereich
-angenommen oder verworfen. Es wird niemals unmittelbar in Room gespeichert.
+oranger, feldnaher Vorschlag sichtbar und wird über einen direkt unter den
+Bildaktionen liegenden Review-Bereich angenommen oder verworfen. Dieser
+Bereich darf nur nach einer im gerade geöffneten Editor gestarteten Auswertung
+erscheinen; ein älteres Provider-Ergebnis löst ihn nicht erneut aus. Das
+Ergebnis wird niemals unmittelbar in Room gespeichert.
 
 Belegantworten trennen gedruckte Mengen von Artikelbezeichnungen und liefern
 für fachliche Felder bis zu drei bildgestützte Kandidaten mit Evidenz,
@@ -34,7 +37,8 @@ der Antwort und bei einer späteren Sammelübernahme nicht überschrieben.
 Manuell gewählte Alternativkandidaten gelten für das jeweilige Feld als
 entschieden. Strukturelle Änderungen an einer Postenliste erfordern eine
 eigene ausdrückliche Entscheidung; ein unbemerkter Listentausch findet nicht
-statt.
+statt. Aktuelle Posten ohne positionsgleichen KI-Posten werden orange als bei
+der Listenübernahme entfallend gekennzeichnet.
 
 Ein sichtbares KI-Transkript kann mit der lokalen ML-Kit-Zeichengeometrie
 fusioniert werden. Diese Hybridlage unterstützt die manuelle Auswahl direkt im

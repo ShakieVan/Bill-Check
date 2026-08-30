@@ -13,6 +13,10 @@ private val LightColors = lightColorScheme(
     primaryContainer = Color(0xFFDCE7FF),
     onPrimaryContainer = Color(0xFF0A2B66),
     secondary = Color(0xFF475569),
+    tertiary = Color(0xFFC2410C),
+    onTertiary = Color.White,
+    tertiaryContainer = Color(0xFFFFE8D5),
+    onTertiaryContainer = Color(0xFF7C2D12),
     surface = Color(0xFFFFFFFF),
     surfaceVariant = Color(0xFFF1F5F9),
     background = Color(0xFFF5F7FA),
@@ -27,6 +31,10 @@ private val DarkColors = darkColorScheme(
     primaryContainer = Color(0xFF164A9C),
     onPrimaryContainer = Color(0xFFDCE7FF),
     secondary = Color(0xFFB8C5D6),
+    tertiary = Color(0xFFFFB077),
+    onTertiary = Color(0xFF5C2600),
+    tertiaryContainer = Color(0xFF7C2D12),
+    onTertiaryContainer = Color(0xFFFFDCC2),
     surface = Color(0xFF172033),
     surfaceVariant = Color(0xFF202B3D),
     background = Color(0xFF0B1220),
@@ -51,4 +59,3 @@ fun BillCheckTheme(
         content = content,
     )
 }
-

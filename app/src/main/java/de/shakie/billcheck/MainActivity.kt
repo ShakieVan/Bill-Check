@@ -52,6 +52,7 @@ import androidx.compose.material.icons.filled.RemoveCircleOutline
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
@@ -2388,7 +2389,7 @@ internal fun ReceiptEditorDialog(
     val incomingExtractedReceipt = (aiExtraction as? AiExtractionState.ReceiptSuccess)
         ?.takeIf { it.imageUri == imageUri }
         ?.receipt
-    val extractedReceipt = incomingExtractedReceipt ?: retainedExtractedReceipt
+    val extractedReceipt = retainedExtractedReceipt
     val recognizedPage = (localOcr as? LocalOcrState.Success)
         ?.takeIf { it.imageUri == imageUri }
         ?.page
@@ -2554,12 +2555,12 @@ internal fun ReceiptEditorDialog(
 
     LaunchedEffect(aiExtraction) {
         if (aiExtraction is AiExtractionState.Error) {
-            analysisRequest = null
+            if (analysisRequest != null) analysisRequest = null
             return@LaunchedEffect
         }
         val extracted = incomingExtractedReceipt ?: return@LaunchedEffect
+        val request = analysisRequest ?: return@LaunchedEffect
         retainedExtractedReceipt = extracted
-        val request = analysisRequest ?: ReceiptAnalysisRequest(currentBaseline(), wasVirgin = false)
         analysisRequest = null
         val mayApplyAutomatically = shouldAutoApplyReceiptAnalysis(request, currentBaseline())
         val supportedCurrencyCodes = CurrencyCatalog.entries(Locale.ROOT).mapTo(hashSetOf()) { it.code }
@@ -2620,21 +2621,6 @@ internal fun ReceiptEditorDialog(
                 items.map { ReceiptItemDraft(it.name, it.amountText) },
             )
         },
-        contextualActions = pendingAiReview?.let { review ->
-            {
-                val awaitsItemDecision = review.resolvedFields.containsAll(ReceiptAiField.entries) &&
-                    review.itemsProtected &&
-                    !review.itemsDismissed &&
-                    review.extracted.items.isNotEmpty()
-                AiReviewActions(
-                    itemDecision = awaitsItemDecision,
-                    onApply = {
-                        if (awaitsItemDecision) applyReviewedItems() else applyOpenAiValues()
-                    },
-                    onKeep = { pendingAiReview = null },
-                )
-            }
-        },
     ) {
                 ReceiptEditorImageSection(
                     imageUri = imageUri,
@@ -2660,6 +2646,20 @@ internal fun ReceiptEditorDialog(
                         }
                     },
                 )
+                pendingAiReview?.let { review ->
+                    val awaitsItemDecision = review.resolvedFields.containsAll(ReceiptAiField.entries) &&
+                        review.itemsProtected &&
+                        !review.itemsDismissed &&
+                        review.extracted.items.isNotEmpty()
+                    AiReviewActions(
+                        itemDecision = awaitsItemDecision,
+                        onApply = {
+                            if (awaitsItemDecision) applyReviewedItems() else applyOpenAiValues()
+                        },
+                        onKeep = { pendingAiReview = null },
+                    )
+                }
+                HorizontalDivider(Modifier.padding(vertical = 4.dp))
                 LocalOcrStatus(
                     state = localOcr,
                     imageUri = imageUri,
@@ -2902,13 +2902,19 @@ internal fun ReceiptEditorDialog(
                     fontWeight = FontWeight.SemiBold,
                 )
                 items.forEachIndexed { index, item ->
+                    val activeItemReview = pendingAiReview?.takeUnless { it.itemsDismissed }
+                    val wouldBeRemovedByDetectedItems = activeItemReview != null &&
+                        index >= activeItemReview.extracted.items.size
                     val aiItemSuggestionSource = item.aiSourceIndex
                         ?.let { extractedReceipt?.items?.getOrNull(it) }
-                        ?: pendingAiReview?.takeUnless { it.itemsDismissed }
-                            ?.extracted?.items?.getOrNull(index)
+                        ?: activeItemReview?.extracted?.items?.getOrNull(index)
                     Card(
                         colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                            containerColor = if (wouldBeRemovedByDetectedItems) {
+                                MaterialTheme.colorScheme.tertiaryContainer
+                            } else {
+                                MaterialTheme.colorScheme.surfaceVariant
+                            },
                         ),
                     ) {
                         Column(
@@ -2936,6 +2942,14 @@ internal fun ReceiptEditorDialog(
                                         tint = MaterialTheme.colorScheme.error,
                                     )
                                 }
+                            }
+                            if (wouldBeRemovedByDetectedItems) {
+                                Text(
+                                    stringResource(R.string.detected_items_would_remove_item),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.tertiary,
+                                )
                             }
                             ImageTextTarget(
                                 pendingText = pendingImageText,
@@ -3099,12 +3113,12 @@ internal fun ReceiptEditorDialog(
                         Text(
                             stringResource(R.string.additional_detected_items),
                             style = MaterialTheme.typography.labelLarge,
-                            color = MaterialTheme.colorScheme.primary,
+                            color = MaterialTheme.colorScheme.tertiary,
                         )
                         additionalItems.forEachIndexed { offset, detectedItem ->
                             Card(
                                 colors = CardDefaults.cardColors(
-                                    containerColor = MaterialTheme.colorScheme.primaryContainer,
+                                    containerColor = MaterialTheme.colorScheme.tertiaryContainer,
                                 ),
                             ) {
                                 Column(
@@ -3120,10 +3134,10 @@ internal fun ReceiptEditorDialog(
                                             detectedItem.quantityText,
                                             detectedItem.name,
                                         ),
-                                        color = MaterialTheme.colorScheme.primary,
+                                        color = MaterialTheme.colorScheme.tertiary,
                                     )
                                     detectedItem.amountText.takeIf(String::isNotBlank)?.let { value ->
-                                        Text(value, color = MaterialTheme.colorScheme.primary)
+                                        Text(value, color = MaterialTheme.colorScheme.tertiary)
                                     }
                                 }
                             }
@@ -3408,7 +3422,6 @@ private fun ReceiptEditorImageSection(
             Text(stringResource(R.string.select_text_in_image))
         }
     }
-    HorizontalDivider(Modifier.padding(vertical = 4.dp))
 }
 
 @Composable
@@ -3486,31 +3499,44 @@ private fun AiReviewActions(
     onApply: () -> Unit,
     onKeep: () -> Unit,
 ) {
-    Column(
-        modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
+    Card(
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.tertiaryContainer,
+        ),
     ) {
-        Text(
-            stringResource(R.string.ai_analysis_complete),
-            style = MaterialTheme.typography.titleSmall,
-            fontWeight = FontWeight.SemiBold,
-            color = MaterialTheme.colorScheme.primary,
-        )
-        Button(onClick = onApply, modifier = Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
             Text(
-                stringResource(
-                    if (itemDecision) R.string.apply_detected_items
-                    else R.string.apply_detected_values,
-                ),
+                stringResource(R.string.ai_analysis_complete),
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.tertiary,
             )
-        }
-        OutlinedButton(onClick = onKeep, modifier = Modifier.fillMaxWidth()) {
-            Text(
-                stringResource(
-                    if (itemDecision) R.string.keep_my_items
-                    else R.string.keep_my_entries,
+            Button(
+                onClick = onApply,
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.tertiary,
+                    contentColor = MaterialTheme.colorScheme.onTertiary,
                 ),
-            )
+            ) {
+                Text(
+                    stringResource(
+                        if (itemDecision) R.string.apply_detected_items
+                        else R.string.apply_detected_values,
+                    ),
+                )
+            }
+            OutlinedButton(onClick = onKeep, modifier = Modifier.fillMaxWidth()) {
+                Text(
+                    stringResource(
+                        if (itemDecision) R.string.keep_my_items
+                        else R.string.keep_my_entries,
+                    ),
+                )
+            }
         }
     }
 }
@@ -3527,7 +3553,7 @@ private fun PendingAiValue(
     Text(
         text = value,
         style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.primary,
+        color = MaterialTheme.colorScheme.tertiary,
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClickLabel = applyDescription, onClick = onApply)
@@ -3744,7 +3770,6 @@ private fun ScrollableEditorDialog(
     onDismiss: () -> Unit,
     onSave: () -> Unit,
     destructiveAction: (@Composable () -> Unit)? = null,
-    contextualActions: (@Composable () -> Unit)? = null,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     Dialog(onDismissRequest = onDismiss) {
@@ -3770,16 +3795,6 @@ private fun ScrollableEditorDialog(
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                     content = content,
                 )
-                contextualActions?.let { actions ->
-                    HorizontalDivider()
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 10.dp),
-                    ) {
-                        actions()
-                    }
-                }
                 destructiveAction?.let { action ->
                     HorizontalDivider()
                     Box(
