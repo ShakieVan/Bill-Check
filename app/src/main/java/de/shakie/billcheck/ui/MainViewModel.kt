@@ -8,6 +8,9 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import de.shakie.billcheck.BillCheckApplication
 import de.shakie.billcheck.data.ReceiptEntity
+import de.shakie.billcheck.data.BatchReceiptImportEntity
+import de.shakie.billcheck.data.BatchReceiptImportStatus
+import de.shakie.billcheck.data.ReceiptReviewState
 import de.shakie.billcheck.data.NewReceiptItem
 import de.shakie.billcheck.data.ReceiptWithItems
 import de.shakie.billcheck.data.ReconciliationWithLines
@@ -26,6 +29,8 @@ import de.shakie.billcheck.domain.AiExtractionProvider
 import de.shakie.billcheck.domain.AiExtractionResult
 import de.shakie.billcheck.domain.ExtractedReceipt
 import de.shakie.billcheck.domain.ExtractedStatement
+import de.shakie.billcheck.domain.ExtractedTranscriptLine
+import de.shakie.billcheck.domain.BatchReceiptExtractionMapper
 import de.shakie.billcheck.data.OcrPage
 import de.shakie.billcheck.data.GeminiModelInfo
 import de.shakie.billcheck.data.LocalAiAuthType
@@ -40,6 +45,7 @@ import de.shakie.billcheck.update.UpdateCheckStatus
 import de.shakie.billcheck.update.UpdateRelease
 import java.math.BigDecimal
 import java.time.LocalDate
+import java.time.LocalTime
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.time.format.ResolverStyle
@@ -55,6 +61,9 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 enum class AppUpdateStatus {
     IDLE,
@@ -89,6 +98,7 @@ data class MainUiState(
     val locationSuggestions: List<String> = emptyList(),
     val itemNameSuggestions: List<String> = emptyList(),
     val reconciliations: List<ReconciliationWithLines> = emptyList(),
+    val batchReceiptImports: List<BatchReceiptImportEntity> = emptyList(),
 )
 
 data class CandidateSelectionState(
@@ -136,6 +146,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val reconciliationAnalysis = _reconciliationAnalysis.asStateFlow()
     private val _localOcr = MutableStateFlow<LocalOcrState>(LocalOcrState.Idle)
     val localOcr = _localOcr.asStateFlow()
+    private val _aiTranscript = MutableStateFlow<AiTranscriptState>(AiTranscriptState.Idle)
+    val aiTranscript = _aiTranscript.asStateFlow()
+    private var localOcrJob: Job? = null
+    private var aiTranscriptJob: Job? = null
+    private var localOcrGeneration = 0L
+    private var aiTranscriptGeneration = 0L
     private val _geminiModels = MutableStateFlow<GeminiModelsState>(GeminiModelsState.Idle)
     val geminiModels = _geminiModels.asStateFlow()
     private val _localAiSettings = MutableStateFlow(localAiSettingsStore.read())
@@ -147,6 +163,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _appUpdate = MutableStateFlow(AppUpdateState())
     val appUpdate = _appUpdate.asStateFlow()
     private var updateDownloadJob: Job? = null
+    private var batchReceiptJob: Job? = null
+    private val aiRequestMutex = Mutex()
     private val currencyPreferences = MutableStateFlow(
         CurrencyPreferences(
             homeCurrencyCode = homeCurrencySettingsStore.read(),
@@ -166,6 +184,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private val receipts = selectedTrip.flatMapLatest { trip ->
         trip?.let { repository.receipts(it.id) } ?: flowOf(emptyList())
+    }
+
+    private val batchReceiptImports = selectedTrip.flatMapLatest { trip ->
+        trip?.let { repository.visibleBatchImports(it.id) } ?: flowOf(emptyList())
     }
 
     private val tripCurrencies = selectedTrip.flatMapLatest { trip ->
@@ -195,7 +217,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         MainUiCore(currentTrips, currentTrip, currentReceipts, suggestions, currentReconciliations)
     }
 
-    val uiState = combine(uiCore, tripCurrencies, currencyPreferences) { core, currencies, preferences ->
+    val uiState = combine(
+        uiCore,
+        tripCurrencies,
+        currencyPreferences,
+        batchReceiptImports,
+    ) { core, currencies, preferences, batchImports ->
         val homeCode = core.selectedTrip?.homeCurrencyCode ?: preferences.homeCurrencyCode
         MainUiState(
             trips = core.trips,
@@ -212,6 +239,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             locationSuggestions = core.suggestions.locations,
             itemNameSuggestions = core.suggestions.itemNames,
             reconciliations = core.reconciliations,
+            batchReceiptImports = batchImports,
         )
     }.stateIn(
         viewModelScope,
@@ -223,6 +251,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             uiState.collect { BillCheckWidget.updateAll(application) }
         }
+        kickBatchReceiptProcessing()
     }
 
     fun selectTrip(id: String) {
@@ -378,6 +407,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         addDefaultTip: Boolean,
         itemDrafts: List<ReceiptItemDraft>,
         imageUri: String? = null,
+        occurredTimeText: String = "00:00",
     ): Boolean {
         val trip = uiState.value.selectedTrip ?: return false
         val currency = uiState.value.tripCurrencies.firstOrNull { it.currencyCode == currencyCode }
@@ -390,7 +420,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             null
         }
         val input = parseReceiptInput(amountText, itemDrafts, currency.currencyCode) ?: return false
-        val occurredAt = parseReceiptDate(occurredOnText) ?: return false
+        val occurredAt = parseReceiptDateTime(occurredOnText, occurredTimeText) ?: return false
         viewModelScope.launch {
             val receiptRate = currentRate(trip, currency)
             val tipMinor = if (addDefaultTip) trip.defaultTipMinor else 0
@@ -428,12 +458,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         occurredOnText: String,
         addDefaultTip: Boolean,
         itemDrafts: List<ReceiptItemDraft>,
+        occurredTimeText: String = "00:00",
     ): Boolean {
         val trip = uiState.value.selectedTrip ?: return false
         val currency = uiState.value.tripCurrencies.firstOrNull { it.currencyCode == currencyCode }
             ?: return false
         val input = parseReceiptInput(amountText, itemDrafts, currency.currencyCode) ?: return false
-        val occurredAt = parseReceiptDate(occurredOnText) ?: return false
+        val occurredAt = parseReceiptDateTime(occurredOnText, occurredTimeText) ?: return false
         viewModelScope.launch {
             val old = existing.receipt
             val tipMinor = when {
@@ -478,6 +509,135 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun saveAiSettings(providerId: String, apiKey: String?, model: String) {
         aiSettingsStore.save(providerId, apiKey, model)
         _aiSettings.value = aiSettingsStore.read()
+    }
+
+    fun enqueueBatchReceiptImages(tripId: String, imageUris: List<String>) {
+        if (imageUris.isEmpty()) return
+        val previousJob = batchReceiptJob
+        previousJob?.cancel()
+        batchReceiptJob = null
+        viewModelScope.launch {
+            previousJob?.cancelAndJoin()
+            repository.enqueueBatchReceiptImports(tripId, imageUris)
+            kickBatchReceiptProcessing()
+        }
+    }
+
+    fun retryBatchReceiptImport(itemId: String) {
+        viewModelScope.launch {
+            repository.retryBatchReceiptImport(itemId)
+            kickBatchReceiptProcessing()
+        }
+    }
+
+    fun cancelBatchReceiptImports(batchId: String) {
+        val previousJob = batchReceiptJob
+        previousJob?.cancel()
+        batchReceiptJob = null
+        viewModelScope.launch {
+            previousJob?.cancelAndJoin()
+            repository.cancelBatchReceiptImports(batchId)
+            kickBatchReceiptProcessing()
+        }
+    }
+
+    fun dismissBatchReceiptImports(tripId: String) {
+        viewModelScope.launch { repository.dismissBatchReceiptImports(tripId) }
+    }
+
+    private fun kickBatchReceiptProcessing() {
+        if (batchReceiptJob?.isActive == true) return
+        batchReceiptJob = viewModelScope.launch {
+            while (true) {
+                val item = repository.nextPendingBatchReceiptImport() ?: break
+                processBatchReceipt(item)
+            }
+        }
+    }
+
+    private suspend fun processBatchReceipt(item: BatchReceiptImportEntity) {
+        val now = System.currentTimeMillis()
+        repository.receipt(item.id)?.let { existing ->
+            repository.updateBatchReceiptImport(
+                item.copy(
+                    status = BatchReceiptImportStatus.COMPLETED,
+                    receiptId = existing.id,
+                    updatedAt = now,
+                ),
+            )
+            return
+        }
+        repository.updateBatchReceiptImport(
+            item.copy(status = BatchReceiptImportStatus.PROCESSING, message = null, updatedAt = now),
+        )
+        runCatching {
+            val tripWithCurrencies = requireNotNull(repository.tripWithCurrencies(item.tripId)) {
+                "Reise wurde gelöscht"
+            }
+            val trip = tripWithCurrencies.trip
+            val runtime = requireNotNull(activeAiRuntime()) { "KI-Zugang ist nicht eingerichtet" }
+            val defaultCurrency = tripWithCurrencies.currencies.firstOrNull { it.isDefault }
+                ?: tripWithCurrencies.currencies.first()
+            val extracted = aiRequestMutex.withLock {
+                runtime.provider.extract(
+                    imageUri = Uri.parse(item.imageUri),
+                    documentType = AiDocumentType.RECEIPT,
+                    expectedCurrencyCode = defaultCurrency.currencyCode,
+                    apiKey = runtime.credential,
+                    model = runtime.model,
+                ) as AiExtractionResult.Receipt
+            }.value
+            val draft = BatchReceiptExtractionMapper.map(
+                extracted = extracted,
+                currencies = tripWithCurrencies.currencies,
+                fallbackOccurredAt = item.createdAt,
+                existingReceipts = repository.receiptsForTrip(item.tripId).map { it.receipt },
+            )
+            val tipMinor = if (trip.defaultTipSelected) trip.defaultTipMinor else 0L
+            val tipCurrency = tripWithCurrencies.currencies.firstOrNull {
+                it.currencyCode == trip.defaultTipCurrencyCode
+            }
+            val receipt = repository.addReceipt(
+                trip = trip,
+                location = draft.location,
+                checkNumber = draft.checkNumber,
+                amountMinor = draft.amountMinor,
+                currencyCode = draft.currency.currencyCode,
+                exchangeRateSnapshot = currentRate(trip, draft.currency),
+                tipMinor = tipMinor,
+                tipCurrencyCode = tipCurrency?.currencyCode ?: trip.homeCurrencyCode,
+                tipExchangeRateSnapshot = tipCurrency?.let { currentRate(trip, it) } ?: "1",
+                items = draft.items,
+                imageUri = item.imageUri,
+                occurredAt = draft.occurredAt,
+                reviewState = if (draft.reviewReasons.isEmpty()) {
+                    ReceiptReviewState.CONFIRMED
+                } else {
+                    ReceiptReviewState.required(draft.reviewReasons)
+                },
+                receiptId = item.id,
+            )
+            receipt to draft.reviewReasons
+        }.onSuccess { (receipt, reasons) ->
+            repository.updateBatchReceiptImport(
+                item.copy(
+                    status = BatchReceiptImportStatus.COMPLETED,
+                    receiptId = receipt.id,
+                    message = reasons.joinToString(",").ifBlank { null },
+                    updatedAt = System.currentTimeMillis(),
+                ),
+            )
+            homeCurrencySettingsStore.recordUsed(receipt.currencyCode)
+            refreshCurrencyPreferences()
+        }.onFailure { error ->
+            repository.updateBatchReceiptImport(
+                item.copy(
+                    status = BatchReceiptImportStatus.FAILED,
+                    message = error.message?.take(300) ?: error.javaClass.simpleName,
+                    updatedAt = System.currentTimeMillis(),
+                ),
+            )
+        }
     }
 
     fun clearAiApiKey() {
@@ -574,7 +734,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         _aiExtraction.value = AiExtractionState.Loading(imageUri)
         viewModelScope.launch {
             runCatching {
-                runtime.provider.extract(
+                aiRequestMutex.withLock { runtime.provider.extract(
                     imageUri = Uri.parse(imageUri),
                     documentType = AiDocumentType.RECEIPT,
                     expectedCurrencyCode = expectedCurrencyCode
@@ -582,7 +742,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         ?: trip.homeCurrencyCode,
                     apiKey = runtime.credential,
                     model = runtime.model,
-                ) as AiExtractionResult.Receipt
+                ) as AiExtractionResult.Receipt }
             }.onSuccess {
                 _aiExtraction.value = AiExtractionState.ReceiptSuccess(imageUri, it.value)
             }.onFailure {
@@ -604,14 +764,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         _aiExtraction.value = AiExtractionState.Loading(imageUri)
         viewModelScope.launch {
             runCatching {
-                runtime.provider.extract(
+                aiRequestMutex.withLock { runtime.provider.extract(
                     imageUri = Uri.parse(imageUri),
                     documentType = AiDocumentType.STATEMENT,
                     expectedCurrencyCode = uiState.value.tripCurrencies
                         .firstOrNull { it.isDefault }?.currencyCode ?: trip.homeCurrencyCode,
                     apiKey = runtime.credential,
                     model = runtime.model,
-                ) as AiExtractionResult.Statement
+                ) as AiExtractionResult.Statement }
             }.onSuccess {
                 _aiExtraction.value = AiExtractionState.StatementSuccess(
                     imageUri,
@@ -656,12 +816,27 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         _aiExtraction.value = AiExtractionState.Idle
     }
 
-    fun analyzeLocally(imageUri: String) {
+    fun analyzeReceiptText(imageUri: String) {
+        val runtime = activeAiRuntime()
+        val localGeneration = ++localOcrGeneration
+        val aiGeneration = ++aiTranscriptGeneration
+        localOcrJob?.cancel()
+        aiTranscriptJob?.cancel()
         _localOcr.value = LocalOcrState.Loading(imageUri)
-        viewModelScope.launch {
+        _aiTranscript.value = if (runtime == null) {
+            AiTranscriptState.Unavailable(imageUri)
+        } else {
+            AiTranscriptState.Loading(imageUri)
+        }
+        localOcrJob = viewModelScope.launch {
             runCatching { localTextRecognizer.recognize(Uri.parse(imageUri)) }
-                .onSuccess { _localOcr.value = LocalOcrState.Success(imageUri, it) }
+                .onSuccess {
+                    if (localGeneration == localOcrGeneration) {
+                        _localOcr.value = LocalOcrState.Success(imageUri, it)
+                    }
+                }
                 .onFailure {
+                    if (localGeneration != localOcrGeneration) return@onFailure
                     Log.e("BillCheckOcr", "Offline text recognition failed", it)
                     _localOcr.value = LocalOcrState.Error(
                         imageUri,
@@ -669,10 +844,47 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     )
                 }
         }
+        if (runtime != null) {
+            aiTranscriptJob = viewModelScope.launch {
+                runCatching {
+                    aiRequestMutex.withLock { runtime.provider.transcribeReceipt(
+                        imageUri = Uri.parse(imageUri),
+                        apiKey = runtime.credential,
+                        model = runtime.model,
+                    ) }
+                }.onSuccess {
+                    if (aiGeneration == aiTranscriptGeneration) {
+                        _aiTranscript.value = AiTranscriptState.Success(imageUri, it)
+                    }
+                }.onFailure {
+                    if (aiGeneration != aiTranscriptGeneration) return@onFailure
+                    Log.e("BillCheckAiTranscript", "AI text recognition failed", it)
+                    _aiTranscript.value = AiTranscriptState.Error(
+                        imageUri,
+                        it.message?.take(300).orEmpty(),
+                    )
+                }
+            }
+        }
+    }
+
+    /** Kept for callers compiled against the previous name. */
+    fun analyzeLocally(imageUri: String) = analyzeReceiptText(imageUri)
+
+    fun continueWithLocalReceiptText(imageUri: String) {
+        if ((_aiTranscript.value as? AiTranscriptState.Loading)?.imageUri != imageUri) return
+        ++aiTranscriptGeneration
+        aiTranscriptJob?.cancel()
+        _aiTranscript.value = AiTranscriptState.Unavailable(imageUri)
     }
 
     fun clearLocalOcr() {
+        ++localOcrGeneration
+        ++aiTranscriptGeneration
+        localOcrJob?.cancel()
+        aiTranscriptJob?.cancel()
         _localOcr.value = LocalOcrState.Idle
+        _aiTranscript.value = AiTranscriptState.Idle
     }
 
     fun exportData(uri: Uri, tripIds: Set<String>, format: ExportFormat) {
@@ -913,11 +1125,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 val report = repository.runAutomaticReconciliation(tripId, reconciliation)
                 val runtime = activeAiRuntime()
                 if (runtime != null) {
-                    val summary = runtime.provider.summarizeReconciliation(
+                    val summary = aiRequestMutex.withLock { runtime.provider.summarizeReconciliation(
                         report = report,
                         apiKey = runtime.credential,
                         model = runtime.model,
-                    )
+                    ) }
                     repository.storeReconciliationSummary(report.reconciliationId, summary)
                 }
             }.onSuccess {
@@ -987,15 +1199,23 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             return ParsedReceiptInput(totalMinor, items).takeIf { it.totalMinor > 0 }
         }
 
-        fun parseReceiptDate(value: String): Long? {
-            val trimmed = value.trim()
+        fun parseReceiptDate(value: String): Long? = parseReceiptDateTime(value, "00:00")
+
+        fun parseReceiptDateTime(dateValue: String, timeValue: String): Long? {
+            val trimmed = dateValue.trim()
             val date = sequenceOf(
                 DateTimeFormatter.ofPattern("dd.MM.uuuu").withResolverStyle(ResolverStyle.STRICT),
                 DateTimeFormatter.ISO_LOCAL_DATE,
             ).mapNotNull { formatter ->
                 runCatching { LocalDate.parse(trimmed, formatter) }.getOrNull()
             }.firstOrNull() ?: return null
-            return date.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
+            val time = runCatching {
+                LocalTime.parse(
+                    timeValue.trim(),
+                    DateTimeFormatter.ofPattern("HH:mm").withResolverStyle(ResolverStyle.STRICT),
+                )
+            }.getOrNull() ?: return null
+            return date.atTime(time).atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
         }
 
         private fun normalizeTripCurrencies(
@@ -1090,6 +1310,17 @@ sealed interface GeminiModelsState {
     data object MissingApiKey : GeminiModelsState
     data class Success(val models: List<GeminiModelInfo>) : GeminiModelsState
     data class Error(val message: String) : GeminiModelsState
+}
+
+sealed interface AiTranscriptState {
+    data object Idle : AiTranscriptState
+    data class Unavailable(val imageUri: String) : AiTranscriptState
+    data class Loading(val imageUri: String) : AiTranscriptState
+    data class Success(
+        val imageUri: String,
+        val lines: List<ExtractedTranscriptLine>,
+    ) : AiTranscriptState
+    data class Error(val imageUri: String, val message: String) : AiTranscriptState
 }
 
 private data class AiRuntime(

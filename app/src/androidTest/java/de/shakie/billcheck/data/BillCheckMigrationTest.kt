@@ -59,7 +59,7 @@ class BillCheckMigrationTest {
     }
 
     @Test
-    fun version5DatabaseIsDeliberatelyRecreatedWithGenericCurrencySchema() {
+    fun version5DatabaseMigratesLosslesslyToBatchCapableGenericCurrencySchema() {
         val helper = FrameworkSQLiteOpenHelperFactory().create(
             SupportSQLiteOpenHelper.Configuration.builder(context)
                 .name(DATABASE_NAME)
@@ -77,25 +77,52 @@ class BillCheckMigrationTest {
                 })
                 .build(),
         )
-        helper.writableDatabase.execSQL(
-            "INSERT INTO trips VALUES ('legacy',0,'Legacy','EGP','55.5','FIXED',0,'EUR',0,'ORIGINAL',0)",
-        )
+        helper.writableDatabase.apply {
+            execSQL(
+                "INSERT INTO trips VALUES ('legacy',0,'Legacy','EGP','55.5','FIXED',0,'EUR',0,'ORIGINAL',0)",
+            )
+            execSQL(
+                "INSERT INTO receipts VALUES (" +
+                    "'receipt','legacy',1234,'Sultana','5595',15595,'EGP','55.5',281,0,'EUR'," +
+                    "'content://receipt','CONFIRMED',5678)",
+            )
+            execSQL("INSERT INTO receipt_items VALUES ('item','receipt',0,'Cola',12500,'EGP')")
+        }
         helper.close()
 
         val roomDatabase = Room.databaseBuilder(context, BillCheckDatabase::class.java, DATABASE_NAME)
-            .fallbackToDestructiveMigration(dropAllTables = true)
+            .addMigrations(BillCheckDatabase.MIGRATION_5_6, BillCheckDatabase.MIGRATION_6_7)
             .build()
         roomDatabase.openHelper.writableDatabase.apply {
             query("SELECT COUNT(*) FROM trips").use { cursor ->
                 cursor.moveToFirst()
-                assertEquals(0, cursor.getInt(0))
+                assertEquals(1, cursor.getInt(0))
             }
-            query("PRAGMA table_info(receipts)").use { cursor ->
-                val names = buildSet {
-                    while (cursor.moveToNext()) add(cursor.getString(cursor.getColumnIndexOrThrow("name")))
-                }
-                assertEquals(true, "exactHomeMinor" in names)
-                assertEquals(true, "tipExchangeRateSnapshot" in names)
+            query(
+                "SELECT amountMinor,currencyCode,exchangeRateSnapshot,exactHomeMinor,imageUri " +
+                    "FROM receipts WHERE id='receipt'",
+            ).use { cursor ->
+                cursor.moveToFirst()
+                assertEquals(15595, cursor.getInt(0))
+                assertEquals("EGP", cursor.getString(1))
+                assertEquals("55.5", cursor.getString(2))
+                assertEquals(281, cursor.getInt(3))
+                assertEquals("content://receipt", cursor.getString(4))
+            }
+            query("SELECT currencyCode,isDefault FROM trip_currencies ORDER BY currencyCode").use { cursor ->
+                cursor.moveToFirst()
+                assertEquals("EGP", cursor.getString(0))
+                assertEquals(1, cursor.getInt(1))
+                cursor.moveToNext()
+                assertEquals("EUR", cursor.getString(0))
+            }
+            query("SELECT name FROM receipt_items WHERE id='item'").use { cursor ->
+                cursor.moveToFirst()
+                assertEquals("Cola", cursor.getString(0))
+            }
+            query("SELECT COUNT(*) FROM batch_receipt_imports").use { cursor ->
+                cursor.moveToFirst()
+                assertEquals(0, cursor.getInt(0))
             }
         }
         roomDatabase.close()

@@ -20,8 +20,11 @@ class GeminiPromptFactoryTest {
         assertTrue(prompt.contains("return an empty currencyCode"))
         assertTrue(prompt.contains("printed item quantity separately"))
         assertTrue(prompt.contains("zero to three distinct candidates"))
-        assertTrue(prompt.contains("transcriptLines"))
-        assertTrue(prompt.contains("never reconstruct hidden characters"))
+        assertFalse(prompt.contains("transcriptLines"))
+        assertTrue(prompt.contains("separately printed final amount"))
+        assertTrue(prompt.contains("complete visible labelled total line"))
+        assertTrue(prompt.contains("HH:mm in 24-hour format"))
+        assertTrue(prompt.contains("Never infer the time"))
     }
 
     @Test
@@ -61,7 +64,8 @@ class GeminiPromptFactoryTest {
     fun receiptSchemaKeepsShapeButRemovesUnsupportedGeminiKeywords() {
         val schema = localReceiptSchema().forGeminiResponseSchema()
 
-        assertTrue(schema.getJSONObject("properties").has("transcriptLines"))
+        assertFalse(schema.getJSONObject("properties").has("transcriptLines"))
+        assertTrue(schema.getJSONObject("properties").has("time"))
         assertFalse(schema.containsKeyRecursively("additionalProperties"))
         assertFalse(schema.containsKeyRecursively("maximum"))
         assertFalse(schema.containsKeyRecursively("maxItems"))

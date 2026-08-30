@@ -77,4 +77,15 @@ class MainViewModelTest {
     fun `invalid receipt date is rejected`() {
         assertNull(MainViewModel.parseReceiptDate("31.02.2024"))
     }
+
+    @Test
+    fun `receipt date and time are stored in the same local timestamp`() {
+        val occurredAt = MainViewModel.parseReceiptDateTime("26.12.2024", "19:42")
+        val local = Instant.ofEpochMilli(requireNotNull(occurredAt)).atZone(ZoneId.systemDefault())
+
+        assertEquals("2024-12-26", local.toLocalDate().toString())
+        assertEquals("19:42", local.toLocalTime().toString())
+        assertNull(MainViewModel.parseReceiptDateTime("26.12.2024", "24:00"))
+        assertNull(MainViewModel.parseReceiptDateTime("26.12.2024", "9:7"))
+    }
 }

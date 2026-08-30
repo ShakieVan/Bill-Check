@@ -78,11 +78,15 @@ data class ExtractedReceipt(
     val currencyCode: String,
     val occurredOn: String,
     val items: List<ExtractedItem>,
+    val occurredTime: String = "",
     val locationSuggestions: ExtractedFieldSuggestions = ExtractedFieldSuggestions.single(location),
     val checkNumberSuggestions: ExtractedFieldSuggestions = ExtractedFieldSuggestions.single(checkNumber),
     val totalAmountSuggestions: ExtractedFieldSuggestions = ExtractedFieldSuggestions.single(totalAmountText),
     val occurredOnSuggestions: ExtractedFieldSuggestions = ExtractedFieldSuggestions.single(occurredOn),
+    val occurredTimeSuggestions: ExtractedFieldSuggestions = ExtractedFieldSuggestions.single(occurredTime),
     val transcriptLines: List<ExtractedTranscriptLine> = emptyList(),
+    /** A local plausibility check found that the proposed total must not be applied automatically. */
+    val totalAmountNeedsReview: Boolean = false,
 )
 
 data class ExtractedStatementLine(
@@ -123,6 +127,18 @@ interface AiExtractionProvider {
         model: String,
         receiptContext: List<ReconciliationReceiptContext> = emptyList(),
     ): AiExtractionResult
+
+    /**
+     * Reads spatial text only when the user opens the image-text selection tool.
+     *
+     * The default keeps test doubles and providers without spatial OCR source-compatible; the
+     * on-device OCR remains available in that case.
+     */
+    suspend fun transcribeReceipt(
+        imageUri: Uri,
+        apiKey: String,
+        model: String,
+    ): List<ExtractedTranscriptLine> = emptyList()
 
     suspend fun summarizeReconciliation(
         report: VerifiedReconciliationReport,

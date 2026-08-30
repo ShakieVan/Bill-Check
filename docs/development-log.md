@@ -1,5 +1,53 @@
 # Entwicklungsprotokoll
 
+## 30.08.2026 – Deterministische Datumswerte im KI-Abgleichsfazit
+
+- Einen reproduzierten Widerspruch beseitigt, bei dem das lokale Kurzfazit den
+  20.12.2024 korrekt zeigte, Qwen denselben rohen Unix-Zeitstempel aber als
+  07.12.2024 wiedergab.
+- Die Faktenaufbereitung für lokale KI und Gemini vereinheitlicht. Beide
+  Anbieter erhalten nun ein anzeigefertiges `occurredOn` (`20.12.2024` auf
+  Deutsch) und niemals den internen Millisekundenwert.
+- Der Prompt verbietet eine erneute Datumsumrechnung; ein Regressionstest
+  prüft den konkreten 20.12.2024-Fall sowie die Abwesenheit von `occurredAt`.
+
+## 30.08.2026 – Persistente Stapelverarbeitung für Belegbilder
+
+- In der aktiven Reise den Einzelbutton zu „Bild“ verkürzt, daneben
+  „Mehrere Bilder“ mit echter Mehrfachauswahl ergänzt und „Manuell erfassen“
+  in eine eigene Zeile verschoben.
+- Ausgewählte Bilder dauerhaft nach `Pictures/Bill Check` importiert und in
+  einer Room-Warteschlange nacheinander über den gewählten KI-Anbieter
+  verarbeitet. Alle KI-Aufträge sind appweit serialisiert, damit LM Studio/Qwen
+  nicht durch konkurrierende Anfragen überlastet wird.
+- Erfolgreiche Extraktionen erzeugen sofort normale Belege. Unklare Daten,
+  mögliche Dubletten und fehlende oder nicht eingerichtete Währungen werden
+  als orange Review-Fälle gespeichert, ohne den gesamten Stapel anzuhalten.
+- Fortschritt, Abbruch und Einzelwiederholung persistiert; stabile IDs
+  verhindern doppelte Belege bei einer Wiederaufnahme nach Prozessabbruch.
+- Die zuvor fehlende Migration 5→6 verlustfrei nachgezogen, Migration 6→7 für
+  die Warteschlange ergänzt und den destruktiven Room-Fallback entfernt. Der
+  komplette Pfad wurde auf einem separaten Android-16-Test-AVD geprüft; danach
+  blieb beim Update des Arbeits-Emulators dessen vorhandener Bestand erhalten.
+
+## 30.08.2026 – Schnellere KI-Auswertung und Systemgalerie
+
+- Fachliche Belegextraktion und räumliches Volltranskript in zwei unabhängige
+  KI-Aufträge getrennt; das Transkript läuft nur noch bei „Text im Bild
+  auswählen“ und bleibt mit der lokalen Zeichengeometrie kombinierbar.
+- Verspätete OCR-/Transkriptantworten gegen Bild- und Editorwechsel abgesichert;
+  bei langsamer KI ist ein bewusster lokaler Sofortstart möglich.
+- Konservative Summenplausibilität ergänzt: Eine mutmaßlich aus einem einzelnen
+  Posten übernommene Gesamtsumme wird nicht automatisch eingetragen, aber auch
+  niemals still durch eine berechnete Summe ersetzt.
+- Primäre Auswahl auf den System-Galeriefluss umgestellt. Temporäre Auswahl-URIs
+  werden robust in `Pictures/Bill Check` importiert; verworfene Kopien werden
+  wieder entfernt.
+- Der getrennte Extraktionsvertrag wurde gegen 23 private Einzelbelege geprüft:
+  keine unvollständige Antwort, alle separat gedruckten kanonischen Summen wie
+  in der Referenz und eine Medianlaufzeit von 24,9 statt zuvor 49,5 Sekunden.
+  Belegnamen, Bilder und Rohantworten bleiben im privaten Daten-Repository.
+
 ## 30.08.2026 – Feldnahe KI-Ergebnisprüfung
 
 - Die bisherige allgemeine Konfliktkarte durch einen umbruchsicheren
@@ -552,3 +600,16 @@
   eingeklappt. Ihr Prompt verlangt zwei bis vier Sätze, konkrete Details nur
   bei höchstens drei Diskrepanzen und keine technische Warnung bei fehlender
   Kontrollsumme.
+
+## 30.08.2026 – Belegzeit statt pauschal 00:00
+
+- Den Belegeditor um ein validiertes Uhrzeitfeld im Format `HH:mm` ergänzt.
+  Datum und Uhrzeit werden gemeinsam in `ReceiptEntity.occurredAt` gespeichert;
+  eine Datenbankmigration ist nicht erforderlich.
+- Die strukturierte KI-Antwort um eine separat evidenzgebundene Belegzeit samt
+  Alternativkandidaten erweitert. Fehlende Zeiten bleiben leer und dürfen weder
+  aus Bild-Metadaten noch aus der aktuellen Uhrzeit abgeleitet werden.
+- Automatische Übernahme, orange Feldvorschläge, manuelle Kandidatenauswahl und
+  Schutz parallel bearbeiteter Werte behandeln die Uhrzeit unabhängig vom
+  Datum. JVM- und Compose-Regressionstests decken Speicherung, Validierung und
+  den KI-Review-Pfad ab.

@@ -15,6 +15,12 @@ Heimatwährung seiner Reise als unveränderlichen Snapshot fest. Ein Trinkgeld
 hat einen unabhängigen Kurs-Snapshot. Wechselkurse werden als Dezimaltext
 persistiert und mit `BigDecimal` verarbeitet.
 
+Schemaänderungen werden über explizite, verlustfreie Room-Migrationen
+ausgeliefert. Ein Versionswechsel darf die lokale Datenbank nicht destruktiv
+neu anlegen. Die persistente Stapelwarteschlange ist ab Schema 7 Teil derselben
+lokalen Quelle der Wahrheit und wird mit der jeweiligen Reise kaskadierend
+gelöscht.
+
 ## Gründe
 
 - Das Galaxy S23 Ultra und neuere Zielgeräte erhalten Android 16.

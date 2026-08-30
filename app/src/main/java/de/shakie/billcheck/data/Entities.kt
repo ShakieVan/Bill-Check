@@ -90,6 +90,29 @@ data class ReceiptEntity(
     val createdAt: Long,
 )
 
+object ReceiptReviewState {
+    const val CONFIRMED = "CONFIRMED"
+    const val REVIEW_REQUIRED_PREFIX = "REVIEW_REQUIRED"
+
+    fun required(reasons: List<String>): String = buildString {
+        append(REVIEW_REQUIRED_PREFIX)
+        reasons.filter(String::isNotBlank).distinct().takeIf(List<String>::isNotEmpty)?.let {
+            append(':')
+            append(it.joinToString(","))
+        }
+    }
+
+    fun needsReview(value: String): Boolean = value.startsWith(REVIEW_REQUIRED_PREFIX)
+}
+
+object BatchReceiptImportStatus {
+    const val QUEUED = "QUEUED"
+    const val PROCESSING = "PROCESSING"
+    const val COMPLETED = "COMPLETED"
+    const val FAILED = "FAILED"
+    const val CANCELLED = "CANCELLED"
+}
+
 @Entity(
     tableName = "receipt_items",
     foreignKeys = [
@@ -118,6 +141,32 @@ data class ReceiptWithItems(
         entityColumn = "receiptId",
     )
     val items: List<ReceiptItemEntity>,
+)
+
+@Entity(
+    tableName = "batch_receipt_imports",
+    foreignKeys = [
+        ForeignKey(
+            entity = TripEntity::class,
+            parentColumns = ["id"],
+            childColumns = ["tripId"],
+            onDelete = ForeignKey.CASCADE,
+        ),
+    ],
+    indices = [Index("tripId"), Index("batchId")],
+)
+data class BatchReceiptImportEntity(
+    @PrimaryKey val id: String,
+    val batchId: String,
+    val tripId: String,
+    val sortPosition: Int,
+    val imageUri: String,
+    val status: String,
+    val receiptId: String? = null,
+    val message: String? = null,
+    val dismissed: Boolean = false,
+    val createdAt: Long,
+    val updatedAt: Long,
 )
 
 @Entity(

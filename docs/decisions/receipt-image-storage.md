@@ -10,9 +10,18 @@ Galeriealbum `Pictures/Bill Check`, verwendet JPEG und behält die von der
 Kamera gelieferte Auflösung. Die App fordert dafür weder Kamera- noch breite
 Speicherberechtigungen an.
 
-Vorhandene Bilder werden ausschließlich über den Android Photo Picker gewählt.
-Bill Check merkt sich die Leseberechtigung des ausgewählten URI und erzeugt
-keine Kopie.
+Vorhandene Bilder werden primär über den normalen System-Galeriefluss gewählt.
+Auf Samsung-Geräten steht dadurch die vertraute Samsung-Gallery-Oberfläche zur
+Verfügung. Weil deren URI-Freigabe nur vorübergehend sein kann, kopiert Bill
+Check die Auswahl streaming in einen eigenen `MediaStore`-Eintrag unter
+`Pictures/Bill Check`. Erst dieser dauerhafte URI wird verknüpft. Die separate
+Ordnerauswahl über `ACTION_OPEN_DOCUMENT` bleibt erhalten.
+
+Die Stapelauswahl verwendet denselben Galeriefluss mit aktivierter
+Mehrfachauswahl. Jedes ausgewählte Bild wird vor dem Einreihen einzeln in
+`Pictures/Bill Check` importiert. Die Warteschlange referenziert nur diese
+dauerhaften URIs und kann deshalb nach einer Activity- oder
+Prozessneuerstellung wieder aufgenommen werden.
 
 ## Lebenszyklen
 
@@ -23,8 +32,8 @@ keine Kopie.
 - Ein verknüpftes Bild lässt sich über jede sichtbare Belegminiatur in der
   gemeinsamen zoombaren Detailansicht öffnen. Ersetzen oder vom Eintrag lösen
   lässt es sich bewusst nur im Belegeditor.
-- Der Belegeditor bietet unabhängig vom aktuellen Bildstatus Kamera und Photo
-  Picker an. Sein Formularzustand bleibt während der externen Auswahl und der
+- Der Belegeditor bietet unabhängig vom aktuellen Bildstatus Kamera und
+  Systemgalerie an. Sein Formularzustand bleibt während der externen Auswahl und der
   anschließenden Prüfansicht im Speicher.
 - Die erneute KI-/OCR-Auswertung wird vom Bildbereich des Editors aus
   angestoßen. Bildverwaltung und Erkennungsanbieter bleiben dabei getrennte
@@ -33,6 +42,8 @@ keine Kopie.
   Galerieoriginal.
 - Eine abgebrochene Kameraaufnahme entfernt nur den zuvor angelegten leeren
   Galerieeintrag.
+- Eine verworfene Galerieauswahl entfernt nur die noch nicht verwendete
+  Bill-Check-Importkopie; das vom Nutzer ausgewählte Original bleibt unberührt.
 - Ziel-URI und laufender Ersetzungsmodus werden über Activity-Neuerstellungen
   hinweg gespeichert.
 

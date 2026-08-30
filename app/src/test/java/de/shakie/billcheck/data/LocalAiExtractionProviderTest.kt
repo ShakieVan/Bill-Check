@@ -5,12 +5,15 @@ import de.shakie.billcheck.domain.AiExtractionResult
 import de.shakie.billcheck.domain.AiSuggestionCertainty
 import de.shakie.billcheck.domain.VerifiedReconciliationReport
 import de.shakie.billcheck.domain.VerifiedReconciliationEntry
+import java.time.LocalDate
+import java.time.ZoneId
 import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
+import org.junit.Assert.assertThrows
 import org.junit.Test
 
 class LocalAiExtractionProviderTest {
@@ -26,7 +29,7 @@ class LocalAiExtractionProviderTest {
 
         assertEquals("qwen3.8-27b-q8", request.getString("model"))
         assertEquals("none", request.getString("reasoning_effort"))
-        assertEquals(6_000, request.getInt("max_tokens"))
+        assertEquals(4_000, request.getInt("max_tokens"))
         val messages = request.getJSONArray("messages")
         assertEquals("system", messages.getJSONObject(0).getString("role"))
         val content = messages.getJSONObject(1).getJSONArray("content")
@@ -44,7 +47,8 @@ class LocalAiExtractionProviderTest {
         val properties = receiptSchema.getJSONObject("properties")
         assertEquals(3, properties.getJSONObject("location").getJSONObject("properties")
             .getJSONObject("candidates").getInt("maxItems"))
-        assertTrue(properties.has("transcriptLines"))
+        assertFalse(properties.has("transcriptLines"))
+        assertTrue(properties.has("time"))
         assertTrue(properties.getJSONObject("items").getJSONObject("items")
             .getJSONObject("properties").has("quantity"))
     }
@@ -95,6 +99,22 @@ class LocalAiExtractionProviderTest {
     }
 
     @Test
+    fun `shared transcript parser rejects invalid model geometry`() {
+        val content = JSONObject().put(
+            "lines",
+            JSONArray().put(
+                JSONObject().put("text", "Total").put(
+                    "bbox",
+                    JSONObject().put("left", 700).put("top", 120)
+                        .put("right", 600).put("bottom", 170),
+                ),
+            ),
+        )
+
+        assertThrows(IllegalStateException::class.java) { parseTranscriptJson(content) }
+    }
+
+    @Test
     fun `local receipt response is parsed and deterministically normalized`() {
         val content = JSONObject()
             .put("location", "  Sunset Lobby ")
@@ -125,6 +145,14 @@ class LocalAiExtractionProviderTest {
     }
 
     @Test
+    fun `currency labels are removed from otherwise strict extracted amounts`() {
+        assertEquals("949.14", normalizeLocalAmount("LE949.14"))
+        assertEquals("949.14", normalizeLocalAmount("949,14 EGP"))
+        assertEquals("20.-", normalizeLocalAmount("20.-"))
+        assertEquals("LE 1,253.28", normalizeLocalAmount("LE 1,253.28"))
+    }
+
+    @Test
     fun `structured candidates quantities and transcript geometry are parsed`() {
         val content = JSONObject()
             .put(
@@ -142,6 +170,7 @@ class LocalAiExtractionProviderTest {
             .put("totalAmount", suggestedField("100.00", false, listOf(candidate("100.00", "100.00"))))
             .put("currencyCode", "EGP")
             .put("date", suggestedField("2026-08-20", false, listOf(candidate("2026-08-20", "20/08/26"))))
+            .put("time", suggestedField("7:05", false, listOf(candidate("7:05", "7:05"))))
             .put(
                 "items",
                 JSONArray().put(
@@ -170,9 +199,11 @@ class LocalAiExtractionProviderTest {
                 ),
             )
 
-        val parsed = parseLocalExtractionResponse(
-            AiDocumentType.RECEIPT,
-            completionResponse(content),
+        val parsed = normalizeLocalExtraction(
+            parseLocalExtractionResponse(
+                AiDocumentType.RECEIPT,
+                completionResponse(content),
+            ),
         ) as AiExtractionResult.Receipt
 
         assertEquals("Sultana Rest.", parsed.value.location)
@@ -184,6 +215,8 @@ class LocalAiExtractionProviderTest {
         assertEquals(100, parsed.value.locationSuggestions.candidates.first().boundingBox?.left)
         assertEquals("5", parsed.value.items.single().quantityText)
         assertEquals("Cola - Can 330", parsed.value.items.single().nameSuggestions.preferred)
+        assertEquals("07:05", parsed.value.occurredTime)
+        assertEquals("07:05", parsed.value.occurredTimeSuggestions.preferred)
         assertEquals("Sultana Rest.**", parsed.value.transcriptLines.single().text)
         assertEquals(430, parsed.value.transcriptLines.single().boundingBox.right)
     }
@@ -269,6 +302,11 @@ class LocalAiExtractionProviderTest {
 
     @Test
     fun `summary prompt forbids positive verdicts while discrepancies remain`() {
+        val localZone = ZoneId.systemDefault()
+        val decemberTwentieth = LocalDate.of(2024, 12, 20)
+            .atStartOfDay(localZone)
+            .toInstant()
+            .toEpochMilli()
         val report = VerifiedReconciliationReport(
             reconciliationId = "test",
             title = "Test",
@@ -282,7 +320,7 @@ class LocalAiExtractionProviderTest {
             entries = listOf(
                 VerifiedReconciliationEntry(
                     kind = VerifiedReconciliationReport.KIND_STATEMENT_ONLY,
-                    occurredAt = null,
+                    occurredAt = decemberTwentieth,
                     description = "Open charge",
                     statementCheckNumber = "1",
                     receiptCheckNumber = null,
@@ -311,6 +349,10 @@ class LocalAiExtractionProviderTest {
 
         assertTrue(prompt.contains("Never call the overall reconciliation correct"))
         assertTrue(prompt.contains("Do not invent causes"))
+        assertTrue(prompt.contains("\"occurredOn\":\"20.12.2024\""))
+        assertTrue(prompt.contains("Copy them exactly"))
+        assertFalse(prompt.contains("\"occurredAt\""))
+        assertFalse(prompt.contains(decemberTwentieth.toString()))
     }
 
     private fun completionResponse(content: JSONObject): String = JSONObject().put(

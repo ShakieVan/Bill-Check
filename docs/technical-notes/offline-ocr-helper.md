@@ -16,12 +16,16 @@ kehrt die App in den Editor zurück; alle geeigneten Zielfelder sind
 hervorgehoben. Erst der bewusste Tipp auf ein Feld ersetzt dessen Inhalt. Die
 frühere Wortfetzen-/Zielchip-Oberfläche wurde vollständig entfernt.
 
-Wenn die aktive KI-Auswertung Transkriptzeilen liefert, fusioniert die App
-deren meist besseren Text mit der lokalen Geometrie. Passende Zeilen behalten
-die präzisere ML-Kit-Position; weitere sichtbare KI-Zeilen werden mit ihrer
-groben Box ergänzt. Fehlt das Transkript in einer lokalen Qwen-Antwort, folgt
-einmalig ein reiner OCR-Durchlauf. Ohne KI oder Netzwerk bleibt die lokale
-Auswahl verfügbar. Ergänzte Zeichenpositionen sind geometrische Näherungen.
+Die normale Aktion „Bild auswerten“ extrahiert nur die fachlichen Belegdaten.
+Erst „Text im Bild auswählen“ startet parallel die lokale Erkennung und einen
+separaten räumlichen KI-Transkriptlauf. Dessen meist besserer Text wird mit der
+lokalen Geometrie fusioniert. Passende Zeilen behalten die präzisere
+ML-Kit-Position; weitere sichtbare KI-Zeilen werden mit ihrer groben Box
+ergänzt. Während einer langsamen oder nicht erreichbaren KI kann der Nutzer
+bewusst sofort mit der lokalen Erkennung fortfahren. Ergebnisse sind an den
+aktuellen Bildauftrag gebunden, damit verspätete Antworten nicht in einen
+anderen Editor geraten. Ergänzte Zeichenpositionen bleiben geometrische
+Näherungen.
 
 ## Regressionstest
 

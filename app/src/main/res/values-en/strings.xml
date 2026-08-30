@@ -37,7 +37,18 @@
     <string name="no_receipts">No receipts yet.</string>
     <string name="add_receipt">Add receipt</string>
     <string name="take_photo">Photo</string>
-    <string name="choose_image">Choose image</string>
+    <string name="choose_image">Image</string>
+    <string name="choose_multiple_images">Multiple images</string>
+    <string name="batch_processing">Batch processing</string>
+    <string name="batch_processing_progress">%1$d of %2$d images processed</string>
+    <string name="batch_processing_result">%1$d created · %2$d to review · %3$d failed</string>
+    <string name="batch_image_failed">Image %1$d could not be created.</string>
+    <string name="retry">Retry</string>
+    <string name="cancel_remaining">Cancel remaining</string>
+    <string name="receipt_needs_review">Please review</string>
+    <string name="receipt_currency_needs_review">Please review: %1$s is not available for this trip</string>
+    <string name="batch_gallery_import_running">Importing image %1$d of %2$d …</string>
+    <string name="batch_gallery_import_partial_error">Some selected images could not be imported.</string>
     <string name="browse_folders">Browse folders</string>
     <string name="review_image_title">Review image</string>
     <string name="review_image_hint">Is the complete receipt sharp and readable? Tap the image to enlarge it. It is linked to an entry only after you confirm.</string>
@@ -58,6 +69,9 @@
     <string name="image_analysis">Image analysis</string>
     <string name="image_unavailable">Image unavailable</string>
     <string name="camera_start_failed">The image could not be prepared for the camera.</string>
+    <string name="gallery_import_failed">The gallery image could not be imported into “Bill Check”.</string>
+    <string name="gallery_import_title">Gallery image</string>
+    <string name="gallery_import_running">Importing the image into “Bill Check” …</string>
     <string name="manual_entry">Enter manually</string>
     <string name="edit_receipt">Edit receipt</string>
     <string name="trips">Trips</string>
@@ -72,6 +86,8 @@
     <string name="check_number">Check number</string>
     <string name="receipt_date">Receipt date (DD.MM.YYYY)</string>
     <string name="date_example">e.g. 26.12.2024</string>
+    <string name="receipt_time">Receipt time (HH:mm)</string>
+    <string name="time_example">e.g. 19:42</string>
     <string name="amount_in_currency">Amount (%1$s)</string>
     <string name="receipt_exchange_rate">1 %1$s = %2$s %3$s</string>
     <string name="receipt_tip">Tip: %1$s</string>
@@ -224,6 +240,7 @@
     <string name="remove_statement_image">Remove statement image</string>
     <string name="back_to_reconciliations">Back to reconciliations</string>
     <string name="invalid_date">Enter the date as DD.MM.YYYY.</string>
+    <string name="invalid_time">Enter the time as HH:mm.</string>
     <string name="ai_recognition">AI image recognition</string>
     <string name="ai_provider">Provider</string>
     <string name="gemini">Google Gemini</string>
@@ -245,7 +262,10 @@
     <string name="statement_ai_result">%1$d statement lines recognized. Applying this result replaces existing statement lines and their assignments.</string>
     <string name="apply_result">Apply result</string>
     <string name="local_text_help">Offline text helper</string>
-    <string name="local_ocr_running">Recognizing text offline …</string>
+    <string name="local_ocr_running">Recognizing text in the image …</string>
+    <string name="ai_transcript_failed_local_available">AI text assistance was unavailable. Local recognition is still available.</string>
+    <string name="ai_total_needs_review">The detected total matches one individual item. Please verify it against the receipt.</string>
+    <string name="continue_with_local_ocr">Continue now with local recognition</string>
     <string name="local_ocr_failed">Offline text recognition failed: %1$s</string>
     <string name="local_ocr_empty">No text was found in this image.</string>
     <string name="spatial_text_selection_hint">Long-press text · Drag the blue handles character by character; a magnifier shows the position under your finger · Pinch to zoom</string>

@@ -63,10 +63,12 @@ Stand: 16.08.2026
   Auswertung verwendet vorher das Original.
 - App-Löschen trennt standardmäßig nur die Verknüpfung und lässt das
   Galerieoriginal bestehen.
-- Galerieimporte werden nicht dupliziert.
-- Neben dem Android Photo Picker steht eine Ordnerauswahl zur Verfügung. Sie
-  startet nach Möglichkeit in `DCIM/Bill Check`, weil der Google-Photo-Picker
-  lokale Ordner nicht verlässlich als Alben darstellt.
+- Die primäre Bildauswahl öffnet die normale Systemgalerie (auf Samsung-Geräten
+  typischerweise Samsung Gallery). Das ausgewählte Bild wird als dauerhafte
+  Importkopie in `Pictures/Bill Check` übernommen; ein Abbruch der Prüfansicht
+  entfernt nur diese noch nicht verwendete Kopie.
+- Daneben steht eine Ordnerauswahl zur Verfügung. Sie startet nach Möglichkeit
+  in `DCIM/Bill Check`.
 - Jede Aufnahme und Auswahl wird vor dem Anlegen des Eintrags groß angezeigt
   und ausdrücklich bestätigt. Ein Tipp auf das Bild öffnet auch dort die
   bildschirmfüllende, zoombare Detailansicht.
@@ -76,7 +78,7 @@ Stand: 16.08.2026
 - Im Belegeditor öffnet ein Tipp auf die Miniatur eine bildschirmfüllende
   Ansicht mit Pinch-Zoom, Verschieben und Doppeltipp-Zoom. Ein eigener
   „Bearbeiten“-Button trennt diese Prüfung klar von Ersetzen und Entknüpfen.
-- Kamera und Photo Picker sind auch direkt im Editor neuer und bestehender
+- Kamera und Systemgalerie sind auch direkt im Editor neuer und bestehender
   Belege erreichbar. Noch nicht gespeicherte Felder und Posten bleiben beim
   Wechsel zur Bildprüfung erhalten.
 - Ein verknüpftes Bild bietet im Editor den neutralen Einstieg „Bild
@@ -86,6 +88,29 @@ Stand: 16.08.2026
   ein orange hervorgehobener Bereich unmittelbar unter „Text im Bild
   auswählen“ übernimmt oder verwirft die offenen Vorschläge. Er erscheint nur
   nach einer im aktuell geöffneten Editor gestarteten Auswertung.
+
+## Stapelverarbeitung
+
+- Innerhalb der aktiven Reise stehen „Bild“ und „Mehrere Bilder“ nebeneinander;
+  „Manuell erfassen“ bleibt als eigene, volle Zeile darunter erreichbar.
+- „Mehrere Bilder“ öffnet die normale Systemgalerie mit Mehrfachauswahl. Alle
+  gewählten Bilder werden vor der Auswertung dauerhaft in `Pictures/Bill Check`
+  importiert und der gerade sichtbaren Reise zugeordnet. Eine zusätzliche
+  Reise- oder Ersatzwährungsauswahl gibt es bewusst nicht.
+- Die Bilder werden nacheinander ausgewertet, damit ein lokaler KI-Server nicht
+  durch parallele Anfragen überlastet wird. Erfolgreiche Ergebnisse werden als
+  normale Belege gespeichert; Menge, Posten, Datum und eine tatsächlich
+  gedruckte Uhrzeit werden dabei übernommen.
+- Fehlende, uneindeutige oder für die Reise nicht verfügbare Währungen sowie
+  weitere Auffälligkeiten erzeugen trotzdem einen editierbaren Beleg. Er wird
+  in der Liste orange als zu prüfen markiert; bei einer nicht verfügbaren
+  Währung nennt der Hinweis das erkannte Kürzel. Die Reise-Standardwährung
+  dient bis zur manuellen Korrektur als technischer Platzhalter.
+- Der Fortschritt bleibt lokal gespeichert. Fehlgeschlagene Einzelbilder
+  lassen sich gezielt wiederholen, ausstehende Bilder abbrechen und ein
+  abgeschlossener Status schließen. Nach einem Prozessabbruch wird die
+  Warteschlange beim nächsten App-Start fortgesetzt; bereits erzeugte Belege
+  werden dabei nicht doppelt angelegt.
 
 ## Belegposten
 
@@ -97,9 +122,9 @@ Stand: 16.08.2026
   Differenz sichtbar, das Speichern bleibt wegen Gebühren und Rabatten
   möglich.
 - Ein gespeicherter Beleg kann durch Antippen einschließlich Ort,
-  Checknummer, Belegdatum, Gesamtbetrag, Trinkgeldwahl und Einzelposten
-  bearbeitet werden. Das Datum aus einer Bilderkennung bleibt ein sichtbarer,
-  korrigierbarer Vorschlag.
+  Checknummer, Belegdatum, Belegzeit, Gesamtbetrag, Trinkgeldwahl und
+  Einzelposten bearbeitet werden. Datum und Uhrzeit aus einer Bilderkennung
+  bleiben getrennte sichtbare, korrigierbare Vorschläge.
 - Der Belegeditor besitzt einen festen Kopf und Aktionsbereich; nur sein Inhalt
   scrollt und bleibt auch bei geöffneter Bildschirmtastatur vollständig
   erreichbar.

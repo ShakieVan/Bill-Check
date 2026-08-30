@@ -37,7 +37,18 @@
     <string name="no_receipts">Noch keine Belege vorhanden.</string>
     <string name="add_receipt">Beleg erfassen</string>
     <string name="take_photo">Foto</string>
-    <string name="choose_image">Bild wählen</string>
+    <string name="choose_image">Bild</string>
+    <string name="choose_multiple_images">Mehrere Bilder</string>
+    <string name="batch_processing">Stapelverarbeitung</string>
+    <string name="batch_processing_progress">%1$d von %2$d Bildern verarbeitet</string>
+    <string name="batch_processing_result">%1$d angelegt · %2$d zu prüfen · %3$d fehlgeschlagen</string>
+    <string name="batch_image_failed">Bild %1$d konnte nicht angelegt werden.</string>
+    <string name="retry">Erneut versuchen</string>
+    <string name="cancel_remaining">Rest abbrechen</string>
+    <string name="receipt_needs_review">Bitte prüfen</string>
+    <string name="receipt_currency_needs_review">Bitte prüfen: %1$s ist für diese Reise nicht verfügbar</string>
+    <string name="batch_gallery_import_running">Bild %1$d von %2$d wird übernommen …</string>
+    <string name="batch_gallery_import_partial_error">Einige ausgewählte Bilder konnten nicht übernommen werden.</string>
     <string name="browse_folders">Ordner durchsuchen</string>
     <string name="review_image_title">Bild prüfen</string>
     <string name="review_image_hint">Ist der Beleg vollständig und gut lesbar? Zum Vergrößern das Bild antippen. Es wird erst nach Deiner Bestätigung mit einem Eintrag verknüpft.</string>
@@ -58,6 +69,9 @@
     <string name="image_analysis">Bildauswertung</string>
     <string name="image_unavailable">Bild nicht verfügbar</string>
     <string name="camera_start_failed">Das Bild konnte nicht für die Kamera vorbereitet werden.</string>
+    <string name="gallery_import_failed">Das Galeriebild konnte nicht in „Bill Check“ importiert werden.</string>
+    <string name="gallery_import_title">Galeriebild</string>
+    <string name="gallery_import_running">Bild wird sicher in „Bill Check“ übernommen …</string>
     <string name="manual_entry">Manuell erfassen</string>
     <string name="edit_receipt">Beleg bearbeiten</string>
     <string name="trips">Reisen</string>
@@ -72,6 +86,8 @@
     <string name="check_number">Checknummer</string>
     <string name="receipt_date">Belegdatum (TT.MM.JJJJ)</string>
     <string name="date_example">z. B. 26.12.2024</string>
+    <string name="receipt_time">Belegzeit (HH:mm)</string>
+    <string name="time_example">z. B. 19:42</string>
     <string name="amount_in_currency">Betrag (%1$s)</string>
     <string name="receipt_exchange_rate">1 %1$s = %2$s %3$s</string>
     <string name="receipt_tip">Trinkgeld: %1$s</string>
@@ -224,6 +240,7 @@
     <string name="remove_statement_image">Rechnungsbild entfernen</string>
     <string name="back_to_reconciliations">Zur Rechnungsübersicht</string>
     <string name="invalid_date">Bitte das Datum als TT.MM.JJJJ eingeben.</string>
+    <string name="invalid_time">Bitte die Uhrzeit als HH:mm eingeben.</string>
     <string name="ai_recognition">KI-Bilderkennung</string>
     <string name="ai_provider">Anbieter</string>
     <string name="gemini">Google Gemini</string>
@@ -245,7 +262,10 @@
     <string name="statement_ai_result">%1$d Rechnungszeilen erkannt. Bei der Übernahme werden vorhandene Rechnungszeilen und ihre Zuordnungen ersetzt.</string>
     <string name="apply_result">Ergebnis übernehmen</string>
     <string name="local_text_help">Lokale Texthilfe</string>
-    <string name="local_ocr_running">Text wird offline erkannt …</string>
+    <string name="local_ocr_running">Text im Bild wird erkannt …</string>
+    <string name="ai_transcript_failed_local_available">Die KI-Texthilfe war nicht erreichbar. Die lokale Erkennung steht trotzdem zur Verfügung.</string>
+    <string name="ai_total_needs_review">Die erkannte Gesamtsumme entspricht einem einzelnen Posten. Bitte am Beleg prüfen.</string>
+    <string name="continue_with_local_ocr">Sofort mit lokaler Erkennung fortfahren</string>
     <string name="local_ocr_failed">Lokale Texterkennung fehlgeschlagen: %1$s</string>
     <string name="local_ocr_empty">Auf diesem Bild wurde kein Text gefunden.</string>
     <string name="spatial_text_selection_hint">Text lange drücken · Blaue Griffe verschieben die Auswahl zeichengenau; eine Lupe zeigt die Stelle unter dem Finger · Mit zwei Fingern zoomen</string>

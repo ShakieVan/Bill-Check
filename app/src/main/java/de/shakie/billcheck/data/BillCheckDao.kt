@@ -173,8 +173,68 @@ interface BillCheckDao {
     @Query("UPDATE receipts SET imageUri = :imageUri WHERE id = :receiptId")
     suspend fun updateReceiptImage(receiptId: String, imageUri: String?)
 
+    @Query("SELECT * FROM receipts WHERE id = :receiptId LIMIT 1")
+    suspend fun getReceipt(receiptId: String): ReceiptEntity?
+
     @Delete
     suspend fun deleteReceipt(receipt: ReceiptEntity)
+
+    @Query(
+        "SELECT * FROM batch_receipt_imports " +
+            "WHERE tripId = :tripId AND dismissed = 0 ORDER BY createdAt, sortPosition",
+    )
+    fun observeVisibleBatchImports(tripId: String): Flow<List<BatchReceiptImportEntity>>
+
+    @Query(
+        "SELECT * FROM batch_receipt_imports " +
+            "WHERE status IN ('QUEUED', 'PROCESSING') ORDER BY createdAt, sortPosition LIMIT 1",
+    )
+    suspend fun nextPendingBatchImport(): BatchReceiptImportEntity?
+
+    @Insert(onConflict = OnConflictStrategy.ABORT)
+    suspend fun insertBatchImports(items: List<BatchReceiptImportEntity>)
+
+    @Update
+    suspend fun updateBatchImport(item: BatchReceiptImportEntity)
+
+    @Query("UPDATE batch_receipt_imports SET dismissed = 1 WHERE tripId = :tripId")
+    suspend fun dismissVisibleBatchImports(tripId: String)
+
+    @Query(
+        "UPDATE batch_receipt_imports SET status = 'CANCELLED', updatedAt = :updatedAt " +
+            "WHERE tripId = :tripId AND status IN ('QUEUED', 'PROCESSING')",
+    )
+    suspend fun cancelPendingBatchImportsForTrip(tripId: String, updatedAt: Long)
+
+    @Transaction
+    suspend fun replaceVisibleBatchImports(
+        tripId: String,
+        items: List<BatchReceiptImportEntity>,
+    ) {
+        require(items.all { it.tripId == tripId })
+        cancelPendingBatchImportsForTrip(tripId, System.currentTimeMillis())
+        dismissVisibleBatchImports(tripId)
+        insertBatchImports(items)
+    }
+
+    @Query(
+        "UPDATE batch_receipt_imports SET status = 'QUEUED', message = NULL, " +
+            "updatedAt = :updatedAt WHERE id = :itemId",
+    )
+    suspend fun retryBatchImport(itemId: String, updatedAt: Long)
+
+    @Query(
+        "UPDATE batch_receipt_imports SET status = 'CANCELLED', " +
+            "message = NULL, updatedAt = :updatedAt " +
+            "WHERE batchId = :batchId AND status IN ('QUEUED', 'PROCESSING')",
+    )
+    suspend fun cancelPendingBatchImports(batchId: String, updatedAt: Long)
+
+    @Query("UPDATE batch_receipt_imports SET message = NULL WHERE receiptId = :receiptId")
+    suspend fun markBatchImportReviewed(receiptId: String)
+
+    @Query("DELETE FROM batch_receipt_imports WHERE receiptId = :receiptId")
+    suspend fun deleteBatchImportForReceipt(receiptId: String)
 
     @Transaction
     @Query("SELECT * FROM reconciliations WHERE tripId = :tripId ORDER BY createdAt DESC")

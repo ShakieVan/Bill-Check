@@ -30,13 +30,20 @@ internal object GeminiPromptFactory {
                 street, and other address text. For example, prefer "Sunset Lobby" over
                 "Utopia Beach Club, Marsa Alam, Sunset Lobby".
                 Keep decimal amounts as plain strings without currency symbols. Use YYYY-MM-DD for
-                dates and an empty string when a value is not visible. Item amounts must be the
+                dates and HH:mm in 24-hour format for the visibly printed receipt time. Return an
+                empty string when either value is not visible. Never infer the time from the image
+                metadata, the current time, or business hours. Item amounts must be the
                 printed line totals. Extract each explicitly printed item quantity separately from
                 its description. Return an empty quantity when the receipt does not visibly print
                 one; do not infer a quantity from an amount, package size, or repeated-looking row.
+                totalAmount is only the separately printed final amount due or grand total, for
+                example a line labelled TOTAL, GRAND TOTAL, CHECK TTL, AMOUNT DUE, or its local
+                equivalent. Never use an item line, subtotal, tax, service charge, tendered amount,
+                change, or converted balance as totalAmount. For total candidates, evidenceText
+                must contain the complete visible labelled total line, not merely the digits.
 
-                For location, check number, total amount, date, and every item's quantity, name, and
-                amount, return a preferred value plus zero to three distinct candidates. Every
+                For location, check number, total amount, date, time, and every item's quantity,
+                name, and amount, return a preferred value plus zero to three distinct candidates. Every
                 candidate must be grounded in visible text from this image: copy that literal text
                 into evidenceText and give its coarse source rectangle as integer coordinates from
                 0 to 1000 relative to the full image. Use an all-zero rectangle only when no source
@@ -46,11 +53,7 @@ internal object GeminiPromptFactory {
                 variants, complete occluded text, or propose alternatives without separate visible
                 evidence.
 
-                Also transcribe all visibly readable receipt text in top-to-bottom transcriptLines.
-                Each line has the literal visible text and one coarse 0-to-1000 rectangle. Preserve
-                punctuation and partial words; never reconstruct hidden characters. These AI boxes
-                are for coarse alignment, not character-precise selection. Never invent missing
-                values.
+                Never invent missing values.
             """.trimIndent()
 
             AiDocumentType.STATEMENT -> """

@@ -16,7 +16,7 @@ Fehlschläge dauerhaft außerhalb einzelner Chats fest.
 - [`decisions/multi-currency-model.md`](decisions/multi-currency-model.md):
   Heimatwährung, mehrere Reisewährungen und getrennte Kurs-Snapshots
 - [`decisions/receipt-image-storage.md`](decisions/receipt-image-storage.md):
-  Kamera, Photo Picker und getrennte Lebenszyklen von Galerie und App-Datensatz
+  Kamera, Systemgalerie, dauerhafter MediaStore-Import und Bildlebenszyklen
 - [`decisions/reconciliation-matching.md`](decisions/reconciliation-matching.md):
   1:1-Zuordnung, Status und Lebenszyklus von Rechnungsabgleichen
 - [`decisions/ai-image-extraction.md`](decisions/ai-image-extraction.md):

@@ -4,7 +4,6 @@ import android.os.Bundle
 import android.net.Uri
 import android.content.Intent
 import androidx.activity.ComponentActivity
-import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
@@ -62,6 +61,7 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -98,6 +98,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.text.TextRange
@@ -123,6 +124,9 @@ import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import de.shakie.billcheck.data.ReceiptEntity
+import de.shakie.billcheck.data.BatchReceiptImportEntity
+import de.shakie.billcheck.data.BatchReceiptImportStatus
+import de.shakie.billcheck.data.ReceiptReviewState
 import de.shakie.billcheck.data.ReceiptImageStorage
 import de.shakie.billcheck.data.ReceiptWithItems
 import de.shakie.billcheck.data.TripEntity
@@ -138,6 +142,8 @@ import de.shakie.billcheck.domain.SuggestionSource
 import de.shakie.billcheck.ui.MainUiState
 import de.shakie.billcheck.ui.MainViewModel
 import de.shakie.billcheck.ui.OpenImageDocumentContract
+import de.shakie.billcheck.ui.OpenGalleryImageContract
+import de.shakie.billcheck.ui.OpenMultipleGalleryImagesContract
 import de.shakie.billcheck.ui.ReceiptItemDraft
 import de.shakie.billcheck.ui.ReceiptImageReview
 import de.shakie.billcheck.ui.ReceiptThumbnail
@@ -145,6 +151,7 @@ import de.shakie.billcheck.ui.FullscreenReceiptImage
 import de.shakie.billcheck.ui.SpatialTextSelectionDialog
 import de.shakie.billcheck.ui.ExchangeRateLookupState
 import de.shakie.billcheck.ui.AiExtractionState
+import de.shakie.billcheck.ui.AiTranscriptState
 import de.shakie.billcheck.ui.LocalOcrState
 import de.shakie.billcheck.ui.GeminiModelsState
 import de.shakie.billcheck.ui.LocalAiConnectionState
@@ -246,6 +253,7 @@ private fun BillCheckApp(
     val aiExtraction by viewModel.aiExtraction.collectAsStateWithLifecycle()
     val reconciliationAnalysis by viewModel.reconciliationAnalysis.collectAsStateWithLifecycle()
     val localOcr by viewModel.localOcr.collectAsStateWithLifecycle()
+    val aiTranscript by viewModel.aiTranscript.collectAsStateWithLifecycle()
     val geminiModels by viewModel.geminiModels.collectAsStateWithLifecycle()
     val localAiSettings by viewModel.localAiSettings.collectAsStateWithLifecycle()
     val localAiConnection by viewModel.localAiConnection.collectAsStateWithLifecycle()
@@ -265,6 +273,11 @@ private fun BillCheckApp(
     var showReconciliations by remember { mutableStateOf(false) }
     var pendingCameraUriString by rememberSaveable { mutableStateOf<String?>(null) }
     var pendingImageUriString by rememberSaveable { mutableStateOf<String?>(null) }
+    var pendingImportedImageUriString by rememberSaveable { mutableStateOf<String?>(null) }
+    var galleryImportGeneration by remember { mutableStateOf(0L) }
+    var galleryImportInProgress by remember { mutableStateOf(false) }
+    var batchGalleryTargetTripId by remember { mutableStateOf<String?>(null) }
+    var batchGalleryImportProgress by remember { mutableStateOf<Pair<Int, Int>?>(null) }
     var draftReceiptImageUriString by rememberSaveable { mutableStateOf<String?>(null) }
     var fullscreenImageUriString by rememberSaveable { mutableStateOf<String?>(null) }
     var imageTargetReceiptId by rememberSaveable { mutableStateOf<String?>(null) }
@@ -278,6 +291,8 @@ private fun BillCheckApp(
     val scope = rememberCoroutineScope()
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val cameraError = stringResource(R.string.camera_start_failed)
+    val galleryImportError = stringResource(R.string.gallery_import_failed)
+    val batchGalleryImportPartialError = stringResource(R.string.batch_gallery_import_partial_error)
     val updateAvailableMessage = stringResource(R.string.update_available)
     val updatesLabel = stringResource(R.string.updates)
 
@@ -304,10 +319,27 @@ private fun BillCheckApp(
         }
         pendingCameraUriString = null
     }
-    val galleryLauncher = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+    val galleryLauncher = rememberLauncherForActivityResult(OpenGalleryImageContract()) { uri ->
         if (uri != null) {
-            imageStorage.persistPickedImageAccess(uri)
-            pendingImageUriString = uri.toString()
+            val importGeneration = galleryImportGeneration
+            galleryImportInProgress = true
+            scope.launch {
+                runCatching { imageStorage.importGalleryImage(uri) }
+                    .onSuccess { imported ->
+                        if (importGeneration == galleryImportGeneration) {
+                            pendingImportedImageUriString = imported.toString()
+                            pendingImageUriString = imported.toString()
+                        } else {
+                            imageStorage.discardImportedImage(imported)
+                        }
+                    }
+                    .onFailure {
+                        if (importGeneration == galleryImportGeneration) {
+                            snackbar.showSnackbar(galleryImportError)
+                        }
+                    }
+                if (importGeneration == galleryImportGeneration) galleryImportInProgress = false
+            }
         } else if (imageTargetReconciliationId != null) {
             showReconciliations = true
         }
@@ -348,7 +380,41 @@ private fun BillCheckApp(
             viewModel.previewImport(uri)
         }
     }
+    val discardPendingGalleryImport = {
+        galleryImportGeneration++
+        galleryImportInProgress = false
+        pendingImportedImageUriString?.let { imported ->
+            runCatching { imageStorage.discardImportedImage(Uri.parse(imported)) }
+        }
+        pendingImportedImageUriString = null
+    }
+    val multipleGalleryLauncher = rememberLauncherForActivityResult(
+        OpenMultipleGalleryImagesContract(),
+    ) { sources ->
+        val targetTripId = batchGalleryTargetTripId
+        batchGalleryTargetTripId = null
+        if (sources.isEmpty() || targetTripId == null) return@rememberLauncherForActivityResult
+        galleryImportInProgress = true
+        batchGalleryImportProgress = 0 to sources.size
+        scope.launch {
+            val imported = mutableListOf<String>()
+            var failed = 0
+            sources.forEachIndexed { index, source ->
+                runCatching { imageStorage.importGalleryImage(source) }
+                    .onSuccess { imported += it.toString() }
+                    .onFailure { failed++ }
+                batchGalleryImportProgress = index + 1 to sources.size
+            }
+            if (imported.isNotEmpty()) {
+                viewModel.enqueueBatchReceiptImages(targetTripId, imported)
+            }
+            if (failed > 0) snackbar.showSnackbar(batchGalleryImportPartialError)
+            batchGalleryImportProgress = null
+            galleryImportInProgress = false
+        }
+    }
     val takePhoto = {
+        discardPendingGalleryImport()
         runCatching { imageStorage.createCameraImage() }
             .onSuccess { uri ->
                 pendingCameraUriString = uri.toString()
@@ -358,11 +424,11 @@ private fun BillCheckApp(
         Unit
     }
     val chooseImage = {
-        galleryLauncher.launch(
-            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly),
-        )
+        discardPendingGalleryImport()
+        galleryLauncher.launch(Unit)
     }
     val browseFolders = {
+        discardPendingGalleryImport()
         documentLauncher.launch(OpenImageDocumentContract.BILL_CHECK_FOLDER)
     }
 
@@ -532,12 +598,14 @@ private fun BillCheckApp(
                             showManualReceipt = true
                         }
                     }
+                    pendingImportedImageUriString = null
                     pendingImageUriString = null
                     imageTargetReceiptId = null
                     imageTargetReconciliationId = null
                     imageTargetHadLinkedImage = false
                 },
                 onClose = {
+                    discardPendingGalleryImport()
                     pendingImageUriString = null
                     imageTargetReceiptId = null
                     imageTargetReconciliationId = null
@@ -547,6 +615,7 @@ private fun BillCheckApp(
                 onUnlink = when {
                     imageTargetReceiptId != null && imageTargetHadLinkedImage -> {
                         {
+                            discardPendingGalleryImport()
                             viewModel.updateReceiptImage(requireNotNull(imageTargetReceiptId), null)
                             pendingImageUriString = null
                             imageTargetReceiptId = null
@@ -555,6 +624,7 @@ private fun BillCheckApp(
                     }
                     imageTargetReconciliationId != null && imageTargetHadLinkedImage -> {
                         {
+                            discardPendingGalleryImport()
                             state.reconciliations.firstOrNull {
                                 it.reconciliation.id == imageTargetReconciliationId
                             }?.reconciliation?.let {
@@ -568,6 +638,7 @@ private fun BillCheckApp(
                     }
                     pendingImageUriString == draftReceiptImageUriString -> {
                         {
+                            discardPendingGalleryImport()
                             draftReceiptImageUriString = null
                             pendingImageUriString = null
                         }
@@ -595,6 +666,10 @@ private fun BillCheckApp(
                     imageTargetHadLinkedImage = false
                     chooseImage()
                 },
+                onBatchGallery = {
+                    batchGalleryTargetTripId = state.selectedTrip?.id
+                    multipleGalleryLauncher.launch(Unit)
+                },
                 onBrowseFolders = {
                     imageTargetReceiptId = null
                     imageTargetHadLinkedImage = false
@@ -603,6 +678,9 @@ private fun BillCheckApp(
                 onOpenReceiptImage = { fullscreenImageUriString = it },
                 onEditReceipt = { editingReceipt = it },
                 onDeleteReceipt = viewModel::deleteReceipt,
+                onRetryBatchItem = viewModel::retryBatchReceiptImport,
+                onCancelBatch = viewModel::cancelBatchReceiptImports,
+                onDismissBatch = viewModel::dismissBatchReceiptImports,
                 onOpenReconciliations = { showReconciliations = true },
                 )
             }
@@ -678,6 +756,25 @@ private fun BillCheckApp(
                         editingTrip = null
                         viewModel.clearExchangeRateLookup()
                     }
+                }
+            },
+        )
+    }
+
+    if (galleryImportInProgress) {
+        AlertDialog(
+            onDismissRequest = {},
+            confirmButton = {},
+            title = { Text(stringResource(R.string.gallery_import_title)) },
+            text = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    CircularProgressIndicator(Modifier.size(28.dp), strokeWidth = 3.dp)
+                    Spacer(Modifier.width(12.dp))
+                    Text(
+                        batchGalleryImportProgress?.let { (done, total) ->
+                            stringResource(R.string.batch_gallery_import_running, done, total)
+                        } ?: stringResource(R.string.gallery_import_running),
+                    )
                 }
             },
         )
@@ -810,6 +907,7 @@ private fun BillCheckApp(
                 itemNameSuggestions = state.itemNameSuggestions,
                 aiExtraction = aiExtraction,
                 localOcr = localOcr,
+                aiTranscript = aiTranscript,
                 onTakePhoto = {
                     imageTargetReceiptId = null
                     imageTargetHadLinkedImage = false
@@ -834,16 +932,19 @@ private fun BillCheckApp(
                     draftReceiptImageUriString?.let { viewModel.analyzeReceipt(it) }
                 },
                 onAnalyzeLocally = {
-                    draftReceiptImageUriString?.let(viewModel::analyzeLocally)
+                    draftReceiptImageUriString?.let(viewModel::analyzeReceiptText)
                 },
                 onClearLocalOcr = viewModel::clearLocalOcr,
+                onContinueWithLocalText = {
+                    draftReceiptImageUriString?.let(viewModel::continueWithLocalReceiptText)
+                },
                 onAddTripCurrency = viewModel::addCurrencyToSelectedTrip,
                 onDismiss = {
                     showManualReceipt = false
                     draftReceiptImageUriString = null
                     viewModel.clearLocalOcr()
                 },
-                onSave = { location, check, amount, currency, occurredOn, tip, itemDrafts ->
+                onSave = { location, check, amount, currency, occurredOn, occurredTime, tip, itemDrafts ->
                     viewModel.addReceipt(
                         location,
                         check,
@@ -853,6 +954,7 @@ private fun BillCheckApp(
                         tip,
                         itemDrafts,
                         draftReceiptImageUriString,
+                        occurredTime,
                     ).also { saved ->
                         if (saved) {
                             showManualReceipt = false
@@ -881,6 +983,7 @@ private fun BillCheckApp(
                 itemNameSuggestions = state.itemNameSuggestions,
                 aiExtraction = aiExtraction,
                 localOcr = localOcr,
+                aiTranscript = aiTranscript,
                 onTakePhoto = {
                     imageTargetReceiptId = existing.receipt.id
                     imageTargetHadLinkedImage = existing.receipt.imageUri != null
@@ -907,15 +1010,18 @@ private fun BillCheckApp(
                     }
                 },
                 onAnalyzeLocally = {
-                    existing.receipt.imageUri?.let(viewModel::analyzeLocally)
+                    existing.receipt.imageUri?.let(viewModel::analyzeReceiptText)
                 },
                 onClearLocalOcr = viewModel::clearLocalOcr,
+                onContinueWithLocalText = {
+                    existing.receipt.imageUri?.let(viewModel::continueWithLocalReceiptText)
+                },
                 onAddTripCurrency = viewModel::addCurrencyToSelectedTrip,
                 onDismiss = {
                     editingReceipt = null
                     viewModel.clearLocalOcr()
                 },
-                onSave = { location, check, amount, currency, occurredOn, tip, itemDrafts ->
+                onSave = { location, check, amount, currency, occurredOn, occurredTime, tip, itemDrafts ->
                     viewModel.updateReceipt(
                         existing = existing,
                         location = location,
@@ -925,6 +1031,7 @@ private fun BillCheckApp(
                         occurredOnText = occurredOn,
                         addDefaultTip = tip,
                         itemDrafts = itemDrafts,
+                        occurredTimeText = occurredTime,
                     ).also { saved ->
                         if (saved) editingReceipt = null
                     }
@@ -1806,10 +1913,14 @@ private fun Dashboard(
     onManualReceipt: () -> Unit,
     onCamera: () -> Unit,
     onGallery: () -> Unit,
+    onBatchGallery: () -> Unit,
     onBrowseFolders: () -> Unit,
     onOpenReceiptImage: (String) -> Unit,
     onEditReceipt: (ReceiptWithItems) -> Unit,
     onDeleteReceipt: (ReceiptEntity) -> Unit,
+    onRetryBatchItem: (String) -> Unit,
+    onCancelBatch: (String) -> Unit,
+    onDismissBatch: (String) -> Unit,
     onOpenReconciliations: () -> Unit,
 ) {
     LazyColumn(
@@ -1821,7 +1932,17 @@ private fun Dashboard(
             Summary(state)
         }
         item {
-            ReceiptActions(onCamera, onGallery, onBrowseFolders, onManualReceipt)
+            ReceiptActions(onCamera, onGallery, onBatchGallery, onBrowseFolders, onManualReceipt)
+        }
+        if (state.batchReceiptImports.isNotEmpty()) {
+            item {
+                BatchReceiptImportCard(
+                    items = state.batchReceiptImports,
+                    onRetry = onRetryBatchItem,
+                    onCancel = onCancelBatch,
+                    onDismiss = { state.selectedTrip?.id?.let(onDismissBatch) },
+                )
+            }
         }
         item {
             OutlinedButton(onClick = onOpenReconciliations, modifier = Modifier.fillMaxWidth().height(50.dp)) {
@@ -1936,9 +2057,10 @@ private fun SmallSummary(label: String, value: String, modifier: Modifier = Modi
 }
 
 @Composable
-private fun ReceiptActions(
+internal fun ReceiptActions(
     onCamera: () -> Unit,
     onGallery: () -> Unit,
+    onBatchGallery: () -> Unit,
     onBrowseFolders: () -> Unit,
     onManual: () -> Unit,
 ) {
@@ -1954,11 +2076,16 @@ private fun ReceiptActions(
                 Spacer(Modifier.width(6.dp))
                 Text(stringResource(R.string.choose_image))
             }
-            OutlinedButton(onClick = onManual, modifier = Modifier.weight(1f)) {
-                Icon(Icons.Default.Add, contentDescription = null)
+            FilledTonalButton(onClick = onBatchGallery, modifier = Modifier.weight(1f)) {
+                Icon(Icons.Default.Image, contentDescription = null)
                 Spacer(Modifier.width(6.dp))
-                Text(stringResource(R.string.manual_entry))
+                Text(stringResource(R.string.choose_multiple_images))
             }
+        }
+        OutlinedButton(onClick = onManual, modifier = Modifier.fillMaxWidth()) {
+            Icon(Icons.Default.Add, contentDescription = null)
+            Spacer(Modifier.width(6.dp))
+            Text(stringResource(R.string.manual_entry))
         }
         TextButton(onClick = onBrowseFolders, modifier = Modifier.fillMaxWidth()) {
             Icon(Icons.Default.FolderOpen, contentDescription = null)
@@ -1969,7 +2096,7 @@ private fun ReceiptActions(
 }
 
 @Composable
-private fun ReceiptCard(
+internal fun ReceiptCard(
     receiptWithItems: ReceiptWithItems,
     homeCurrencyCode: String,
     onDelete: (ReceiptEntity) -> Unit,
@@ -1977,11 +2104,22 @@ private fun ReceiptCard(
     onEdit: (ReceiptWithItems) -> Unit,
 ) {
     val receipt = receiptWithItems.receipt
+    val needsReview = ReceiptReviewState.needsReview(receipt.reviewState)
+    val unavailableCurrency = Regex("CURRENCY_NOT_AVAILABLE=([A-Z]{3})")
+        .find(receipt.reviewState)
+        ?.groupValues
+        ?.getOrNull(1)
     val exactHomeMinor = MoneyCalculator.exactHomeMinor(receipt)
     val rounded = MoneyCalculator.roundedUpHomeMajor(exactHomeMinor, homeCurrencyCode)
     Card(
         onClick = { onEdit(receiptWithItems) },
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        colors = CardDefaults.cardColors(
+            containerColor = if (needsReview) {
+                MaterialTheme.colorScheme.tertiaryContainer
+            } else {
+                MaterialTheme.colorScheme.surface
+            },
+        ),
     ) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(16.dp),
@@ -2001,6 +2139,16 @@ private fun ReceiptCard(
                     receipt.location.ifBlank { stringResource(R.string.add_receipt) },
                     fontWeight = FontWeight.SemiBold,
                 )
+                if (needsReview) {
+                    Text(
+                        unavailableCurrency?.let {
+                            stringResource(R.string.receipt_currency_needs_review, it)
+                        } ?: stringResource(R.string.receipt_needs_review),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.tertiary,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                }
                 Text(
                     buildString {
                         append(formatDate(receipt.occurredAt))
@@ -2297,6 +2445,91 @@ private fun TripEditorDialog(
 }
 
 @Composable
+internal fun BatchReceiptImportCard(
+    items: List<BatchReceiptImportEntity>,
+    onRetry: (String) -> Unit,
+    onCancel: (String) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val total = items.size
+    val finished = items.count {
+        it.status == BatchReceiptImportStatus.COMPLETED ||
+            it.status == BatchReceiptImportStatus.FAILED ||
+            it.status == BatchReceiptImportStatus.CANCELLED
+    }
+    val completed = items.count { it.status == BatchReceiptImportStatus.COMPLETED }
+    val failed = items.filter { it.status == BatchReceiptImportStatus.FAILED }
+    val reviewCount = items.count {
+        it.status == BatchReceiptImportStatus.COMPLETED && !it.message.isNullOrBlank()
+    }
+    val running = items.any {
+        it.status == BatchReceiptImportStatus.QUEUED || it.status == BatchReceiptImportStatus.PROCESSING
+    }
+    Card(
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.secondaryContainer,
+        ),
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(
+                stringResource(R.string.batch_processing),
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+            )
+            LinearProgressIndicator(
+                progress = { if (total == 0) 0f else finished.toFloat() / total },
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Text(
+                if (running) {
+                    stringResource(R.string.batch_processing_progress, finished, total)
+                } else {
+                    stringResource(R.string.batch_processing_result, completed, reviewCount, failed.size)
+                },
+                style = MaterialTheme.typography.bodySmall,
+            )
+            failed.forEach { item ->
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        stringResource(R.string.batch_image_failed, item.sortPosition + 1),
+                        color = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.weight(1f),
+                    )
+                    TextButton(onClick = { onRetry(item.id) }) {
+                        Text(stringResource(R.string.retry))
+                    }
+                }
+                item.message?.takeIf(String::isNotBlank)?.let { message ->
+                    Text(
+                        message,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSecondaryContainer,
+                    )
+                }
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End,
+            ) {
+                if (running) {
+                    TextButton(onClick = { onCancel(items.first().batchId) }) {
+                        Text(stringResource(R.string.cancel_remaining))
+                    }
+                } else {
+                    TextButton(onClick = onDismiss) { Text(stringResource(R.string.close)) }
+                }
+            }
+        }
+    }
+}
+
+@Composable
 internal fun ReceiptEditorDialog(
     trip: TripEntity,
     tripCurrencies: List<TripCurrencyEntity>,
@@ -2310,6 +2543,7 @@ internal fun ReceiptEditorDialog(
     itemNameSuggestions: List<String> = emptyList(),
     aiExtraction: AiExtractionState = AiExtractionState.Idle,
     localOcr: LocalOcrState = LocalOcrState.Idle,
+    aiTranscript: AiTranscriptState = AiTranscriptState.Idle,
     onTakePhoto: () -> Unit,
     onChooseImage: () -> Unit,
     onBrowseFolders: () -> Unit,
@@ -2317,9 +2551,10 @@ internal fun ReceiptEditorDialog(
     onAnalyzeImage: () -> Unit,
     onAnalyzeLocally: () -> Unit,
     onClearLocalOcr: () -> Unit,
+    onContinueWithLocalText: () -> Unit = {},
     onAddTripCurrency: (String, String, Boolean) -> Boolean,
     onDismiss: () -> Unit,
-    onSave: (String, String, String, String, String, Boolean, List<ReceiptItemDraft>) -> Boolean,
+    onSave: (String, String, String, String, String, String, Boolean, List<ReceiptItemDraft>) -> Boolean,
 ) {
     val stateKey = existing?.receipt?.id
     val defaultCurrencyCode = tripCurrencies.firstOrNull { it.isDefault }?.currencyCode
@@ -2343,11 +2578,15 @@ internal fun ReceiptEditorDialog(
                 ?: LocalDate.now().format(editorDateFormatter),
         )
     }
+    var occurredTime by remember(stateKey) {
+        mutableStateOf(existing?.receipt?.occurredAt?.let(::formatEditorTime) ?: "00:00")
+    }
     var addTip by remember(stateKey) {
         mutableStateOf(existing?.receipt?.tipMinor?.let { it > 0 } ?: trip.defaultTipSelected)
     }
     var invalidAmount by remember(stateKey) { mutableStateOf(false) }
     var invalidDate by remember(stateKey) { mutableStateOf(false) }
+    var invalidTime by remember(stateKey) { mutableStateOf(false) }
     var showFullscreenImage by remember(stateKey, imageUri) { mutableStateOf(false) }
     var openTextSelectionWhenReady by remember(stateKey, imageUri) { mutableStateOf(false) }
     var showTextSelection by remember(stateKey, imageUri) { mutableStateOf(false) }
@@ -2393,17 +2632,28 @@ internal fun ReceiptEditorDialog(
     val recognizedPage = (localOcr as? LocalOcrState.Success)
         ?.takeIf { it.imageUri == imageUri }
         ?.page
-    val selectablePage = remember(recognizedPage, extractedReceipt) {
+    val transcriptLines = (aiTranscript as? AiTranscriptState.Success)
+        ?.takeIf { it.imageUri == imageUri }
+        ?.lines
+        .orEmpty()
+    val selectablePage = remember(recognizedPage, transcriptLines, extractedReceipt) {
         recognizedPage?.let { localPage ->
             HybridOcrPageBuilder.merge(
                 local = localPage,
-                transcript = extractedReceipt?.transcriptLines.orEmpty(),
+                transcript = transcriptLines,
                 extraCandidates = extractedReceipt
-                    ?.takeIf { it.transcriptLines.isEmpty() }
+                    ?.takeIf { transcriptLines.isEmpty() }
                     ?.imageTextCandidates()
                     .orEmpty(),
             )
         }
+    }
+    val aiTranscriptReady = when (aiTranscript) {
+        is AiTranscriptState.Success -> aiTranscript.imageUri == imageUri
+        is AiTranscriptState.Error -> aiTranscript.imageUri == imageUri
+        is AiTranscriptState.Unavailable -> aiTranscript.imageUri == imageUri
+        AiTranscriptState.Idle,
+        is AiTranscriptState.Loading -> false
     }
     fun currentBaseline() = ReceiptEditorBaseline(
         location = location,
@@ -2411,6 +2661,7 @@ internal fun ReceiptEditorDialog(
         amountText = amount,
         currencyCode = receiptCurrencyCode,
         occurredOn = occurredOn,
+        occurredTime = occurredTime,
         items = items.map { it.name to it.amountText },
     )
     val initialEditorBaseline = remember(stateKey) { currentBaseline() }
@@ -2445,17 +2696,33 @@ internal fun ReceiptEditorDialog(
         }
         nextItemId = items.size.toLong()
     }
-    fun applyExtractedReceipt(extracted: ExtractedReceipt) {
+    fun applyExtractedReceipt(extracted: ExtractedReceipt, applyAmount: Boolean = true) {
         location = extracted.location
         check = extracted.checkNumber
-        amount = extracted.totalAmountText
+        if (applyAmount) amount = extracted.totalAmountText
         extracted.occurredOn.takeIf(String::isNotBlank)?.let { extractedDate ->
             occurredOn = normalizeEditorDate(extractedDate) ?: occurredOn
+        }
+        extracted.occurredTime.takeIf(String::isNotBlank)?.let { extractedTime ->
+            occurredTime = normalizeEditorTime(extractedTime) ?: occurredTime
         }
         replaceItemsFromExtraction(extracted)
         invalidAmount = false
         invalidDate = false
+        invalidTime = false
         pendingAiReview = null
+    }
+    fun autoApplyExtractedReceipt(extracted: ExtractedReceipt) {
+        if (!extracted.totalAmountNeedsReview) {
+            applyExtractedReceipt(extracted)
+            return
+        }
+        applyExtractedReceipt(extracted, applyAmount = false)
+        pendingAiReview = PendingReceiptAiReview(
+            extracted = extracted,
+            resolvedFields = ReceiptAiField.entries.toSet() - ReceiptAiField.AMOUNT,
+            itemsApplied = true,
+        )
     }
     fun queueAiReview(
         extracted: ExtractedReceipt,
@@ -2488,6 +2755,10 @@ internal fun ReceiptEditorDialog(
         if (open(ReceiptAiField.DATE) && extracted.occurredOn.isNotBlank()) {
             occurredOn = normalizeEditorDate(extracted.occurredOn) ?: extracted.occurredOn
             invalidDate = false
+        }
+        if (open(ReceiptAiField.TIME) && extracted.occurredTime.isNotBlank()) {
+            occurredTime = normalizeEditorTime(extracted.occurredTime) ?: extracted.occurredTime
+            invalidTime = false
         }
         val detectedCode = extracted.currencyCode.trim().uppercase(Locale.ROOT)
         if (open(ReceiptAiField.CURRENCY) && (
@@ -2538,9 +2809,9 @@ internal fun ReceiptEditorDialog(
         pendingAiReview = updated.takeUnless { updated.valuesApplied }
     }
 
-    LaunchedEffect(localOcr, openTextSelectionWhenReady) {
+    LaunchedEffect(localOcr, aiTranscript, openTextSelectionWhenReady) {
         when {
-            openTextSelectionWhenReady && recognizedPage != null -> {
+            openTextSelectionWhenReady && recognizedPage != null && aiTranscriptReady -> {
                 openTextSelectionWhenReady = false
                 showTextSelection = true
             }
@@ -2564,7 +2835,8 @@ internal fun ReceiptEditorDialog(
         val detectedCode = extracted.currencyCode.trim().uppercase(Locale.ROOT)
         when {
             detectedCode.isBlank() -> {
-                if (mayApplyAutomatically) applyExtractedReceipt(extracted) else queueAiReview(extracted, request)
+                if (mayApplyAutomatically) autoApplyExtractedReceipt(extracted)
+                else queueAiReview(extracted, request)
             }
             detectedCode !in supportedCurrencyCodes -> queueAiReview(
                 extracted,
@@ -2574,7 +2846,7 @@ internal fun ReceiptEditorDialog(
             tripCurrencies.any { it.currencyCode == detectedCode } -> {
                 if (mayApplyAutomatically) {
                     receiptCurrencyCode = detectedCode
-                    applyExtractedReceipt(extracted)
+                    autoApplyExtractedReceipt(extracted)
                 } else {
                     queueAiReview(extracted, request)
                 }
@@ -2606,14 +2878,17 @@ internal fun ReceiptEditorDialog(
         title = stringResource(if (existing == null) R.string.add_receipt else R.string.edit_receipt),
         onDismiss = onDismiss,
         onSave = {
+            val validTimestamp = MainViewModel.parseReceiptDateTime(occurredOn, occurredTime) != null
             invalidDate = MainViewModel.parseReceiptDate(occurredOn) == null
-            if (invalidDate) return@ScrollableEditorDialog
+            invalidTime = !validTimestamp && !invalidDate
+            if (!validTimestamp) return@ScrollableEditorDialog
             invalidAmount = !onSave(
                 location,
                 check,
                 amount,
                 receiptCurrencyCode,
                 occurredOn,
+                occurredTime,
                 addTip,
                 items.map { ReceiptItemDraft(it.name, it.amountText) },
             )
@@ -2635,7 +2910,7 @@ internal fun ReceiptEditorDialog(
                         onAnalyzeImage()
                     },
                     onAnalyzeLocally = {
-                        if (recognizedPage != null) {
+                        if (recognizedPage != null && aiTranscriptReady) {
                             showTextSelection = true
                         } else {
                             openTextSelectionWhenReady = true
@@ -2656,8 +2931,10 @@ internal fun ReceiptEditorDialog(
                 HorizontalDivider(Modifier.padding(vertical = 4.dp))
                 LocalOcrStatus(
                     state = localOcr,
+                    aiTranscriptState = aiTranscript,
                     imageUri = imageUri,
                     onClose = onClearLocalOcr,
+                    onUseLocalOnly = onContinueWithLocalText,
                 )
                 pendingImageText?.let { selectedText ->
                     PendingImageTextBanner(
@@ -2809,6 +3086,63 @@ internal fun ReceiptEditorDialog(
                         protectAiField(ReceiptAiField.DATE, resolved = true)
                     },
                 )
+                ImageTextTarget(
+                    pendingText = pendingImageText,
+                    fieldLabel = stringResource(R.string.receipt_time),
+                    onApply = {
+                        occurredTime = normalizeEditorTime(it) ?: it
+                        invalidTime = false
+                        protectAiField(ReceiptAiField.TIME, resolved = true)
+                        pendingImageText = null
+                    },
+                ) {
+                    OutlinedTextField(
+                        value = occurredTime,
+                        onValueChange = {
+                            occurredTime = it
+                            invalidTime = false
+                            protectAiField(ReceiptAiField.TIME)
+                        },
+                        label = { Text(stringResource(R.string.receipt_time)) },
+                        placeholder = { Text(stringResource(R.string.time_example)) },
+                        isError = invalidTime,
+                        supportingText = if (invalidTime) {
+                            { Text(stringResource(R.string.invalid_time)) }
+                        } else null,
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text),
+                        modifier = Modifier.fillMaxWidth().testTag("receipt_time_input"),
+                    )
+                }
+                pendingAiReview?.let { review ->
+                    val rawDetected = review.extracted.occurredTimeSuggestions.preferred
+                        .ifBlank { review.extracted.occurredTime }
+                    val detected = normalizeEditorTime(rawDetected) ?: rawDetected
+                    PendingAiValue(
+                        value = detected,
+                        currentValue = occurredTime,
+                        visible = ReceiptAiField.TIME !in review.resolvedFields,
+                        onApply = {
+                            occurredTime = detected
+                            invalidTime = false
+                            protectAiField(ReceiptAiField.TIME, resolved = true)
+                        },
+                    )
+                }
+                if (pendingImageText == null) AiSuggestionMenu(
+                    currentValue = occurredTime,
+                    suggestions = extractedReceipt
+                        ?.occurredTimeSuggestions
+                        ?.toEditorSuggestions { candidate ->
+                            normalizeEditorTime(candidate) ?: candidate
+                        }
+                        .orEmpty(),
+                    onSelected = { selected ->
+                        occurredTime = normalizeEditorTime(selected) ?: selected
+                        invalidTime = false
+                        protectAiField(ReceiptAiField.TIME, resolved = true)
+                    },
+                )
                 TripCurrencySelector(
                     selectedCurrencyCode = receiptCurrencyCode,
                     currencyCodes = tripCurrencies.map { it.currencyCode },
@@ -2876,7 +3210,7 @@ internal fun ReceiptEditorDialog(
                             { Text(stringResource(R.string.invalid_amount)) }
                         } else null,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier.fillMaxWidth().testTag("receipt_amount_input"),
                     )
                 }
                 pendingAiReview?.let { review ->
@@ -2892,6 +3226,11 @@ internal fun ReceiptEditorDialog(
                             protectAiField(ReceiptAiField.AMOUNT, resolved = true)
                         },
                     )
+                    if (review.extracted.totalAmountNeedsReview &&
+                        ReceiptAiField.AMOUNT !in review.resolvedFields
+                    ) {
+                        PendingAiNotice(stringResource(R.string.ai_total_needs_review))
+                    }
                 }
                 if (pendingImageText == null) AiSuggestionMenu(
                     currentValue = amount,
@@ -3316,7 +3655,7 @@ internal fun ReceiptEditorDialog(
                         if (extracted != null && request != null) {
                             if (mayApplyAutomatically) {
                                 receiptCurrencyCode = newCode
-                                applyExtractedReceipt(extracted)
+                                autoApplyExtractedReceipt(extracted)
                             } else {
                                 queueAiReview(extracted, request)
                             }
@@ -3434,17 +3773,31 @@ private fun ReceiptEditorImageSection(
 @Composable
 private fun LocalOcrStatus(
     state: LocalOcrState,
+    aiTranscriptState: AiTranscriptState,
     imageUri: String?,
     onClose: () -> Unit,
+    onUseLocalOnly: () -> Unit,
 ) {
-    when (state) {
-        is LocalOcrState.Loading -> if (state.imageUri == imageUri) {
+    val localLoading = state is LocalOcrState.Loading && state.imageUri == imageUri
+    val aiLoading = aiTranscriptState is AiTranscriptState.Loading &&
+        aiTranscriptState.imageUri == imageUri
+    if (localLoading || aiLoading) {
+        Column {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp)
                 Spacer(Modifier.width(8.dp))
                 Text(stringResource(R.string.local_ocr_running))
             }
+            if (!localLoading && aiLoading && state is LocalOcrState.Success) {
+                TextButton(onClick = onUseLocalOnly) {
+                    Text(stringResource(R.string.continue_with_local_ocr))
+                }
+            }
         }
+        return
+    }
+    when (state) {
+        is LocalOcrState.Loading -> Unit
         is LocalOcrState.Error -> if (state.imageUri == imageUri) {
             Column {
                 Text(
@@ -3467,6 +3820,15 @@ private fun LocalOcrStatus(
             }
         }
         LocalOcrState.Idle -> Unit
+    }
+    if (state is LocalOcrState.Success && state.imageUri == imageUri &&
+        aiTranscriptState is AiTranscriptState.Error && aiTranscriptState.imageUri == imageUri
+    ) {
+        Text(
+            stringResource(R.string.ai_transcript_failed_local_available),
+            color = MaterialTheme.colorScheme.tertiary,
+            style = MaterialTheme.typography.bodySmall,
+        )
     }
 }
 
@@ -3857,12 +4219,14 @@ internal data class ReceiptEditorBaseline(
     val currencyCode: String,
     val occurredOn: String,
     val items: List<Pair<String, String>>,
+    val occurredTime: String = "00:00",
 )
 
 internal enum class ReceiptAiField {
     LOCATION,
     CHECK_NUMBER,
     DATE,
+    TIME,
     CURRENCY,
     AMOUNT,
 }
@@ -3899,6 +4263,7 @@ internal fun changedReceiptAiFields(
         add(ReceiptAiField.CURRENCY)
     }
     if (requestBaseline.occurredOn != currentBaseline.occurredOn) add(ReceiptAiField.DATE)
+    if (requestBaseline.occurredTime != currentBaseline.occurredTime) add(ReceiptAiField.TIME)
 }
 
 private data class PendingReceiptAiReview(
@@ -3947,6 +4312,7 @@ private fun ExtractedReceipt.imageTextCandidates() = buildList {
     addAll(checkNumberSuggestions.candidates)
     addAll(totalAmountSuggestions.candidates)
     addAll(occurredOnSuggestions.candidates)
+    addAll(occurredTimeSuggestions.candidates)
     items.forEach { item ->
         addAll(item.quantitySuggestions.candidates)
         addAll(item.nameSuggestions.candidates)
@@ -4000,9 +4366,22 @@ private fun formatEditorDate(epochMillis: Long): String = Instant.ofEpochMilli(e
     .toLocalDate()
     .format(editorDateFormatter)
 
+private fun formatEditorTime(epochMillis: Long): String = Instant.ofEpochMilli(epochMillis)
+    .atZone(ZoneId.systemDefault())
+    .toLocalTime()
+    .format(DateTimeFormatter.ofPattern("HH:mm"))
+
 private fun normalizeEditorDate(value: String): String? = runCatching {
     LocalDate.parse(value.trim(), DateTimeFormatter.ISO_LOCAL_DATE).format(editorDateFormatter)
 }.getOrNull()
+
+private fun normalizeEditorTime(value: String): String? {
+    val match = Regex("([0-9]{1,2}):([0-9]{2})").matchEntire(value.trim()) ?: return null
+    val hour = match.groupValues[1].toInt()
+    val minute = match.groupValues[2].toInt()
+    if (hour !in 0..23 || minute !in 0..59) return null
+    return "%02d:%02d".format(Locale.ROOT, hour, minute)
+}
 
 private fun formatMinor(minor: Long, currencyCode: String): String =
     CurrencyAmount.formatMinor(minor, currencyCode)

@@ -1,11 +1,16 @@
 package de.shakie.billcheck
 
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assert
+import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.text.AnnotatedString
 import androidx.test.platform.app.InstrumentationRegistry
 import de.shakie.billcheck.data.ReceiptEntity
 import de.shakie.billcheck.data.ReceiptItemEntity
@@ -56,7 +61,7 @@ class ReceiptAiReviewUiTest {
                     onClearLocalOcr = {},
                     onAddTripCurrency = { _, _, _ -> true },
                     onDismiss = {},
-                    onSave = { _, _, _, _, _, _, _ -> true },
+                    onSave = { _, _, _, _, _, _, _, _ -> true },
                 )
             }
         }
@@ -69,6 +74,7 @@ class ReceiptAiReviewUiTest {
         compose.onNodeWithText("Sultana Rest.").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("5595").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("28.12.2024").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("19:42").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("155.95").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("EGP").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("5 × Cola - Can 330").performScrollTo().assertIsDisplayed()
@@ -121,7 +127,7 @@ class ReceiptAiReviewUiTest {
                     onAnalyzeImage = {}, onAnalyzeLocally = {}, onClearLocalOcr = {},
                     onAddTripCurrency = { _, _, _ -> true },
                     onDismiss = {},
-                    onSave = { _, _, _, _, _, _, _ -> true },
+                    onSave = { _, _, _, _, _, _, _, _ -> true },
                 )
             }
         }
@@ -131,12 +137,78 @@ class ReceiptAiReviewUiTest {
         compose.onNodeWithText(context.getString(R.string.apply_detected_values)).assertDoesNotExist()
     }
 
+    @Test
+    fun suspiciousTotalOnVirginReceiptAutoAppliesOtherFieldsButRequiresAmountReview() {
+        val imageUri = "android.resource://de.shakie.billcheck.debug/${R.drawable.ic_launcher_foreground}"
+        val extractionState = mutableStateOf<AiExtractionState>(AiExtractionState.Idle)
+        compose.setContent {
+            BillCheckTheme(darkTheme = false) {
+                ReceiptEditorDialog(
+                    trip = trip(),
+                    tripCurrencies = listOf(tripCurrency()),
+                    recentCurrencyCodes = emptyList(),
+                    exchangeRateLookup = ExchangeRateLookupState.Idle,
+                    onLookupRate = { _, _ -> },
+                    imageUri = imageUri,
+                    aiExtraction = extractionState.value,
+                    localOcr = LocalOcrState.Idle,
+                    onTakePhoto = {}, onChooseImage = {}, onBrowseFolders = {}, onOpenImage = {},
+                    onAnalyzeImage = {
+                        extractionState.value = AiExtractionState.ReceiptSuccess(
+                            imageUri,
+                            ExtractedReceipt(
+                                location = "Fresh Venue",
+                                checkNumber = "123",
+                                totalAmountText = "56.78",
+                                currencyCode = "EGP",
+                                occurredOn = "2026-08-30",
+                                occurredTime = "21:07",
+                                items = listOf(
+                                    ExtractedItem("Alpha", "12.34"),
+                                    ExtractedItem("Beta", "56.78"),
+                                ),
+                                totalAmountNeedsReview = true,
+                            ),
+                        )
+                    },
+                    onAnalyzeLocally = {}, onClearLocalOcr = {},
+                    onAddTripCurrency = { _, _, _ -> true },
+                    onDismiss = {},
+                    onSave = { _, _, _, _, _, _, _, _ -> true },
+                )
+            }
+        }
+
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        compose.onNodeWithText(context.getString(R.string.analyze_image)).performClick()
+        compose.onNodeWithText("Fresh Venue").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithTag("receipt_time_input").assert(
+            SemanticsMatcher.expectValue(SemanticsProperties.EditableText, AnnotatedString("21:07")),
+        )
+        compose.onNodeWithText("Alpha").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText(context.getString(R.string.ai_total_needs_review))
+            .performScrollTo()
+            .assertIsDisplayed()
+        compose.onNodeWithText(context.getString(R.string.apply_detected_values))
+            .performScrollTo()
+            .assertIsDisplayed()
+        compose.onNodeWithTag("receipt_amount_input").assert(
+            SemanticsMatcher.expectValue(SemanticsProperties.EditableText, AnnotatedString("")),
+        )
+        compose.onNodeWithText(context.getString(R.string.apply_detected_values))
+            .performClick()
+        compose.onNodeWithTag("receipt_amount_input").assert(
+            SemanticsMatcher.expectValue(SemanticsProperties.EditableText, AnnotatedString("56.78")),
+        )
+    }
+
     private fun extractedReceipt() = ExtractedReceipt(
         location = "Sultana Rest.",
         checkNumber = "5595",
         totalAmountText = "155.95",
         currencyCode = "EGP",
         occurredOn = "2024-12-28",
+        occurredTime = "19:42",
         items = listOf(
             ExtractedItem(name = "Cola - Can 330", amountText = "125.00", quantityText = "5"),
             ExtractedItem(name = "Service", amountText = "30.95"),

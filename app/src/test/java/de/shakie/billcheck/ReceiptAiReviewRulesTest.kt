@@ -49,6 +49,16 @@ class ReceiptAiReviewRulesTest {
     }
 
     @Test
+    fun `time edited while analysis runs is protected independently from date`() {
+        val current = untouched.copy(occurredTime = "19:42")
+
+        assertEquals(
+            setOf(ReceiptAiField.TIME),
+            changedReceiptAiFields(untouched, current),
+        )
+    }
+
+    @Test
     fun `returning to the request value removes field protection`() {
         val changedThenRestored = untouched.copy(location = untouched.location)
 

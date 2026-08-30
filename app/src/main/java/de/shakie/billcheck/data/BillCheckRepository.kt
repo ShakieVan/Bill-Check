@@ -44,6 +44,8 @@ class BillCheckRepository(database: BillCheckDatabase) {
 
     fun receipts(tripId: String) = dao.observeReceipts(tripId)
 
+    fun visibleBatchImports(tripId: String) = dao.observeVisibleBatchImports(tripId)
+
     fun locationSuggestions(tripId: String) = dao.observeLocationSuggestions(tripId)
 
     fun itemNameSuggestions(tripId: String) = dao.observeItemNameSuggestions(tripId)
@@ -133,7 +135,9 @@ class BillCheckRepository(database: BillCheckDatabase) {
         items: List<NewReceiptItem> = emptyList(),
         imageUri: String? = null,
         occurredAt: Long = System.currentTimeMillis(),
-    ) {
+        reviewState: String = ReceiptReviewState.CONFIRMED,
+        receiptId: String = UUID.randomUUID().toString(),
+    ): ReceiptEntity {
         require(amountMinor > 0) { "Receipt amount must be positive" }
         require(tipMinor >= 0) { "Tip must not be negative" }
         require(items.all { it.amountMinor >= 0 }) { "Item amounts must not be negative" }
@@ -150,7 +154,6 @@ class BillCheckRepository(database: BillCheckDatabase) {
         } else {
             requireRateSnapshot(trip.homeCurrencyCode, tipCurrency, tipExchangeRateSnapshot)
         }
-        val receiptId = UUID.randomUUID().toString()
         val receipt = ReceiptEntity(
                 id = receiptId,
                 tripId = trip.id,
@@ -173,7 +176,7 @@ class BillCheckRepository(database: BillCheckDatabase) {
                 tipCurrencyCode = tipCurrency,
                 tipExchangeRateSnapshot = tipRate,
                 imageUri = imageUri,
-                reviewState = "CONFIRMED",
+                reviewState = reviewState,
                 createdAt = now,
             )
         val receiptItems = items.mapIndexed { index, item ->
@@ -191,10 +194,12 @@ class BillCheckRepository(database: BillCheckDatabase) {
             items = receiptItems,
         )
         dao.clearTripAnalyses(trip.id)
+        return receipt
     }
 
     suspend fun deleteReceipt(receipt: ReceiptEntity) {
         val affectedLines = dao.getStatementLinesForReceipt(receipt.id)
+        dao.deleteBatchImportForReceipt(receipt.id)
         dao.deleteReceipt(receipt)
         affectedLines.forEach { line ->
             dao.updateStatementLine(
@@ -262,6 +267,7 @@ class BillCheckRepository(database: BillCheckDatabase) {
             tipMinor = tipMinor,
             tipCurrencyCode = tipCurrency,
             tipExchangeRateSnapshot = tipRate,
+            reviewState = ReceiptReviewState.CONFIRMED,
         )
         val receiptItems = items.mapIndexed { index, item ->
             ReceiptItemEntity(
@@ -274,11 +280,58 @@ class BillCheckRepository(database: BillCheckDatabase) {
             )
         }
         dao.updateReceiptWithItems(receipt, receiptItems)
+        dao.markBatchImportReviewed(receipt.id)
         dao.getStatementLinesForReceipt(receipt.id).forEach { line ->
             dao.updateStatementLine(line.copy(status = ReconciliationMatcher.suggestedStatus(line, receipt)))
         }
         dao.clearTripAnalyses(trip.id)
     }
+
+    suspend fun enqueueBatchReceiptImports(tripId: String, imageUris: List<String>): String {
+        require(imageUris.isNotEmpty())
+        requireNotNull(dao.getTripWithCurrencies(tripId)) { "Trip no longer exists" }
+        val batchId = UUID.randomUUID().toString()
+        val now = System.currentTimeMillis()
+        dao.replaceVisibleBatchImports(
+            tripId,
+            imageUris.distinct().mapIndexed { index, imageUri ->
+                BatchReceiptImportEntity(
+                    id = UUID.randomUUID().toString(),
+                    batchId = batchId,
+                    tripId = tripId,
+                    sortPosition = index,
+                    imageUri = imageUri,
+                    status = BatchReceiptImportStatus.QUEUED,
+                    createdAt = now,
+                    updatedAt = now,
+                )
+            },
+        )
+        return batchId
+    }
+
+    suspend fun nextPendingBatchReceiptImport(): BatchReceiptImportEntity? =
+        dao.nextPendingBatchImport()
+
+    suspend fun updateBatchReceiptImport(item: BatchReceiptImportEntity) =
+        dao.updateBatchImport(item)
+
+    suspend fun retryBatchReceiptImport(itemId: String) =
+        dao.retryBatchImport(itemId, System.currentTimeMillis())
+
+    suspend fun cancelBatchReceiptImports(batchId: String) =
+        dao.cancelPendingBatchImports(batchId, System.currentTimeMillis())
+
+    suspend fun dismissBatchReceiptImports(tripId: String) =
+        dao.dismissVisibleBatchImports(tripId)
+
+    suspend fun tripWithCurrencies(tripId: String): TripWithCurrencies? =
+        dao.getTripWithCurrencies(tripId)
+
+    suspend fun receiptsForTrip(tripId: String): List<ReceiptWithItems> =
+        dao.getReceiptsWithItems(tripId)
+
+    suspend fun receipt(receiptId: String): ReceiptEntity? = dao.getReceipt(receiptId)
 
     suspend fun updateReceiptImage(receiptId: String, imageUri: String?) =
         dao.updateReceiptImage(receiptId, imageUri)

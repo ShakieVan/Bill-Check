@@ -40,6 +40,12 @@ eigene ausdrückliche Entscheidung; ein unbemerkter Listentausch findet nicht
 statt. Aktuelle Posten ohne positionsgleichen KI-Posten werden orange als bei
 der Listenübernahme entfallend gekennzeichnet.
 
+Datum und Uhrzeit sind getrennte KI-Felder. Die Uhrzeit wird nur aus einer
+sichtbar gedruckten Angabe übernommen, als `HH:mm` normalisiert und niemals aus
+Foto-Metadaten, aktueller Gerätezeit oder Öffnungszeiten abgeleitet. Im Editor
+bleibt sie separat änderbar und wird gemeinsam mit dem Datum im vorhandenen
+Belegzeitstempel gespeichert; deshalb ist keine zusätzliche Room-Spalte nötig.
+
 Kopfwerte und Posten sind zwei gleichzeitige, voneinander unabhängige
 Übernahmeaktionen. Sie dürfen in beliebiger Reihenfolge ausgeführt oder durch
 Abbrechen beziehungsweise Speichern beide ignoriert werden; eigene
@@ -51,10 +57,44 @@ einen leeren Code. Der Editor zeigt eine erkannte Währung auch dann orange an,
 wenn sie der aktuellen Auswahl entspricht, und benennt ein leeres oder nicht
 nutzbares Ergebnis ausdrücklich.
 
-Ein sichtbares KI-Transkript kann mit der lokalen ML-Kit-Zeichengeometrie
-fusioniert werden. Diese Hybridlage unterstützt die manuelle Auswahl direkt im
-Bild, ist aber keine automatische Wahrheit: KI-Positionen und proportional
-ergänzte Zeichen bleiben Näherungen.
+Der fachliche Extraktionslauf enthält bewusst kein Volltranskript. Erst die
+separate Nutzeraktion „Text im Bild auswählen“ fordert ein räumliches
+KI-Transkript an und fusioniert es mit der lokalen ML-Kit-Zeichengeometrie.
+Diese Trennung verkürzt und stabilisiert die normale Belegauswertung. Die
+Hybridlage unterstützt die manuelle Auswahl direkt im Bild, ist aber keine
+automatische Wahrheit: KI-Positionen und proportional ergänzte Zeichen bleiben
+Näherungen.
+
+Eine lokale Plausibilitätsprüfung ersetzt niemals die gedruckte Gesamtsumme
+durch die Summe erkannter Posten, weil Steuern, Service, Rabatt oder
+unvollständig erkannte Zeilen legitime Abweichungen verursachen. Entspricht die
+vorgeschlagene Gesamtsumme jedoch auffällig genau einem von mindestens zwei
+Posten, wird nur dieser Betrag von der automatischen Übernahme ausgenommen und
+im Editor ausdrücklich zur Prüfung markiert.
+
+Die Stapelverarbeitung verwendet denselben providerunabhängigen
+Extraktionsvertrag, speichert ihre Ergebnisse aber ohne vorgeschalteten Editor
+direkt als Belege. Provideraufrufe werden appweit serialisiert; insbesondere
+laufen Stapel, Einzelbeleg, Rechnungsanalyse und räumliches Transkript nicht
+gleichzeitig gegen einen lokalen Qwen-Server. Eine persistente Room-
+Warteschlange sichert Reihenfolge, Einzelwiederholung und Wiederaufnahme beim
+nächsten App-Start. Die Warteschlangen-ID ist zugleich die ID des erzeugten
+Belegs, sodass ein Absturz zwischen Beleg- und Statusspeicherung keinen
+doppelten Datensatz erzeugt.
+
+Automatische Übernahme bedeutet im Stapel nicht ungeprüfte Gewissheit. Fehlende
+Pflichtangaben, ungültige Zeitangaben, Kandidatenkonflikte, eine auffällige
+Gesamtsumme, unvollständige Posten, eine mögliche Dublette sowie eine fehlende
+oder in der Reise nicht eingerichtete Währung werden als Review-Gründe am
+Beleg gespeichert. Solche Belege bleiben vollständig editierbar und werden in
+der Belegliste orange markiert. Eine manuelle Speicherung bestätigt den
+geprüften Zustand.
+
+Auch sprachliche Abgleichsfazits erhalten ausschließlich lokal vorbereitete
+Fakten. Belegdaten werden deterministisch als anzeigefertiges Kalenderdatum der
+Ausgabesprache formatiert; Unix-Zeitstempel werden dem Sprachmodell weder zur
+Umrechnung noch zur Darstellung überlassen. Das Modell darf ein solches Datum
+nur sprachlich einbetten, nicht neu berechnen oder umformatieren.
 
 API-Schlüssel liegen verschlüsselt mit einem nicht exportierbaren AES/GCM-
 Schlüssel im Android Keystore. Klartextschlüssel gehören weder in Ressourcen,
@@ -73,6 +113,8 @@ auf die erwarteten Beleg- oder Rechnungsfelder.
 - Zimmernummer, Unterschrift und handschriftliches Trinkgeld werden ignoriert.
 - Beträge sind Dezimalstrings ohne Währungssymbol; fehlende Werte bleiben
   leer und dürfen nicht erfunden werden.
+- Gedruckte Belegzeiten werden als `HH:mm` im 24-Stunden-Format geliefert;
+  ohne sichtbare Zeit bleibt das Feld leer.
 - Rechnungsbilder liefern einzelne Belastungszeilen, keine Überschriften,
   Zahlungen, Zwischen- oder Endsummen.
 
