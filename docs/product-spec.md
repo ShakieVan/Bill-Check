@@ -80,8 +80,10 @@ Stand: 16.08.2026
   Belege erreichbar. Noch nicht gespeicherte Felder und Posten bleiben beim
   Wechsel zur Bildprüfung erhalten.
 - Ein verknüpftes Bild bietet im Editor den neutralen Einstieg „Bild
-  auswerten“. Das Cloud-Ergebnis wird erst nach einem stehenbleibenden
-  Ergebnisdialog in das weiterhin editierbare Formular übernommen.
+  auswerten“. In einem neuen, unveränderten Eintrag werden die besten Treffer
+  direkt in das weiterhin editierbare Formular übernommen. Andernfalls stehen
+  die erkannten Werte ohne Präfix farbig direkt unter den zugehörigen Feldern;
+  ein fester Aktionsbereich übernimmt oder verwirft die offenen Vorschläge.
 
 ## Belegposten
 
@@ -102,6 +104,10 @@ Stand: 16.08.2026
 - Für Ort/Restaurant und Postenbezeichnungen zeigt ein Verlaufssymbol die
   zuletzt in derselben Reise verwendeten eindeutigen Texte. Betragsfelder und
   Checknummern erhalten bewusst keine solchen Vorschläge.
+- Die Auswahl eines alternativen KI-Kandidaten schützt das betreffende Feld
+  vor der späteren Sammelübernahme. Bei konkurrierenden Postenlisten werden
+  Kopfdaten und Liste getrennt bestätigt; manuelle Einzelwerte bleiben auch
+  bei einer ausdrücklich übernommenen KI-Liste erhalten.
 
 ## Abgleich
 

@@ -1,5 +1,23 @@
 # Entwicklungsprotokoll
 
+## 30.08.2026 – Feldnahe KI-Ergebnisprüfung
+
+- Die bisherige allgemeine Konfliktkarte durch einen festen, umbruchsicheren
+  Aktionsbereich mit „Auswertung fertig“ und vollbreiten Schaltflächen ersetzt.
+- Potenziell abweichende Kopf- und Postenwerte stehen in derselben Akzentfarbe
+  ohne platzraubendes Präfix direkt unter ihrem Zielfeld. Ein Tipp übernimmt
+  nur diesen Wert; die bisherigen Mehrfachvorschläge bleiben parallel nutzbar.
+- Neue, unberührte Belege übernehmen den besten Treffer automatisch.
+  Bestehende oder während der Analyse bearbeitete Belege behalten ihre Werte;
+  geänderte beziehungsweise bewusst gewählte Felder sind auch vor einer
+  späteren Sammelübernahme geschützt.
+- Bei konkurrierenden Postenlisten folgt eine eigene Entscheidung. Geschützte
+  Namen und Beträge bleiben selbst bei der ausdrücklichen Listenübernahme
+  erhalten; Hinzufügen oder Löschen eines Postens beendet die unsichere
+  positionsbasierte Zusammenführung.
+- Die destruktive Aktion „Reise löschen“ aus der gemeinsamen Zeile mit
+  „Abbrechen/Speichern“ gelöst, damit keine Beschriftung mehr schmal umbricht.
+
 ## 29.08.2026 – Generisches Mehrwährungsmodell
 
 - Heimatwährung als Vorgabe in den Einstellungen und unveränderlicher Snapshot

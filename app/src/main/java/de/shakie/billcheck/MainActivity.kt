@@ -2169,7 +2169,10 @@ private fun TripEditorDialog(
         onDismiss = onDismiss,
         destructiveAction = onDeleteRequested?.let { requestDelete ->
             {
-                TextButton(onClick = requestDelete) {
+                OutlinedButton(
+                    onClick = requestDelete,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
                     Icon(Icons.Default.DeleteOutline, contentDescription = null)
                     Spacer(Modifier.width(6.dp))
                     Text(
@@ -2293,7 +2296,7 @@ private fun TripEditorDialog(
 }
 
 @Composable
-private fun ReceiptEditorDialog(
+internal fun ReceiptEditorDialog(
     trip: TripEntity,
     tripCurrencies: List<TripCurrencyEntity>,
     recentCurrencyCodes: List<String>,
@@ -2348,8 +2351,8 @@ private fun ReceiptEditorDialog(
     var openTextSelectionWhenReady by remember(stateKey, imageUri) { mutableStateOf(false) }
     var showTextSelection by remember(stateKey, imageUri) { mutableStateOf(false) }
     var pendingImageText by remember(stateKey, imageUri) { mutableStateOf<String?>(null) }
-    var analysisBaseline by remember(stateKey, imageUri) { mutableStateOf<ReceiptEditorBaseline?>(null) }
-    var aiResultConflicted by remember(stateKey, imageUri) { mutableStateOf(false) }
+    var analysisRequest by remember(stateKey, imageUri) { mutableStateOf<ReceiptAnalysisRequest?>(null) }
+    var pendingAiReview by remember(stateKey, imageUri) { mutableStateOf<PendingReceiptAiReview?>(null) }
     val initialItems = existing?.items
         ?.sortedBy { it.sortPosition }
         ?.mapIndexed { index, item ->
@@ -2372,11 +2375,15 @@ private fun ReceiptEditorDialog(
     var pendingCurrencyRate by remember(stateKey) { mutableStateOf("") }
     var pendingCurrencyDaily by remember(stateKey) { mutableStateOf(false) }
     var pendingCurrencyRateInvalid by remember(stateKey) { mutableStateOf(false) }
+    var newlyConfiguredCurrencyCodes by remember(stateKey) { mutableStateOf(emptySet<String>()) }
     var retainedExtractedReceipt by remember(stateKey, imageUri) {
         mutableStateOf<ExtractedReceipt?>(null)
     }
     var pendingCurrencyExtraction by remember(stateKey, imageUri) {
         mutableStateOf<ExtractedReceipt?>(null)
+    }
+    var pendingCurrencyAnalysisRequest by remember(stateKey, imageUri) {
+        mutableStateOf<ReceiptAnalysisRequest?>(null)
     }
     val incomingExtractedReceipt = (aiExtraction as? AiExtractionState.ReceiptSuccess)
         ?.takeIf { it.imageUri == imageUri }
@@ -2405,6 +2412,39 @@ private fun ReceiptEditorDialog(
         occurredOn = occurredOn,
         items = items.map { it.name to it.amountText },
     )
+    val initialEditorBaseline = remember(stateKey) { currentBaseline() }
+    fun protectAiField(field: ReceiptAiField, resolved: Boolean = false) {
+        pendingAiReview = pendingAiReview?.let { review ->
+            review.copy(
+                protectedFields = review.protectedFields + field,
+                resolvedFields = if (resolved) review.resolvedFields + field else review.resolvedFields,
+            )
+        }
+    }
+    fun protectAiItemField(index: Int, kind: ReceiptAiItemFieldKind, resolved: Boolean = false) {
+        val key = ReceiptAiItemField(index, kind)
+        pendingAiReview = pendingAiReview?.let { review ->
+            review.copy(
+                itemsProtected = true,
+                protectedItemFields = review.protectedItemFields + key,
+                resolvedItemFields = if (resolved) review.resolvedItemFields + key else review.resolvedItemFields,
+            )
+        }
+    }
+    fun replaceItemsFromExtraction(extracted: ExtractedReceipt) {
+        if (extracted.items.isEmpty()) return
+        items = extracted.items.mapIndexed { index, item ->
+            EditableReceiptItem(
+                id = index.toLong(),
+                name = formatExtractedItemName(item.quantityText, item.name),
+                amountText = item.amountText,
+                aiSourceIndex = index,
+                nameAiSuggestions = itemNameAiSuggestions(item),
+                amountAiSuggestions = item.amountSuggestions.toEditorSuggestions(),
+            )
+        }
+        nextItemId = items.size.toLong()
+    }
     fun applyExtractedReceipt(extracted: ExtractedReceipt) {
         location = extracted.location
         check = extracted.checkNumber
@@ -2412,22 +2452,92 @@ private fun ReceiptEditorDialog(
         extracted.occurredOn.takeIf(String::isNotBlank)?.let { extractedDate ->
             occurredOn = normalizeEditorDate(extractedDate) ?: occurredOn
         }
-        if (extracted.items.isNotEmpty()) {
-            items = extracted.items.mapIndexed { index, item ->
-                EditableReceiptItem(
-                    id = index.toLong(),
-                    name = formatExtractedItemName(item.quantityText, item.name),
-                    amountText = item.amountText,
-                    aiSourceIndex = index,
-                    nameAiSuggestions = itemNameAiSuggestions(item),
-                    amountAiSuggestions = item.amountSuggestions.toEditorSuggestions(),
-                )
-            }
-            nextItemId = items.size.toLong()
-        }
+        replaceItemsFromExtraction(extracted)
         invalidAmount = false
         invalidDate = false
-        aiResultConflicted = false
+        pendingAiReview = null
+    }
+    fun queueAiReview(
+        extracted: ExtractedReceipt,
+        request: ReceiptAnalysisRequest,
+        suppressCurrency: Boolean = false,
+    ) {
+        val current = currentBaseline()
+        val protectedFields = changedReceiptAiFields(
+            requestBaseline = request.baseline,
+            currentBaseline = current,
+            suppressCurrency = suppressCurrency,
+        )
+        pendingAiReview = PendingReceiptAiReview(
+            extracted = extracted,
+            protectedFields = protectedFields,
+            resolvedFields = if (suppressCurrency) setOf(ReceiptAiField.CURRENCY) else emptySet(),
+            itemsProtected = existing != null ||
+                request.baseline.items.any { (name, value) -> name.isNotBlank() || value.isNotBlank() } ||
+                request.baseline.items != current.items,
+        )
+    }
+    fun applyOpenAiValues() {
+        val review = pendingAiReview ?: return
+        val extracted = review.extracted
+        fun open(field: ReceiptAiField) =
+            field !in review.protectedFields && field !in review.resolvedFields
+        if (open(ReceiptAiField.LOCATION) && extracted.location.isNotBlank()) location = extracted.location
+        if (open(ReceiptAiField.CHECK_NUMBER) && extracted.checkNumber.isNotBlank()) check = extracted.checkNumber
+        if (open(ReceiptAiField.AMOUNT) && extracted.totalAmountText.isNotBlank()) {
+            amount = extracted.totalAmountText
+            invalidAmount = false
+        }
+        if (open(ReceiptAiField.DATE) && extracted.occurredOn.isNotBlank()) {
+            occurredOn = normalizeEditorDate(extracted.occurredOn) ?: extracted.occurredOn
+            invalidDate = false
+        }
+        val detectedCode = extracted.currencyCode.trim().uppercase(Locale.ROOT)
+        if (open(ReceiptAiField.CURRENCY) && (
+                tripCurrencies.any { it.currencyCode == detectedCode } ||
+                    detectedCode in newlyConfiguredCurrencyCodes
+                )
+        ) {
+            receiptCurrencyCode = detectedCode
+            invalidAmount = false
+        }
+        if (!review.itemsProtected && !review.itemsDismissed) {
+            replaceItemsFromExtraction(extracted)
+            pendingAiReview = null
+        } else if (review.itemsDismissed || extracted.items.isEmpty()) {
+            pendingAiReview = null
+        } else {
+            pendingAiReview = review.copy(resolvedFields = ReceiptAiField.entries.toSet())
+        }
+    }
+    fun applyReviewedItems() {
+        val review = pendingAiReview ?: return
+        val previousItems = items
+        items = review.extracted.items.mapIndexed { index, extractedItem ->
+            val previous = previousItems.getOrNull(index)
+            val preserveName = ReceiptAiItemField(index, ReceiptAiItemFieldKind.NAME) in
+                review.protectedItemFields
+            val preserveAmount = ReceiptAiItemField(index, ReceiptAiItemFieldKind.AMOUNT) in
+                review.protectedItemFields
+            EditableReceiptItem(
+                id = previous?.id ?: nextItemId++,
+                name = if (preserveName && previous != null) {
+                    previous.name
+                } else {
+                    formatExtractedItemName(extractedItem.quantityText, extractedItem.name)
+                },
+                amountText = if (preserveAmount && previous != null) {
+                    previous.amountText
+                } else {
+                    extractedItem.amountText
+                },
+                aiSourceIndex = index,
+                nameAiSuggestions = itemNameAiSuggestions(extractedItem),
+                amountAiSuggestions = extractedItem.amountSuggestions.toEditorSuggestions(),
+            )
+        }
+        nextItemId = maxOf(nextItemId, items.size.toLong())
+        pendingAiReview = null
     }
 
     LaunchedEffect(localOcr, openTextSelectionWhenReady) {
@@ -2444,26 +2554,36 @@ private fun ReceiptEditorDialog(
 
     LaunchedEffect(aiExtraction) {
         if (aiExtraction is AiExtractionState.Error) {
-            analysisBaseline = null
+            analysisRequest = null
             return@LaunchedEffect
         }
         val extracted = incomingExtractedReceipt ?: return@LaunchedEffect
         retainedExtractedReceipt = extracted
-        val mayApplyAutomatically = analysisBaseline?.let { it == currentBaseline() } == true
-        analysisBaseline = null
-        aiResultConflicted = !mayApplyAutomatically
-        if (!mayApplyAutomatically) return@LaunchedEffect
+        val request = analysisRequest ?: ReceiptAnalysisRequest(currentBaseline(), wasVirgin = false)
+        analysisRequest = null
+        val mayApplyAutomatically = shouldAutoApplyReceiptAnalysis(request, currentBaseline())
         val supportedCurrencyCodes = CurrencyCatalog.entries(Locale.ROOT).mapTo(hashSetOf()) { it.code }
         val detectedCode = extracted.currencyCode.trim().uppercase(Locale.ROOT)
         when {
-            detectedCode.isBlank() -> applyExtractedReceipt(extracted)
-            detectedCode !in supportedCurrencyCodes -> aiResultConflicted = true
+            detectedCode.isBlank() -> {
+                if (mayApplyAutomatically) applyExtractedReceipt(extracted) else queueAiReview(extracted, request)
+            }
+            detectedCode !in supportedCurrencyCodes -> queueAiReview(
+                extracted,
+                request,
+                suppressCurrency = true,
+            )
             tripCurrencies.any { it.currencyCode == detectedCode } -> {
-                receiptCurrencyCode = detectedCode
-                applyExtractedReceipt(extracted)
+                if (mayApplyAutomatically) {
+                    receiptCurrencyCode = detectedCode
+                    applyExtractedReceipt(extracted)
+                } else {
+                    queueAiReview(extracted, request)
+                }
             }
             else -> {
                 pendingCurrencyExtraction = extracted
+                pendingCurrencyAnalysisRequest = request
                 pendingNewCurrencyCode = detectedCode
                 pendingCurrencyRate = ""
                 pendingCurrencyDaily = false
@@ -2500,6 +2620,21 @@ private fun ReceiptEditorDialog(
                 items.map { ReceiptItemDraft(it.name, it.amountText) },
             )
         },
+        contextualActions = pendingAiReview?.let { review ->
+            {
+                val awaitsItemDecision = review.resolvedFields.containsAll(ReceiptAiField.entries) &&
+                    review.itemsProtected &&
+                    !review.itemsDismissed &&
+                    review.extracted.items.isNotEmpty()
+                AiReviewActions(
+                    itemDecision = awaitsItemDecision,
+                    onApply = {
+                        if (awaitsItemDecision) applyReviewedItems() else applyOpenAiValues()
+                    },
+                    onKeep = { pendingAiReview = null },
+                )
+            }
+        },
     ) {
                 ReceiptEditorImageSection(
                     imageUri = imageUri,
@@ -2509,7 +2644,11 @@ private fun ReceiptEditorDialog(
                     onBrowseFolders = onBrowseFolders,
                     onOpenImage = onOpenImage,
                     onAnalyzeImage = {
-                        analysisBaseline = currentBaseline()
+                        val baseline = currentBaseline()
+                        analysisRequest = ReceiptAnalysisRequest(
+                            baseline = baseline,
+                            wasVirgin = existing == null && baseline == initialEditorBaseline,
+                        )
                         onAnalyzeImage()
                     },
                     onAnalyzeLocally = {
@@ -2532,60 +2671,48 @@ private fun ReceiptEditorDialog(
                         onCancel = { pendingImageText = null },
                     )
                 }
-                if (aiResultConflicted && extractedReceipt?.items?.isNotEmpty() == true) {
-                    AiItemConflictBanner(
-                        aiItems = extractedReceipt.items,
-                        onApplyItems = {
-                            items = extractedReceipt.items.mapIndexed { index, item ->
-                                EditableReceiptItem(
-                                    id = index.toLong(),
-                                    name = formatExtractedItemName(item.quantityText, item.name),
-                                    amountText = item.amountText,
-                                    aiSourceIndex = index,
-                                )
-                            }
-                            nextItemId = items.size.toLong()
-                            aiResultConflicted = false
-                        },
-                        onDismiss = { aiResultConflicted = false },
-                    )
-                } else if (aiResultConflicted) {
-                    Card(
-                        colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.tertiaryContainer,
-                        ),
-                    ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth().padding(12.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Text(
-                                stringResource(R.string.ai_result_review_required),
-                                modifier = Modifier.weight(1f),
-                            )
-                            TextButton(onClick = { aiResultConflicted = false }) {
-                                Text(stringResource(R.string.close))
-                            }
-                        }
-                    }
-                }
                 ImageTextTarget(
                     pendingText = pendingImageText,
                     fieldLabel = stringResource(R.string.location),
                     onApply = {
                         location = it
+                        protectAiField(ReceiptAiField.LOCATION, resolved = true)
                         pendingImageText = null
                     },
                 ) {
                     HistoryTextField(
                         value = location,
-                        onValueChange = { location = it },
+                        onValueChange = {
+                            location = it
+                            protectAiField(ReceiptAiField.LOCATION)
+                        },
                         label = stringResource(R.string.location),
                         suggestions = locationSuggestions,
                         aiSuggestions = extractedReceipt
                             ?.locationSuggestions
                             ?.toEditorSuggestions()
                             .orEmpty(),
+                        onSuggestionSelected = {
+                            protectAiField(ReceiptAiField.LOCATION, resolved = true)
+                        },
+                        belowField = {
+                            pendingAiReview?.let { review ->
+                                val detected = review.extracted.locationSuggestions.preferred
+                                    .ifBlank { review.extracted.location }
+                                PendingAiValue(
+                                    value = detected,
+                                    currentValue = location,
+                                    visible = ReceiptAiField.LOCATION !in review.resolvedFields,
+                                    onApply = {
+                                        location = detected
+                                        protectAiField(
+                                            ReceiptAiField.LOCATION,
+                                            resolved = true,
+                                        )
+                                    },
+                                )
+                            }
+                        },
                     )
                 }
                 ImageTextTarget(
@@ -2593,14 +2720,31 @@ private fun ReceiptEditorDialog(
                     fieldLabel = stringResource(R.string.check_number),
                     onApply = {
                         check = it
+                        protectAiField(ReceiptAiField.CHECK_NUMBER, resolved = true)
                         pendingImageText = null
                     },
                 ) {
                     OutlinedTextField(
                         check,
-                        { check = it },
+                        {
+                            check = it
+                            protectAiField(ReceiptAiField.CHECK_NUMBER)
+                        },
                         label = { Text(stringResource(R.string.check_number)) },
                         modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+                pendingAiReview?.let { review ->
+                    val detected = review.extracted.checkNumberSuggestions.preferred
+                        .ifBlank { review.extracted.checkNumber }
+                    PendingAiValue(
+                        value = detected,
+                        currentValue = check,
+                        visible = ReceiptAiField.CHECK_NUMBER !in review.resolvedFields,
+                        onApply = {
+                            check = detected
+                            protectAiField(ReceiptAiField.CHECK_NUMBER, resolved = true)
+                        },
                     )
                 }
                 if (pendingImageText == null) AiSuggestionMenu(
@@ -2609,7 +2753,10 @@ private fun ReceiptEditorDialog(
                         ?.checkNumberSuggestions
                         ?.toEditorSuggestions()
                         .orEmpty(),
-                    onSelected = { check = it },
+                    onSelected = {
+                        check = it
+                        protectAiField(ReceiptAiField.CHECK_NUMBER, resolved = true)
+                    },
                 )
                 ImageTextTarget(
                     pendingText = pendingImageText,
@@ -2617,6 +2764,7 @@ private fun ReceiptEditorDialog(
                     onApply = {
                         occurredOn = normalizeEditorDate(it) ?: it
                         invalidDate = false
+                        protectAiField(ReceiptAiField.DATE, resolved = true)
                         pendingImageText = null
                     },
                 ) {
@@ -2625,6 +2773,7 @@ private fun ReceiptEditorDialog(
                         onValueChange = {
                             occurredOn = it
                             invalidDate = false
+                            protectAiField(ReceiptAiField.DATE)
                         },
                         label = { Text(stringResource(R.string.receipt_date)) },
                         placeholder = { Text(stringResource(R.string.date_example)) },
@@ -2635,6 +2784,21 @@ private fun ReceiptEditorDialog(
                         singleLine = true,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+                pendingAiReview?.let { review ->
+                    val rawDetected = review.extracted.occurredOnSuggestions.preferred
+                        .ifBlank { review.extracted.occurredOn }
+                    val detected = normalizeEditorDate(rawDetected) ?: rawDetected
+                    PendingAiValue(
+                        value = detected,
+                        currentValue = occurredOn,
+                        visible = ReceiptAiField.DATE !in review.resolvedFields,
+                        onApply = {
+                            occurredOn = detected
+                            invalidDate = false
+                            protectAiField(ReceiptAiField.DATE, resolved = true)
+                        },
                     )
                 }
                 if (pendingImageText == null) AiSuggestionMenu(
@@ -2648,6 +2812,7 @@ private fun ReceiptEditorDialog(
                     onSelected = { selected ->
                         occurredOn = normalizeEditorDate(selected) ?: selected
                         invalidDate = false
+                        protectAiField(ReceiptAiField.DATE, resolved = true)
                     },
                 )
                 TripCurrencySelector(
@@ -2656,18 +2821,35 @@ private fun ReceiptEditorDialog(
                     onCurrencySelected = { selected ->
                         receiptCurrencyCode = selected
                         invalidAmount = false
+                        protectAiField(ReceiptAiField.CURRENCY, resolved = true)
                     },
                     onAddCurrencyRequested = {
                         pendingCurrencyExtraction = null
                         showCurrencyPicker = true
                     },
                 )
+                pendingAiReview?.let { review ->
+                    val detected = review.extracted.currencyCode.trim().uppercase(Locale.ROOT)
+                    PendingAiValue(
+                        value = detected,
+                        currentValue = receiptCurrencyCode,
+                        visible = ReceiptAiField.CURRENCY !in review.resolvedFields &&
+                            (tripCurrencies.any { it.currencyCode == detected } ||
+                                detected in newlyConfiguredCurrencyCodes),
+                        onApply = {
+                            receiptCurrencyCode = detected
+                            invalidAmount = false
+                            protectAiField(ReceiptAiField.CURRENCY, resolved = true)
+                        },
+                    )
+                }
                 ImageTextTarget(
                     pendingText = pendingImageText,
                     fieldLabel = stringResource(R.string.amount_in_currency, receiptCurrencyCode),
                     onApply = {
                         amount = CurrencyAmount.normalizeOcrMajorText(it, receiptCurrencyCode)
                         invalidAmount = false
+                        protectAiField(ReceiptAiField.AMOUNT, resolved = true)
                         pendingImageText = null
                     },
                 ) {
@@ -2676,6 +2858,7 @@ private fun ReceiptEditorDialog(
                         {
                             amount = it
                             invalidAmount = false
+                            protectAiField(ReceiptAiField.AMOUNT)
                         },
                         label = { Text(stringResource(R.string.amount_in_currency, receiptCurrencyCode)) },
                         placeholder = { Text(amountInputPlaceholder(receiptCurrencyCode)) },
@@ -2687,6 +2870,20 @@ private fun ReceiptEditorDialog(
                         modifier = Modifier.fillMaxWidth(),
                     )
                 }
+                pendingAiReview?.let { review ->
+                    val detected = review.extracted.totalAmountSuggestions.preferred
+                        .ifBlank { review.extracted.totalAmountText }
+                    PendingAiValue(
+                        value = detected,
+                        currentValue = amount,
+                        visible = ReceiptAiField.AMOUNT !in review.resolvedFields,
+                        onApply = {
+                            amount = detected
+                            invalidAmount = false
+                            protectAiField(ReceiptAiField.AMOUNT, resolved = true)
+                        },
+                    )
+                }
                 if (pendingImageText == null) AiSuggestionMenu(
                     currentValue = amount,
                     suggestions = extractedReceipt
@@ -2696,6 +2893,7 @@ private fun ReceiptEditorDialog(
                     onSelected = {
                         amount = it
                         invalidAmount = false
+                        protectAiField(ReceiptAiField.AMOUNT, resolved = true)
                     },
                 )
                 Text(
@@ -2706,9 +2904,8 @@ private fun ReceiptEditorDialog(
                 items.forEachIndexed { index, item ->
                     val aiItemSuggestionSource = item.aiSourceIndex
                         ?.let { extractedReceipt?.items?.getOrNull(it) }
-                        ?: extractedReceipt?.items?.getOrNull(index)?.takeIf {
-                            aiResultConflicted && items.size == extractedReceipt.items.size
-                        }
+                        ?: pendingAiReview?.takeUnless { it.itemsDismissed }
+                            ?.extracted?.items?.getOrNull(index)
                     Card(
                         colors = CardDefaults.cardColors(
                             containerColor = MaterialTheme.colorScheme.surfaceVariant,
@@ -2725,7 +2922,13 @@ private fun ReceiptEditorDialog(
                                     modifier = Modifier.weight(1f),
                                 )
                                 IconButton(
-                                    onClick = { items = items.filterNot { it.id == item.id } },
+                                    onClick = {
+                                        items = items.filterNot { it.id == item.id }
+                                        pendingAiReview = pendingAiReview?.copy(
+                                            itemsProtected = true,
+                                            itemsDismissed = true,
+                                        )
+                                    },
                                 ) {
                                     Icon(
                                         Icons.Default.RemoveCircleOutline,
@@ -2741,6 +2944,11 @@ private fun ReceiptEditorDialog(
                                     items = items.toMutableList().also {
                                         it[index] = item.copy(name = selected)
                                     }
+                                    protectAiItemField(
+                                        index,
+                                        ReceiptAiItemFieldKind.NAME,
+                                        resolved = true,
+                                    )
                                     pendingImageText = null
                                 },
                             ) {
@@ -2750,12 +2958,52 @@ private fun ReceiptEditorDialog(
                                         items = items.toMutableList().also {
                                             it[index] = item.copy(name = value)
                                         }
+                                        protectAiItemField(index, ReceiptAiItemFieldKind.NAME)
                                     },
                                     label = stringResource(R.string.item_name),
                                     suggestions = itemNameSuggestions,
                                     aiSuggestions = aiItemSuggestionSource
                                         ?.let(::itemNameAiSuggestions)
                                         ?: item.nameAiSuggestions,
+                                    onSuggestionSelected = {
+                                        protectAiItemField(
+                                            index,
+                                            ReceiptAiItemFieldKind.NAME,
+                                            resolved = true,
+                                        )
+                                    },
+                                    belowField = {
+                                        pendingAiReview?.takeUnless { it.itemsDismissed }
+                                            ?.let { review ->
+                                                val detected = review.extracted.items
+                                                    .getOrNull(index)
+                                                    ?.let { detectedItem ->
+                                                        formatExtractedItemName(
+                                                            detectedItem.quantityText,
+                                                            detectedItem.name,
+                                                        )
+                                                    }
+                                                    .orEmpty()
+                                                PendingAiValue(
+                                                    value = detected,
+                                                    currentValue = item.name,
+                                                    visible = ReceiptAiItemField(
+                                                        index,
+                                                        ReceiptAiItemFieldKind.NAME,
+                                                    ) !in review.resolvedItemFields,
+                                                    onApply = {
+                                                        items = items.toMutableList().also {
+                                                            it[index] = item.copy(name = detected)
+                                                        }
+                                                        protectAiItemField(
+                                                            index,
+                                                            ReceiptAiItemFieldKind.NAME,
+                                                            resolved = true,
+                                                        )
+                                                    },
+                                                )
+                                            }
+                                    },
                                     modifier = Modifier.fillMaxWidth(),
                                 )
                             }
@@ -2772,6 +3020,11 @@ private fun ReceiptEditorDialog(
                                         )
                                     }
                                     invalidAmount = false
+                                    protectAiItemField(
+                                        index,
+                                        ReceiptAiItemFieldKind.AMOUNT,
+                                        resolved = true,
+                                    )
                                     pendingImageText = null
                                 },
                             ) {
@@ -2782,6 +3035,7 @@ private fun ReceiptEditorDialog(
                                             it[index] = item.copy(amountText = value)
                                         }
                                         invalidAmount = false
+                                        protectAiItemField(index, ReceiptAiItemFieldKind.AMOUNT)
                                     },
                                     label = {
                                         Text(
@@ -2796,6 +3050,28 @@ private fun ReceiptEditorDialog(
                                     modifier = Modifier.fillMaxWidth(),
                                 )
                             }
+                            pendingAiReview?.takeUnless { it.itemsDismissed }?.let { review ->
+                                val detected = review.extracted.items.getOrNull(index)?.amountText.orEmpty()
+                                PendingAiValue(
+                                    value = detected,
+                                    currentValue = item.amountText,
+                                    visible = ReceiptAiItemField(
+                                        index,
+                                        ReceiptAiItemFieldKind.AMOUNT,
+                                    ) !in review.resolvedItemFields,
+                                    onApply = {
+                                        items = items.toMutableList().also {
+                                            it[index] = item.copy(amountText = detected)
+                                        }
+                                        invalidAmount = false
+                                        protectAiItemField(
+                                            index,
+                                            ReceiptAiItemFieldKind.AMOUNT,
+                                            resolved = true,
+                                        )
+                                    },
+                                )
+                            }
                             if (pendingImageText == null) AiSuggestionMenu(
                                 currentValue = item.amountText,
                                 suggestions = aiItemSuggestionSource
@@ -2807,14 +3083,60 @@ private fun ReceiptEditorDialog(
                                         it[index] = item.copy(amountText = value)
                                     }
                                     invalidAmount = false
+                                    protectAiItemField(
+                                        index,
+                                        ReceiptAiItemFieldKind.AMOUNT,
+                                        resolved = true,
+                                    )
                                 },
                             )
+                        }
+                    }
+                }
+                pendingAiReview?.takeUnless { it.itemsDismissed }?.let { review ->
+                    val additionalItems = review.extracted.items.drop(items.size)
+                    if (additionalItems.isNotEmpty()) {
+                        Text(
+                            stringResource(R.string.additional_detected_items),
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                        additionalItems.forEachIndexed { offset, detectedItem ->
+                            Card(
+                                colors = CardDefaults.cardColors(
+                                    containerColor = MaterialTheme.colorScheme.primaryContainer,
+                                ),
+                            ) {
+                                Column(
+                                    modifier = Modifier.fillMaxWidth().padding(10.dp),
+                                    verticalArrangement = Arrangement.spacedBy(2.dp),
+                                ) {
+                                    Text(
+                                        stringResource(R.string.item_number, items.size + offset + 1),
+                                        style = MaterialTheme.typography.labelMedium,
+                                    )
+                                    Text(
+                                        formatExtractedItemName(
+                                            detectedItem.quantityText,
+                                            detectedItem.name,
+                                        ),
+                                        color = MaterialTheme.colorScheme.primary,
+                                    )
+                                    detectedItem.amountText.takeIf(String::isNotBlank)?.let { value ->
+                                        Text(value, color = MaterialTheme.colorScheme.primary)
+                                    }
+                                }
+                            }
                         }
                     }
                 }
                 OutlinedButton(
                     onClick = {
                         items = items + EditableReceiptItem(id = nextItemId++)
+                        pendingAiReview = pendingAiReview?.copy(
+                            itemsProtected = true,
+                            itemsDismissed = true,
+                        )
                     },
                 ) {
                     Icon(Icons.Default.Add, contentDescription = null)
@@ -2900,8 +3222,13 @@ private fun ReceiptEditorDialog(
     pendingNewCurrencyCode?.let { newCode ->
         AlertDialog(
             onDismissRequest = {
-                if (pendingCurrencyExtraction != null) aiResultConflicted = true
+                val extracted = pendingCurrencyExtraction
+                val request = pendingCurrencyAnalysisRequest
+                if (extracted != null && request != null) {
+                    queueAiReview(extracted, request, suppressCurrency = true)
+                }
                 pendingCurrencyExtraction = null
+                pendingCurrencyAnalysisRequest = null
                 pendingNewCurrencyCode = null
             },
             title = { Text(stringResource(R.string.trip_currency_add_other)) },
@@ -2940,8 +3267,13 @@ private fun ReceiptEditorDialog(
             },
             dismissButton = {
                 TextButton(onClick = {
-                    if (pendingCurrencyExtraction != null) aiResultConflicted = true
+                    val extracted = pendingCurrencyExtraction
+                    val request = pendingCurrencyAnalysisRequest
+                    if (extracted != null && request != null) {
+                        queueAiReview(extracted, request, suppressCurrency = true)
+                    }
                     pendingCurrencyExtraction = null
+                    pendingCurrencyAnalysisRequest = null
                     pendingNewCurrencyCode = null
                 }) {
                     Text(stringResource(R.string.cancel))
@@ -2955,9 +3287,23 @@ private fun ReceiptEditorDialog(
                     if (validRate == null) {
                         pendingCurrencyRateInvalid = true
                     } else if (onAddTripCurrency(newCode, validRate, pendingCurrencyDaily)) {
-                        receiptCurrencyCode = newCode
-                        pendingCurrencyExtraction?.let(::applyExtractedReceipt)
+                        newlyConfiguredCurrencyCodes = newlyConfiguredCurrencyCodes + newCode
+                        val extracted = pendingCurrencyExtraction
+                        val request = pendingCurrencyAnalysisRequest
+                        val mayApplyAutomatically = extracted != null && request != null &&
+                            shouldAutoApplyReceiptAnalysis(request, currentBaseline())
+                        if (extracted != null && request != null) {
+                            if (mayApplyAutomatically) {
+                                receiptCurrencyCode = newCode
+                                applyExtractedReceipt(extracted)
+                            } else {
+                                queueAiReview(extracted, request)
+                            }
+                        } else {
+                            receiptCurrencyCode = newCode
+                        }
                         pendingCurrencyExtraction = null
+                        pendingCurrencyAnalysisRequest = null
                         pendingNewCurrencyCode = null
                     }
                 }) { Text(stringResource(R.string.trip_currency_add)) }
@@ -3135,47 +3481,58 @@ private fun PendingImageTextBanner(
 }
 
 @Composable
-private fun AiItemConflictBanner(
-    aiItems: List<ExtractedItem>,
-    onApplyItems: () -> Unit,
-    onDismiss: () -> Unit,
+private fun AiReviewActions(
+    itemDecision: Boolean,
+    onApply: () -> Unit,
+    onKeep: () -> Unit,
 ) {
-    Card(
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.tertiaryContainer,
-        ),
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Column(
-            modifier = Modifier.fillMaxWidth().padding(12.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp),
-        ) {
+        Text(
+            stringResource(R.string.ai_analysis_complete),
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.primary,
+        )
+        Button(onClick = onApply, modifier = Modifier.fillMaxWidth()) {
             Text(
-                stringResource(R.string.ai_result_preserved_edits),
-                style = MaterialTheme.typography.bodyMedium,
+                stringResource(
+                    if (itemDecision) R.string.apply_detected_items
+                    else R.string.apply_detected_values,
+                ),
             )
-            aiItems.take(5).forEach { item ->
-                Text(
-                    buildString {
-                        append("• ")
-                        append(formatExtractedItemName(item.quantityText, item.name))
-                        item.amountText.takeIf(String::isNotBlank)?.let { append(" · ").append(it) }
-                    },
-                    style = MaterialTheme.typography.bodySmall,
-                )
-            }
-            Row(
-                modifier = Modifier.align(Alignment.End),
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
-            ) {
-                TextButton(onClick = onDismiss) {
-                    Text(stringResource(R.string.keep_my_items))
-                }
-                TextButton(onClick = onApplyItems) {
-                    Text(stringResource(R.string.apply_ai_items))
-                }
-            }
+        }
+        OutlinedButton(onClick = onKeep, modifier = Modifier.fillMaxWidth()) {
+            Text(
+                stringResource(
+                    if (itemDecision) R.string.keep_my_items
+                    else R.string.keep_my_entries,
+                ),
+            )
         }
     }
+}
+
+@Composable
+private fun PendingAiValue(
+    value: String,
+    currentValue: String,
+    visible: Boolean,
+    onApply: () -> Unit,
+) {
+    if (!visible || value.isBlank() || value.trim().equals(currentValue.trim(), ignoreCase = true)) return
+    val applyDescription = stringResource(R.string.apply_detected_value, value)
+    Text(
+        text = value,
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.primary,
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClickLabel = applyDescription, onClick = onApply)
+            .padding(horizontal = 12.dp, vertical = 4.dp),
+    )
 }
 
 @Composable
@@ -3234,6 +3591,8 @@ private fun HistoryTextField(
     label: String,
     suggestions: List<String>,
     aiSuggestions: List<EditorSuggestion> = emptyList(),
+    onSuggestionSelected: ((String) -> Unit)? = null,
+    belowField: @Composable (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     var expanded by remember { mutableStateOf(false) }
@@ -3258,6 +3617,7 @@ private fun HistoryTextField(
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
             modifier = Modifier.fillMaxWidth(),
         )
+        belowField?.invoke()
         FieldSuggestionMenu(
             currentValue = fieldValue.text,
             suggestions = aiSuggestions + suggestions.map {
@@ -3271,6 +3631,7 @@ private fun HistoryTextField(
                     selection = TextRange(suggestion.length),
                 )
                 onValueChange(suggestion)
+                onSuggestionSelected?.invoke(suggestion)
             },
             modifier = Modifier.align(Alignment.End),
         )
@@ -3383,6 +3744,7 @@ private fun ScrollableEditorDialog(
     onDismiss: () -> Unit,
     onSave: () -> Unit,
     destructiveAction: (@Composable () -> Unit)? = null,
+    contextualActions: (@Composable () -> Unit)? = null,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     Dialog(onDismissRequest = onDismiss) {
@@ -3408,15 +3770,31 @@ private fun ScrollableEditorDialog(
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                     content = content,
                 )
+                contextualActions?.let { actions ->
+                    HorizontalDivider()
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 10.dp),
+                    ) {
+                        actions()
+                    }
+                }
+                destructiveAction?.let { action ->
+                    HorizontalDivider()
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 8.dp),
+                    ) {
+                        action()
+                    }
+                }
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(12.dp, 8.dp, 16.dp, 12.dp),
                     horizontalArrangement = Arrangement.End,
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    destructiveAction?.let { action ->
-                        action()
-                        Spacer(Modifier.weight(1f))
-                    }
                     TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
                     TextButton(onClick = onSave) { Text(stringResource(R.string.save)) }
                 }
@@ -3434,13 +3812,65 @@ private data class EditableReceiptItem(
     val amountAiSuggestions: List<EditorSuggestion> = emptyList(),
 )
 
-private data class ReceiptEditorBaseline(
+internal data class ReceiptEditorBaseline(
     val location: String,
     val checkNumber: String,
     val amountText: String,
     val currencyCode: String,
     val occurredOn: String,
     val items: List<Pair<String, String>>,
+)
+
+internal enum class ReceiptAiField {
+    LOCATION,
+    CHECK_NUMBER,
+    DATE,
+    CURRENCY,
+    AMOUNT,
+}
+
+private enum class ReceiptAiItemFieldKind {
+    NAME,
+    AMOUNT,
+}
+
+private data class ReceiptAiItemField(
+    val index: Int,
+    val kind: ReceiptAiItemFieldKind,
+)
+
+internal data class ReceiptAnalysisRequest(
+    val baseline: ReceiptEditorBaseline,
+    val wasVirgin: Boolean,
+)
+
+internal fun shouldAutoApplyReceiptAnalysis(
+    request: ReceiptAnalysisRequest,
+    currentBaseline: ReceiptEditorBaseline,
+): Boolean = request.wasVirgin && request.baseline == currentBaseline
+
+internal fun changedReceiptAiFields(
+    requestBaseline: ReceiptEditorBaseline,
+    currentBaseline: ReceiptEditorBaseline,
+    suppressCurrency: Boolean = false,
+): Set<ReceiptAiField> = buildSet {
+    if (requestBaseline.location != currentBaseline.location) add(ReceiptAiField.LOCATION)
+    if (requestBaseline.checkNumber != currentBaseline.checkNumber) add(ReceiptAiField.CHECK_NUMBER)
+    if (requestBaseline.amountText != currentBaseline.amountText) add(ReceiptAiField.AMOUNT)
+    if (requestBaseline.currencyCode != currentBaseline.currencyCode || suppressCurrency) {
+        add(ReceiptAiField.CURRENCY)
+    }
+    if (requestBaseline.occurredOn != currentBaseline.occurredOn) add(ReceiptAiField.DATE)
+}
+
+private data class PendingReceiptAiReview(
+    val extracted: ExtractedReceipt,
+    val protectedFields: Set<ReceiptAiField> = emptySet(),
+    val resolvedFields: Set<ReceiptAiField> = emptySet(),
+    val itemsProtected: Boolean = false,
+    val protectedItemFields: Set<ReceiptAiItemField> = emptySet(),
+    val resolvedItemFields: Set<ReceiptAiItemField> = emptySet(),
+    val itemsDismissed: Boolean = false,
 )
 
 private data class EditorSuggestion(

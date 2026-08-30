@@ -82,7 +82,6 @@
     <string name="previous_values">Previously used (%1$d)</string>
     <string name="field_suggestions">Suggestions (%1$d)</string>
     <string name="ai_suggestion_source">AI suggestion · confidence: %1$s</string>
-    <string name="ai_result_review_required">The AI result could not be applied automatically. Please review the currency and suggestions.</string>
     <string name="history_suggestion_source">Previously used</string>
     <string name="local_ocr_suggestion_source">On-device text recognition</string>
     <string name="image_selection_suggestion_source">Selected in image</string>
@@ -97,9 +96,13 @@
     <string name="apply_selected_text_to">Apply selected text to %1$s</string>
     <string name="item_name_with_number">Name of item %1$d</string>
     <string name="item_amount_with_number">Amount of item %1$d</string>
-    <string name="ai_result_preserved_edits">AI analysis is ready. Your edits were not overwritten; individual field suggestions remain available.</string>
     <string name="keep_my_items">Keep my items</string>
-    <string name="apply_ai_items">Apply AI items</string>
+    <string name="ai_analysis_complete">Analysis complete</string>
+    <string name="apply_detected_values">Apply recognized values</string>
+    <string name="keep_my_entries">Keep my entries</string>
+    <string name="apply_detected_items">Apply recognized items</string>
+    <string name="apply_detected_value">Apply recognized value: %1$s</string>
+    <string name="additional_detected_items">Additional recognized items</string>
     <string name="spatial_text_accessibility">Receipt image. Recognized text: %1$s</string>
     <string name="item_amount">Amount (%1$s)</string>
     <string name="add_item">Add item</string>

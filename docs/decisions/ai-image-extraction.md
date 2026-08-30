@@ -19,17 +19,22 @@ Belegbilder. Der Nutzer wählt ausdrücklich zwischen dem privaten Server und
 Gemini; ein automatischer Cloud-Fallback findet nicht statt.
 
 Der ausgewählte Anbieter erhält das Bild ausschließlich nach der ausdrücklichen
-Aktion „Bild auswerten“. Das Ergebnis wird als korrigierbarer Vorschlag in den
-Editor kopiert, mit einem stehenbleibenden Ergebnisdialog bestätigt und nie
-unmittelbar in Room gespeichert.
+Aktion „Bild auswerten“. In einem neuen, seit dem Öffnen unveränderten Beleg
+werden die besten Treffer direkt in den Editor übernommen. Bei bestehenden
+oder zwischenzeitlich bearbeiteten Belegen bleibt das Ergebnis zunächst als
+farbiger, feldnaher Vorschlag sichtbar und wird über einen festen Aktionsbereich
+angenommen oder verworfen. Es wird niemals unmittelbar in Room gespeichert.
 
 Belegantworten trennen gedruckte Mengen von Artikelbezeichnungen und liefern
 für fachliche Felder bis zu drei bildgestützte Kandidaten mit Evidenz,
 Sicherheit und grober Position. Vorschlagsmenüs liegen außerhalb des
 editierbaren Textfeldes, damit Cursor und Textmarkierung bis zum letzten Zeichen
 frei bleiben. Während einer laufenden Analyse geänderte Nutzerwerte werden bei
-der Antwort nicht überschrieben; Kandidaten und KI-Posten können anschließend
-gezielt übernommen werden.
+der Antwort und bei einer späteren Sammelübernahme nicht überschrieben.
+Manuell gewählte Alternativkandidaten gelten für das jeweilige Feld als
+entschieden. Strukturelle Änderungen an einer Postenliste erfordern eine
+eigene ausdrückliche Entscheidung; ein unbemerkter Listentausch findet nicht
+statt.
 
 Ein sichtbares KI-Transkript kann mit der lokalen ML-Kit-Zeichengeometrie
 fusioniert werden. Diese Hybridlage unterstützt die manuelle Auswahl direkt im

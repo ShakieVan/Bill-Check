@@ -82,7 +82,6 @@
     <string name="previous_values">Früher verwendet (%1$d)</string>
     <string name="field_suggestions">Vorschläge (%1$d)</string>
     <string name="ai_suggestion_source">KI-Vorschlag · Sicherheit: %1$s</string>
-    <string name="ai_result_review_required">Das KI-Ergebnis konnte nicht automatisch übernommen werden. Bitte Währung und Vorschläge prüfen.</string>
     <string name="history_suggestion_source">Früher verwendet</string>
     <string name="local_ocr_suggestion_source">Lokale Texterkennung</string>
     <string name="image_selection_suggestion_source">Im Bild ausgewählt</string>
@@ -97,9 +96,13 @@
     <string name="apply_selected_text_to">Ausgewählten Text in %1$s übernehmen</string>
     <string name="item_name_with_number">Name von Posten %1$d</string>
     <string name="item_amount_with_number">Betrag von Posten %1$d</string>
-    <string name="ai_result_preserved_edits">Die KI-Auswertung ist fertig. Deine zwischenzeitlichen Änderungen wurden nicht überschrieben; einzelne Feldvorschläge bleiben auswählbar.</string>
     <string name="keep_my_items">Meine Posten behalten</string>
-    <string name="apply_ai_items">KI-Posten übernehmen</string>
+    <string name="ai_analysis_complete">Auswertung fertig</string>
+    <string name="apply_detected_values">Erkannte Werte übernehmen</string>
+    <string name="keep_my_entries">Meine Eingaben behalten</string>
+    <string name="apply_detected_items">Erkannte Posten übernehmen</string>
+    <string name="apply_detected_value">Erkannten Wert übernehmen: %1$s</string>
+    <string name="additional_detected_items">Weitere erkannte Posten</string>
     <string name="spatial_text_accessibility">Belegbild. Erkannter Text: %1$s</string>
     <string name="item_amount">Betrag (%1$s)</string>
     <string name="add_item">Posten hinzufügen</string>
