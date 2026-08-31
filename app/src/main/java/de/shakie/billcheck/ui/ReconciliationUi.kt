@@ -71,8 +71,12 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
@@ -894,10 +898,10 @@ private fun StatementLineCard(
     val convertedAmountLabel = convertedAmountText?.let {
         stringResource(R.string.converted_home_amount, it)
     }
-    val ambiguousDateText = if (line.dateAmbiguous) {
-        line.sourceDateText?.let { stringResource(R.string.ambiguous_source_date, it) }
-            ?: stringResource(R.string.ambiguous_date)
-    } else null
+    val displayTitle = statementLineDisplayTitle(line.description, line.checkNumber)
+    val displayDate = line.occurredOn?.let(::formatDate)
+        ?: line.sourceDateText?.trim()?.takeIf(String::isNotEmpty)?.let { "$it (?)" }
+        ?: "—"
     Card(
         colors = CardDefaults.cardColors(containerColor = status.color.copy(alpha = 0.12f)),
         shape = RoundedCornerShape(18.dp),
@@ -1001,23 +1005,41 @@ private fun StatementLineCard(
                     }
                 }
             }
-            Text(line.description.ifBlank { "#${line.checkNumber}" }, style = MaterialTheme.typography.titleMedium)
+            if (displayTitle.isNotEmpty()) {
+                Text(displayTitle, style = MaterialTheme.typography.titleMedium)
+            }
             Text(
                 buildString {
-                    if (line.checkNumber.isNotBlank()) append("#${line.checkNumber} · ")
-                    append(formatMinor(line.amountMinor, line.currencyCode))
-                    line.occurredOn?.let { append(" · ${formatDate(it)}") }
-                    ambiguousDateText?.let { append(" · $it") }
+                    append(displayDate)
+                    if (line.checkNumber.isNotBlank()) append(" · #${line.checkNumber}")
                 },
+                modifier = Modifier.testTag("statement-line-identity-${line.id}"),
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
             )
-            convertedAmountLabel?.let {
+            Box(Modifier.testTag("statement-line-amounts-${line.id}")) {
                 Text(
-                    it,
-                    modifier = Modifier.testTag("statement-line-home-amount-${line.id}"),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.primary,
-                    fontWeight = FontWeight.SemiBold,
+                    buildAnnotatedString {
+                        append(formatMinor(line.amountMinor, line.currencyCode))
+                        convertedAmountLabel?.let {
+                            append(" · ")
+                            withStyle(
+                                SpanStyle(
+                                    color = MaterialTheme.colorScheme.primary,
+                                    fontWeight = FontWeight.SemiBold,
+                                ),
+                            ) { append(it) }
+                        }
+                    },
+                    modifier = if (convertedAmountLabel != null) {
+                        Modifier.testTag("statement-line-home-amount-${line.id}")
+                    } else {
+                        Modifier
+                    },
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
             }
             matchedReceipt?.let {
@@ -1308,6 +1330,35 @@ private fun StatementLineEditorDialog(
             },
         )
     }
+}
+
+internal fun statementLineDisplayTitle(description: String, checkNumber: String): String {
+    var result = description.trim().replace(Regex("\\s+"), " ")
+    if (result.isEmpty() || checkNumber.isBlank()) return result
+    val variants = buildSet {
+        add(checkNumber.trim())
+        val normalized = ReconciliationMatcher.normalizeCheckNumber(checkNumber)
+        normalized.takeIf { it.length >= 3 }?.let(::add)
+        listOf(4, 3).forEach { suffixLength ->
+            if (normalized.length > suffixLength) add(normalized.takeLast(suffixLength))
+        }
+    }.filter(String::isNotEmpty).sortedByDescending { it.length }
+    variants.forEach { variant ->
+        val escaped = Regex.escape(variant)
+        result = result
+            .replace(
+                Regex(
+                    "(?i)(?:check|chk|beleg(?:nummer|nr)?|rechnungs(?:nummer|nr)?|nr)" +
+                        "\\.?\\s*[:#-]?\\s*#?$escaped(?![\\p{L}\\p{N}])",
+                ),
+                " ",
+            )
+            .replace(Regex("(?<![\\p{L}\\p{N}])#?\\s*$escaped(?![\\p{L}\\p{N}])"), " ")
+    }
+    return result
+        .replace(Regex("\\(\\s*\\)"), " ")
+        .replace(Regex("\\s+"), " ")
+        .trim(' ', '·', '-', '–', '—', '|', ',', ':', ';', '/', '(', ')')
 }
 
 @Composable

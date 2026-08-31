@@ -71,7 +71,9 @@ internal object GeminiPromptFactory {
                 contemporary: map 00-79 to 2000-2079 and 80-99 to 1980-1999. Amounts and
                 declaredTotal must be positive plain decimal strings without symbols or grouping
                 separators. Return an empty string when a value is not visible. Never invent, merge,
-                silently correct, or omit a charge line. Keep the original top-to-bottom order.
+                silently correct, or omit a charge line. For each line, put the venue or service name
+                only in description. Never repeat its check number, date, amount, or currency in
+                description because each has a separate field. Keep the original top-to-bottom order.
             """.trimIndent()
         }
 }

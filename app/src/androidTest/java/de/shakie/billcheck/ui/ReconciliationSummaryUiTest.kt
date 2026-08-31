@@ -77,6 +77,14 @@ class ReconciliationSummaryUiTest {
         compose.onNodeWithText(context.getString(R.string.summary_unmatched_statement_lines)).assertIsDisplayed()
         compose.onNodeWithText(context.getString(R.string.narrative_all)).assertIsDisplayed()
         compose.onNodeWithText(context.getString(R.string.summary_control_total_unavailable)).assertDoesNotExist()
+        compose.onNodeWithText("Sultana Restaurant Food").assertIsDisplayed()
+        compose.onNodeWithText("Sultana Restaurant Food · Check #0015512").assertDoesNotExist()
+        compose.onNodeWithTag("statement-line-identity-${line.id}")
+            .performScrollTo()
+            .assertIsDisplayed()
+        compose.onNodeWithTag("statement-line-amounts-${line.id}")
+            .performScrollTo()
+            .assertIsDisplayed()
         compose.onNodeWithTag("statement-line-home-amount-${line.id}")
             .performScrollTo()
             .assertIsDisplayed()
@@ -101,7 +109,7 @@ class ReconciliationSummaryUiTest {
             id = "interim-line",
             reconciliationId = "interim",
             occurredOn = 0,
-            description = "Sultana Restaurant Food",
+            description = "Sultana Restaurant Food · Check #0015512",
             checkNumber = "0015512",
             amountMinor = 31_332,
             currencyCode = "EGP",

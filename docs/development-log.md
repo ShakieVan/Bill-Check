@@ -1,5 +1,20 @@
 # Entwicklungsprotokoll
 
+## 31.08.2026 – Stabile Metadaten der Rechnungsposten
+
+- Eine in der KI-Beschreibung wiederholte Rechnungsnummer wird nur für die
+  Anzeige aus dem Titel entfernt; die gespeicherte Rohbeschreibung bleibt für
+  Bearbeitung und Diagnose vollständig erhalten. Auch die normalisierte Nummer
+  ohne führende Nullen wird erkannt.
+- Den gemeinsamen Qwen-/Gemini-Prompt zusätzlich angewiesen, Beschreibung,
+  Rechnungsnummer, Datum, Betrag und Währung strikt in ihren vorhandenen
+  getrennten Feldern zu halten.
+- Die wechselnd umbrechende Metadatenzeile durch zwei feste, jeweils einzeilige
+  Gruppen ersetzt: `Datum · Rechnungsnummer` sowie darunter
+  `Fremdwährungsbetrag · ≈ Heimatwährungsbetrag`.
+- Pure Formatierungstests und Compose-Instrumentierung gegen Nummerndopplung,
+  alphanumerische Grenzfälle und die neue zweizeilige Anordnung ergänzt.
+
 ## 31.08.2026 – Stabile Abgleichstitel und reiseweit freie Belege
 
 - Die Übernahme einer KI-ausgewerteten Rechnung ersetzt nur Rechnungszeilen und

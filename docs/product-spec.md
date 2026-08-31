@@ -201,6 +201,10 @@ Stand: 16.08.2026
   Originalbetrag, gegebenenfalls Heimatwährungsbetrag, Zuordnung und
   Trefferwert. Bearbeiten, Löschen, Zuordnen oder Lösen sowie
   „bekannt/akzeptiert“ liegen zustandsabhängig in einem `…`-Menü.
+- Die Beschreibung wiederholt keine darin erkannte Rechnungsnummer. Die
+  Metadaten stehen immer in zwei stabilen, einzeiligen Gruppen: zuerst Datum
+  und Rechnungsnummer, darunter Originalbetrag und gegebenenfalls der
+  näherungsweise umgerechnete Heimatwährungsbetrag.
 - Nach dem lokalen Abgleich kann die Cloud-KI aus den bereits geprüften Fakten
   eine gespeicherte, verständliche Zusammenfassung formulieren. Sie ist in der
   kompakten Übersicht optional aufklappbar. Ohne API-Key bleiben das lokale

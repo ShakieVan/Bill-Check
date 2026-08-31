@@ -35,6 +35,8 @@ class GeminiPromptFactoryTest {
         assertFalse(prompt.contains("specific restaurant"))
         assertTrue(prompt.contains("declaredTotal"))
         assertTrue(prompt.contains("dateAmbiguous=true"))
+        assertTrue(prompt.contains("Never repeat its check number"))
+        assertTrue(prompt.contains("each has a separate field"))
     }
 
     @Test
