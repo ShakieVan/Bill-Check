@@ -36,21 +36,33 @@ Lint, Release-Signierung, Tag/Versionsgleichheit und APK-Signatur. Erst danach
 legt sie den öffentlichen GitHub-Release samt APK, Prüfsummen und Release Notes
 an. Drafts oder Prereleases werden nicht von der App als `latest` angeboten.
 
+## Einmaliger Release-Build
+
+Der reguläre Release-Prozess baut die signierte APK ausschließlich auf GitHub.
+Lokal werden vor dem Tag Unit-Tests, Lint und die Git-Konsistenz geprüft, aber
+kein zweiter `assembleRelease` ausgeführt. So bleibt gewährleistet, dass das
+veröffentlichte Artefakt exakt aus dem getaggten Commit entsteht, ohne denselben
+Release-Build lokal und auf GitHub doppelt auszuführen.
+
+Ein lokaler Produktionsbuild bleibt für gezielte Diagnosefälle möglich, ist
+aber keine Pflichtprüfung vor jeder Veröffentlichung.
+
 ## Lokale Pflichtprüfung
 
 Vor Tag und Veröffentlichung:
 
 ```powershell
-.\gradlew.bat testDebugUnitTest lintDebug assembleRelease --console=plain
+.\gradlew.bat testDebugUnitTest lintDebug --console=plain
 git diff --check
 ```
 
-Danach mit den neuesten Android Build Tools mindestens prüfen:
+Nach erfolgreicher Veröffentlichung wird die tatsächlich von GitHub
+ausgelieferte APK zusammen mit `SHA256SUMS-vX.Y.Z.txt` heruntergeladen. An
+diesem öffentlichen Artefakt werden mindestens geprüft:
 
-```powershell
-apksigner verify --print-certs app\build\outputs\apk\release\app-release.apk
-aapt2 dump badging app\build\outputs\apk\release\app-release.apk
-```
+- SHA-256-Prüfsumme gegen `SHA256SUMS-vX.Y.Z.txt`,
+- APK-Signatur und Zertifikat-Fingerprint,
+- Paketname, `versionCode`, `versionName`, Minimum- und Ziel-API.
 
 Erwartet sind Paket `de.shakie.billcheck`, Android 16 als Minimum/Ziel und die
 beabsichtigte stabile Versionsnummer. Der Zertifikat-Fingerprint muss dem

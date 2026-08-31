@@ -51,11 +51,16 @@ Die öffentliche Projektdokumentation beginnt unter [`docs/README.md`](docs/READ
 Reale Testbelege sind aus Datenschutzgründen nicht Bestandteil dieses
 Repositories.
 
-Ein signierter Produktionsbuild benötigt die private `key.properties`:
+Für die lokale Vorprüfung eines Releases genügen Unit-Tests und Lint:
 
 ```powershell
-.\gradlew.bat testDebugUnitTest lintDebug assembleRelease --console=plain
+.\gradlew.bat testDebugUnitTest lintDebug --console=plain
 ```
+
+Die veröffentlichte, signierte APK wird ausschließlich einmal im
+tag-gesteuerten GitHub-Ablauf gebaut. Ein davon unabhängiger lokaler
+Produktionsbuild ist weiterhin möglich, gehört aber nicht zum regulären
+Release-Prozess.
 
 Der tag-gesteuerte GitHub-Ablauf ist in
 [`docs/technical-notes/github-release-process.md`](docs/technical-notes/github-release-process.md)
