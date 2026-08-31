@@ -1,5 +1,25 @@
 # Entwicklungsprotokoll
 
+## 31.08.2026 – Heimatwährungsbeträge und kompakte Abgleichsposten
+
+- Die Summe erkannter Rechnungszeilen und die Summe zugeordneter Belege
+  zusätzlich näherungsweise in der Heimatwährung dargestellt. Die Umrechnung
+  nutzt ausschließlich die aktuell in der Reise hinterlegten Kurse,
+  kennzeichnet das Ergebnis mit `≈` und erklärt die Kursgrundlage direkt unter
+  den Kennzahlen.
+- Jede fremdwährungsbasierte Rechnungszeile um eine eigene, optisch abgesetzte
+  Heimatwährungszeile ergänzt. Bei gleicher Heimatwährung wird kein doppelter
+  Betrag gezeigt; bei fehlendem oder ungültigem Kurs erscheint kein
+  irreführender Teilwert.
+- Die dauerhaft sichtbaren Bearbeiten-, Löschen-, Akzeptieren- und
+  Zuordnungselemente aus den Rechnungszeilen entfernt. Ein zustandsabhängiges
+  `…`-Menü bietet nun Bearbeiten, Zuordnen oder Ändern, Lösen,
+  Akzeptieren beziehungsweise Zurücknehmen und Löschen ohne Funktionsverlust.
+- Compose-Instrumentierung um die sichtbare Heimatwährungsumrechnung sowie das
+  zunächst geschlossene und anschließend vollständig bedienbare Optionsmenü
+  erweitert; der reale Abgleich mit 15 Rechnungszeilen wurde im
+  Android-16-Arbeitsemulator visuell gegengeprüft.
+
 ## 30.08.2026 – Responsive Belegkarten und bestätigtes Swipe-Löschen
 
 - Die bisher konkurrierenden Bild-, Text-, Preis- und Löschspalten in drei

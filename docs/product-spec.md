@@ -189,6 +189,16 @@ Stand: 16.08.2026
   Kontrollsumme verglichen. Nur eine tatsächliche Abweichung wird im Kurzfazit
   erwähnt; eine fehlende zusätzliche Kontrollsumme wird nicht mit einer
   fehlenden Rechnungssumme verwechselt.
+- Rechnungssumme, Summe der zugeordneten Belege und einzelne Rechnungszeilen
+  zeigen bei einer von der Heimatwährung abweichenden Währung zusätzlich den
+  näherungsweise umgerechneten Heimatwährungsbetrag. Grundlage sind die
+  aktuell in der Reise hinterlegten Kurse; die Zusammenfassung weist darauf
+  hin. Fehlt ein verlässlicher Kurs, wird kein scheinbar genauer Betrag
+  angezeigt.
+- Eine Rechnungszeile zeigt im Normalzustand nur Status, Beschreibung,
+  Originalbetrag, gegebenenfalls Heimatwährungsbetrag, Zuordnung und
+  Trefferwert. Bearbeiten, Löschen, Zuordnen oder Lösen sowie
+  „bekannt/akzeptiert“ liegen zustandsabhängig in einem `…`-Menü.
 - Nach dem lokalen Abgleich kann die Cloud-KI aus den bereits geprüften Fakten
   eine gespeicherte, verständliche Zusammenfassung formulieren. Sie ist in der
   kompakten Übersicht optional aufklappbar. Ohne API-Key bleiben das lokale

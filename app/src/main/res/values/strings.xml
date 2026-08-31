@@ -229,6 +229,10 @@
     <string name="assign_receipt">Beleg zuordnen</string>
     <string name="change_assignment">Zuordnung ändern</string>
     <string name="remove_assignment">Zuordnung lösen</string>
+    <string name="statement_line_options">Optionen für diesen Rechnungsposten</string>
+    <string name="revoke_accept_without_receipt">Markierung „bekannt / akzeptiert“ aufheben</string>
+    <string name="converted_home_amount">≈ %1$s</string>
+    <string name="converted_home_amount_note">Umgerechnet mit den aktuell in der Reise hinterlegten Kursen.</string>
     <string name="candidate_receipts">Passende Belege</string>
     <string name="no_candidate_receipts">Keine noch verfügbaren Belege gefunden.</string>
     <string name="candidate_score">Trefferwert %1$d %%</string>

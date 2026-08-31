@@ -1158,6 +1158,9 @@ private fun BillCheckApp(
                 defaultCurrencyCode = state.tripCurrencies.firstOrNull { it.isDefault }?.currencyCode
                     ?: trip.homeCurrencyCode,
                 currencyCodes = state.tripCurrencies.map { it.currencyCode },
+                currencyRates = state.tripCurrencies.associate {
+                    it.currencyCode to it.homeToCurrencyRate
+                },
                 candidateSelection = candidateSelection,
                 analysisState = reconciliationAnalysis,
                 onDismiss = {

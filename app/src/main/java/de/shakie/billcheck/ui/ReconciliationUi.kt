@@ -38,13 +38,15 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.LinkOff
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -66,6 +68,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -81,6 +84,7 @@ import de.shakie.billcheck.data.StatementLineEntity
 import de.shakie.billcheck.data.StatementLineWithMatches
 import de.shakie.billcheck.domain.ReconciliationStatus
 import de.shakie.billcheck.domain.CurrencyAmount
+import de.shakie.billcheck.domain.MoneyCalculator
 import de.shakie.billcheck.domain.ReconciliationAuditor
 import de.shakie.billcheck.domain.ReconciliationCoverage
 import de.shakie.billcheck.domain.ReconciliationMatcher
@@ -106,6 +110,7 @@ fun ReconciliationManagerDialog(
     receipts: List<ReceiptWithItems>,
     defaultCurrencyCode: String,
     currencyCodes: List<String>,
+    currencyRates: Map<String, String> = emptyMap(),
     candidateSelection: CandidateSelectionState,
     analysisState: ReconciliationAnalysisState,
     onDismiss: () -> Unit,
@@ -180,6 +185,8 @@ fun ReconciliationManagerDialog(
                             null,
                         )
                     },
+                    homeCurrencyCode = homeCurrencyCode,
+                    currencyRates = currencyRates,
                 )
             }
         }
@@ -355,6 +362,8 @@ private fun ReconciliationDetails(
     onChooseImage: () -> Unit,
     onAnalyzeImage: () -> Unit,
     onRemoveImage: () -> Unit,
+    homeCurrencyCode: String,
+    currencyRates: Map<String, String>,
 ) {
     val receiptById = receipts.associateBy { it.receipt.id }
     val currentMatchedReceiptIds = reconciliation.lines
@@ -447,6 +456,8 @@ private fun ReconciliationDetails(
                     reconciliation = reconciliation,
                     receiptsForStatement = receiptsForStatement,
                     analysisState = analysisState,
+                    homeCurrencyCode = homeCurrencyCode,
+                    currencyRates = currencyRates,
                 )
             }
             item {
@@ -479,6 +490,8 @@ private fun ReconciliationDetails(
                                 onAccept = { onAcceptLine(line, it) },
                                 onAssign = { onLoadCandidates(line) },
                                 onClearMatch = { onClearLineMatch(line) },
+                                homeCurrencyCode = homeCurrencyCode,
+                                currencyRates = currencyRates,
                             )
                         }
                         is ReconciliationTimelineEntry.ReceiptOnly -> ReceiptOnlyCard(entry.receipt)
@@ -520,6 +533,8 @@ private fun ReconciliationSummaryCard(
     reconciliation: ReconciliationWithLines,
     receiptsForStatement: List<ReceiptEntity>,
     analysisState: ReconciliationAnalysisState,
+    homeCurrencyCode: String,
+    currencyRates: Map<String, String>,
 ) {
     val audit = ReconciliationAuditor.audit(reconciliation, receiptsForStatement)
     val narrativeFacts = ReconciliationNarrator.facts(reconciliation, receiptsForStatement)
@@ -527,6 +542,26 @@ private fun ReconciliationSummaryCard(
         ?: stringResource(R.string.summary_no_amount)
     val matchedReceiptTotalText = formatSummaryTotals(audit.matchedReceiptTotals)
         ?: stringResource(R.string.summary_no_amount)
+    val statementHomeTotalText = audit.statementTotals
+        .takeIf { totals -> totals.keys.any { !it.equals(homeCurrencyCode, ignoreCase = true) } }
+        ?.let {
+            calculateHomeTotalMinor(
+                totals = it,
+                homeCurrencyCode = homeCurrencyCode,
+                currencyRates = currencyRates,
+            )
+        }
+        ?.let { formatMinor(it, homeCurrencyCode) }
+    val matchedReceiptHomeTotalText = audit.matchedReceiptTotals
+        .takeIf { totals -> totals.keys.any { !it.equals(homeCurrencyCode, ignoreCase = true) } }
+        ?.let {
+            calculateHomeTotalMinor(
+                totals = it,
+                homeCurrencyCode = homeCurrencyCode,
+                currencyRates = currencyRates,
+            )
+        }
+        ?.let { formatMinor(it, homeCurrencyCode) }
     Card(
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
         shape = RoundedCornerShape(18.dp),
@@ -551,12 +586,25 @@ private fun ReconciliationSummaryCard(
                 SummaryMetricTile(
                     title = stringResource(R.string.summary_statement_total),
                     value = statementTotalText,
+                    convertedValue = statementHomeTotalText?.let {
+                        stringResource(R.string.converted_home_amount, it)
+                    },
                     modifier = Modifier.weight(1f),
                 )
                 SummaryMetricTile(
                     title = stringResource(R.string.summary_matched_receipt_total),
                     value = matchedReceiptTotalText,
+                    convertedValue = matchedReceiptHomeTotalText?.let {
+                        stringResource(R.string.converted_home_amount, it)
+                    },
                     modifier = Modifier.weight(1f),
+                )
+            }
+            if (statementHomeTotalText != null || matchedReceiptHomeTotalText != null) {
+                Text(
+                    stringResource(R.string.converted_home_amount_note),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
             Row(
@@ -590,6 +638,7 @@ private fun ReconciliationSummaryCard(
 private fun SummaryMetricTile(
     title: String,
     value: String,
+    convertedValue: String? = null,
     modifier: Modifier = Modifier,
 ) {
     Surface(
@@ -604,6 +653,14 @@ private fun SummaryMetricTile(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Text(value, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            convertedValue?.let {
+                Text(
+                    it,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                    fontWeight = FontWeight.SemiBold,
+                )
+            }
         }
     }
 }
@@ -613,6 +670,51 @@ private fun formatSummaryTotals(totals: Map<String, BigInteger>): String? = tota
     .entries
     .takeIf { it.isNotEmpty() }
     ?.joinToString(" · ") { (currency, amount) -> formatBigMinor(amount, currency) }
+
+private fun calculateHomeTotalMinor(
+    totals: Map<String, BigInteger>,
+    homeCurrencyCode: String,
+    currencyRates: Map<String, String>,
+): Long? = totals.entries.takeIf { it.isNotEmpty() }?.let { entries ->
+    runCatching {
+        entries.fold(0L) { total, (currencyCode, amountMinor) ->
+            Math.addExact(
+                total,
+                requireNotNull(
+                    calculateHomeMinor(
+                        amountMinor = amountMinor.longValueExact(),
+                        currencyCode = currencyCode,
+                        homeCurrencyCode = homeCurrencyCode,
+                        currencyRates = currencyRates,
+                    ),
+                ),
+            )
+        }
+    }.getOrNull()
+}
+
+private fun calculateHomeMinor(
+    amountMinor: Long,
+    currencyCode: String,
+    homeCurrencyCode: String,
+    currencyRates: Map<String, String>,
+): Long? = runCatching {
+    val sourceCode = CurrencyAmount.normalizeCode(currencyCode)
+    val homeCode = CurrencyAmount.normalizeCode(homeCurrencyCode)
+    val sourceUnitsPerHome = if (sourceCode == homeCode) {
+        "1"
+    } else {
+        currencyRates.entries.firstOrNull {
+            it.key.equals(sourceCode, ignoreCase = true)
+        }?.value ?: return null
+    }
+    MoneyCalculator.toHomeMinor(
+        sourceMinor = amountMinor,
+        sourceCurrencyCode = sourceCode,
+        homeCurrencyCode = homeCode,
+        sourceUnitsPerHome = sourceUnitsPerHome,
+    )
+}.getOrNull()
 
 @Composable
 private fun reconciliationNarrative(facts: ReconciliationNarrativeFacts): String {
@@ -766,10 +868,23 @@ private fun StatementLineCard(
     onAccept: (Boolean) -> Unit,
     onAssign: () -> Unit,
     onClearMatch: () -> Unit,
+    homeCurrencyCode: String,
+    currencyRates: Map<String, String>,
 ) {
     val status = statusPresentation(line.status)
+    var menuExpanded by remember(line.id) { mutableStateOf(false) }
     val matchScore = matchedReceipt?.let { receipt ->
         ReconciliationMatcher.rank(line, listOf(receipt)).single().score.coerceIn(0, 100)
+    }
+    val convertedAmountText = calculateHomeMinor(
+        amountMinor = line.amountMinor,
+        currencyCode = line.currencyCode,
+        homeCurrencyCode = homeCurrencyCode,
+        currencyRates = currencyRates,
+    )?.takeUnless { line.currencyCode.equals(homeCurrencyCode, ignoreCase = true) }
+        ?.let { formatMinor(it, homeCurrencyCode) }
+    val convertedAmountLabel = convertedAmountText?.let {
+        stringResource(R.string.converted_home_amount, it)
     }
     val ambiguousDateText = if (line.dateAmbiguous) {
         line.sourceDateText?.let { stringResource(R.string.ambiguous_source_date, it) }
@@ -785,8 +900,98 @@ private fun StatementLineCard(
                 Spacer(Modifier.width(8.dp))
                 Text(stringResource(status.label), fontWeight = FontWeight.SemiBold, color = status.color)
                 Spacer(Modifier.weight(1f))
-                IconButton(onClick = onEdit) { Icon(Icons.Default.Edit, contentDescription = stringResource(R.string.edit_statement_line)) }
-                IconButton(onClick = onDelete) { Icon(Icons.Default.DeleteOutline, contentDescription = stringResource(R.string.delete), tint = MaterialTheme.colorScheme.error) }
+                Box {
+                    IconButton(
+                        onClick = { menuExpanded = true },
+                        modifier = Modifier.testTag("statement-line-options-${line.id}"),
+                    ) {
+                        Icon(
+                            Icons.Default.MoreVert,
+                            contentDescription = stringResource(R.string.statement_line_options),
+                        )
+                    }
+                    DropdownMenu(
+                        expanded = menuExpanded,
+                        onDismissRequest = { menuExpanded = false },
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.edit_statement_line)) },
+                            leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null) },
+                            onClick = {
+                                menuExpanded = false
+                                onEdit()
+                            },
+                        )
+                        if (!line.acceptedWithoutReceipt) {
+                            DropdownMenuItem(
+                                text = {
+                                    Text(
+                                        stringResource(
+                                            if (matchedReceipt == null) {
+                                                R.string.assign_receipt
+                                            } else {
+                                                R.string.change_assignment
+                                            },
+                                        ),
+                                    )
+                                },
+                                leadingIcon = { Icon(Icons.Default.Link, contentDescription = null) },
+                                onClick = {
+                                    menuExpanded = false
+                                    onAssign()
+                                },
+                            )
+                        }
+                        if (matchedReceipt != null) {
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.remove_assignment)) },
+                                leadingIcon = { Icon(Icons.Default.LinkOff, contentDescription = null) },
+                                onClick = {
+                                    menuExpanded = false
+                                    onClearMatch()
+                                },
+                            )
+                        } else {
+                            DropdownMenuItem(
+                                text = {
+                                    Text(
+                                        stringResource(
+                                            if (line.acceptedWithoutReceipt) {
+                                                R.string.revoke_accept_without_receipt
+                                            } else {
+                                                R.string.accept_without_receipt
+                                            },
+                                        ),
+                                    )
+                                },
+                                leadingIcon = { Icon(Icons.Default.CheckCircle, contentDescription = null) },
+                                onClick = {
+                                    menuExpanded = false
+                                    onAccept(!line.acceptedWithoutReceipt)
+                                },
+                            )
+                        }
+                        DropdownMenuItem(
+                            text = {
+                                Text(
+                                    stringResource(R.string.delete),
+                                    color = MaterialTheme.colorScheme.error,
+                                )
+                            },
+                            leadingIcon = {
+                                Icon(
+                                    Icons.Default.DeleteOutline,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.error,
+                                )
+                            },
+                            onClick = {
+                                menuExpanded = false
+                                onDelete()
+                            },
+                        )
+                    }
+                }
             }
             Text(line.description.ifBlank { "#${line.checkNumber}" }, style = MaterialTheme.typography.titleMedium)
             Text(
@@ -798,6 +1003,15 @@ private fun StatementLineCard(
                 },
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            convertedAmountLabel?.let {
+                Text(
+                    it,
+                    modifier = Modifier.testTag("statement-line-home-amount-${line.id}"),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                    fontWeight = FontWeight.SemiBold,
+                )
+            }
             matchedReceipt?.let {
                 Spacer(Modifier.height(8.dp))
                 Text("↳ ${it.location} · #${it.checkNumber} · ${formatMinor(it.amountMinor, it.currencyCode)}")
@@ -816,36 +1030,6 @@ private fun StatementLineCard(
                 )
                 line.aiReason?.takeIf(String::isNotBlank)?.let { reason ->
                     Text(reason, style = MaterialTheme.typography.bodySmall)
-                }
-            }
-            Spacer(Modifier.height(8.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Checkbox(
-                    checked = line.acceptedWithoutReceipt,
-                    onCheckedChange = onAccept,
-                    enabled = matchedReceipt == null,
-                )
-                Text(
-                    stringResource(R.string.accept_without_receipt),
-                    style = MaterialTheme.typography.bodySmall,
-                    modifier = Modifier.weight(1f).clickable(
-                        enabled = matchedReceipt == null,
-                        onClick = { onAccept(!line.acceptedWithoutReceipt) },
-                    ),
-                )
-            }
-            if (!line.acceptedWithoutReceipt) {
-                OutlinedButton(onClick = onAssign, modifier = Modifier.fillMaxWidth()) {
-                    Icon(Icons.Default.Link, contentDescription = null)
-                    Spacer(Modifier.width(6.dp))
-                    Text(stringResource(if (matchedReceipt == null) R.string.assign_receipt else R.string.change_assignment))
-                }
-                if (matchedReceipt != null) {
-                    TextButton(onClick = onClearMatch, modifier = Modifier.fillMaxWidth()) {
-                        Icon(Icons.Default.LinkOff, contentDescription = null)
-                        Spacer(Modifier.width(6.dp))
-                        Text(stringResource(R.string.remove_assignment))
-                    }
                 }
             }
             matchScore?.let { score ->

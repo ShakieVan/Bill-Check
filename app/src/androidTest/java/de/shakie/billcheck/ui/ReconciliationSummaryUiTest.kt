@@ -2,7 +2,9 @@ package de.shakie.billcheck.ui
 
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.test.platform.app.InstrumentationRegistry
 import de.shakie.billcheck.R
@@ -54,6 +56,8 @@ class ReconciliationSummaryUiTest {
                 receipts = listOf(ReceiptWithItems(receipt, emptyList())),
                 defaultCurrencyCode = "EGP",
                 currencyCodes = listOf("EGP"),
+                currencyRates = mapOf("EUR" to "1", "EGP" to "55.5"),
+                homeCurrencyCode = "EUR",
                 candidateSelection = CandidateSelectionState(),
                 analysisState = ReconciliationAnalysisState.Idle,
                 onDismiss = {}, onCreate = {}, onUpdateHeader = { _, _, _ -> },
@@ -73,6 +77,17 @@ class ReconciliationSummaryUiTest {
         compose.onNodeWithText(context.getString(R.string.summary_unmatched_statement_lines)).assertIsDisplayed()
         compose.onNodeWithText(context.getString(R.string.narrative_all)).assertIsDisplayed()
         compose.onNodeWithText(context.getString(R.string.summary_control_total_unavailable)).assertDoesNotExist()
+        compose.onNodeWithTag("statement-line-home-amount-${line.id}")
+            .performScrollTo()
+            .assertIsDisplayed()
+        compose.onNodeWithText(context.getString(R.string.change_assignment)).assertDoesNotExist()
+        compose.onNodeWithTag("statement-line-options-${line.id}")
+            .performScrollTo()
+            .performClick()
+        compose.onNodeWithText(context.getString(R.string.edit_statement_line)).assertIsDisplayed()
+        compose.onNodeWithText(context.getString(R.string.change_assignment)).assertIsDisplayed()
+        compose.onNodeWithText(context.getString(R.string.remove_assignment)).assertIsDisplayed()
+        compose.onNodeWithText(context.getString(R.string.change_assignment)).performClick()
         val score = ReconciliationMatcher.rank(line, listOf(receipt)).single().score
         compose.onNodeWithText(context.getString(R.string.match_score, score))
             .performScrollTo()

@@ -229,6 +229,10 @@
     <string name="assign_receipt">Assign receipt</string>
     <string name="change_assignment">Change assignment</string>
     <string name="remove_assignment">Remove assignment</string>
+    <string name="statement_line_options">Options for this statement item</string>
+    <string name="revoke_accept_without_receipt">Remove known / accepted mark</string>
+    <string name="converted_home_amount">≈ %1$s</string>
+    <string name="converted_home_amount_note">Converted using the exchange rates currently stored for this trip.</string>
     <string name="candidate_receipts">Matching receipts</string>
     <string name="no_candidate_receipts">No unassigned receipts found.</string>
     <string name="candidate_score">Match score %1$d%%</string>
