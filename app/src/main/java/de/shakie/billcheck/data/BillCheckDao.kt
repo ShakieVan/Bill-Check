@@ -312,6 +312,17 @@ interface BillCheckDao {
     suspend fun getReconciliationMatches(reconciliationId: String): List<ReceiptMatchEntity>
 
     @Query(
+        "SELECT receipt_matches.receiptId FROM receipt_matches " +
+            "INNER JOIN statement_lines ON statement_lines.id = receipt_matches.statementLineId " +
+            "INNER JOIN reconciliations ON reconciliations.id = statement_lines.reconciliationId " +
+            "WHERE reconciliations.tripId = :tripId AND reconciliations.id != :reconciliationId",
+    )
+    suspend fun getReceiptIdsMatchedInOtherReconciliations(
+        tripId: String,
+        reconciliationId: String,
+    ): List<String>
+
+    @Query(
         "SELECT statement_lines.* FROM statement_lines " +
             "INNER JOIN receipt_matches ON receipt_matches.statementLineId = statement_lines.id " +
             "WHERE receipt_matches.receiptId = :receiptId",

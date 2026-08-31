@@ -91,7 +91,11 @@ class BillCheckMigrationTest {
         helper.close()
 
         val roomDatabase = Room.databaseBuilder(context, BillCheckDatabase::class.java, DATABASE_NAME)
-            .addMigrations(BillCheckDatabase.MIGRATION_5_6, BillCheckDatabase.MIGRATION_6_7)
+            .addMigrations(
+                BillCheckDatabase.MIGRATION_5_6,
+                BillCheckDatabase.MIGRATION_6_7,
+                BillCheckDatabase.MIGRATION_7_8,
+            )
             .build()
         roomDatabase.openHelper.writableDatabase.apply {
             query("SELECT COUNT(*) FROM trips").use { cursor ->
@@ -128,6 +132,58 @@ class BillCheckMigrationTest {
         roomDatabase.close()
     }
 
+    @Test
+    fun migration7To8KeepsOldestReconciliationAssignmentAndRestoresGlobalUniqueness() {
+        val helper = FrameworkSQLiteOpenHelperFactory().create(
+            SupportSQLiteOpenHelper.Configuration.builder(context)
+                .name(DATABASE_NAME)
+                .callback(object : SupportSQLiteOpenHelper.Callback(7) {
+                    override fun onCreate(db: SupportSQLiteDatabase) = createVersion7MatchSchema(db)
+                    override fun onUpgrade(db: SupportSQLiteDatabase, oldVersion: Int, newVersion: Int) = Unit
+                })
+                .build(),
+        )
+        helper.writableDatabase.apply {
+            execSQL("INSERT INTO reconciliations VALUES ('interim','trip','Interim',NULL,10,NULL,NULL,NULL,NULL)")
+            execSQL("INSERT INTO reconciliations VALUES ('final','trip','Final',NULL,20,'stale',99,NULL,NULL)")
+            execSQL("INSERT INTO statement_lines VALUES ('interim-line','interim','CORRECT',0,NULL,NULL,NULL)")
+            execSQL("INSERT INTO statement_lines VALUES ('final-line','final','CORRECT',0,'receipt',95,'old')")
+            execSQL("INSERT INTO receipt_matches VALUES ('interim-line','receipt',0)")
+            execSQL("INSERT INTO receipt_matches VALUES ('final-line','receipt',0)")
+
+            BillCheckDatabase.MIGRATION_7_8.migrate(this)
+
+            query("SELECT statementLineId FROM receipt_matches WHERE receiptId='receipt'").use { cursor ->
+                assertEquals(1, cursor.count)
+                cursor.moveToFirst()
+                assertEquals("interim-line", cursor.getString(0))
+            }
+            query("SELECT status,aiSuggestedReceiptId FROM statement_lines WHERE id='final-line'").use { cursor ->
+                cursor.moveToFirst()
+                assertEquals("NOT_FOUND", cursor.getString(0))
+                assertEquals(null, cursor.getString(1))
+            }
+            query("SELECT analysisSummary,analysisUpdatedAt FROM reconciliations WHERE id='final'").use { cursor ->
+                cursor.moveToFirst()
+                assertEquals(null, cursor.getString(0))
+                assertEquals(true, cursor.isNull(1))
+            }
+            query("PRAGMA index_list('receipt_matches')").use { cursor ->
+                val nameColumn = cursor.getColumnIndexOrThrow("name")
+                val uniqueColumn = cursor.getColumnIndexOrThrow("unique")
+                var uniqueReceiptIndex = false
+                while (cursor.moveToNext()) {
+                    if (cursor.getString(nameColumn) == "index_receipt_matches_receiptId") {
+                        uniqueReceiptIndex = cursor.getInt(uniqueColumn) == 1
+                    }
+                }
+                assertEquals(true, uniqueReceiptIndex)
+            }
+            version = 8
+        }
+        helper.close()
+    }
+
     private fun createVersion4Schema(db: SupportSQLiteDatabase) {
         db.execSQL("PRAGMA foreign_keys = ON")
         db.execSQL("CREATE TABLE trips (id TEXT NOT NULL PRIMARY KEY, sortPosition INTEGER NOT NULL, name TEXT NOT NULL, foreignCurrencyCode TEXT NOT NULL, defaultExchangeRate TEXT NOT NULL, exchangeRateMode TEXT NOT NULL, defaultTipMinor INTEGER NOT NULL, defaultTipCurrencyCode TEXT NOT NULL, defaultTipSelected INTEGER NOT NULL, imageStorageMode TEXT NOT NULL, createdAt INTEGER NOT NULL)")
@@ -144,6 +200,31 @@ class BillCheckMigrationTest {
         db.execSQL("CREATE TABLE receipt_matches (statementLineId TEXT NOT NULL, receiptId TEXT NOT NULL, matchedManually INTEGER NOT NULL, PRIMARY KEY(statementLineId,receiptId), FOREIGN KEY(statementLineId) REFERENCES statement_lines(id) ON DELETE CASCADE, FOREIGN KEY(receiptId) REFERENCES receipts(id) ON DELETE CASCADE)")
         db.execSQL("CREATE UNIQUE INDEX index_receipt_matches_statementLineId ON receipt_matches(statementLineId)")
         db.execSQL("CREATE UNIQUE INDEX index_receipt_matches_receiptId ON receipt_matches(receiptId)")
+    }
+
+    private fun createVersion7MatchSchema(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            "CREATE TABLE reconciliations (" +
+                "id TEXT NOT NULL PRIMARY KEY, tripId TEXT NOT NULL, title TEXT NOT NULL, " +
+                "statementImageUri TEXT, createdAt INTEGER NOT NULL, analysisSummary TEXT, " +
+                "analysisUpdatedAt INTEGER, declaredTotalMinor INTEGER, declaredTotalCurrencyCode TEXT)",
+        )
+        db.execSQL(
+            "CREATE TABLE statement_lines (" +
+                "id TEXT NOT NULL PRIMARY KEY, reconciliationId TEXT NOT NULL, " +
+                "status TEXT NOT NULL, acceptedWithoutReceipt INTEGER NOT NULL, " +
+                "aiSuggestedReceiptId TEXT, aiConfidence INTEGER, aiReason TEXT)",
+        )
+        db.execSQL(
+            "CREATE TABLE receipt_matches (" +
+                "statementLineId TEXT NOT NULL, receiptId TEXT NOT NULL, matchedManually INTEGER NOT NULL, " +
+                "PRIMARY KEY(statementLineId, receiptId))",
+        )
+        db.execSQL(
+            "CREATE UNIQUE INDEX index_receipt_matches_statementLineId " +
+                "ON receipt_matches(statementLineId)",
+        )
+        db.execSQL("CREATE INDEX index_receipt_matches_receiptId ON receipt_matches(receiptId)")
     }
 
     private companion object {

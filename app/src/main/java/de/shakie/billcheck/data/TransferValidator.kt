@@ -87,6 +87,12 @@ internal object TransferValidator {
         require(allStatementLineIds.distinct().size == allStatementLineIds.size) {
             "Duplicate statement line IDs"
         }
+        val allMatchedReceiptIds = source.reconciliations.flatMap { reconciliation ->
+            reconciliation.lines.mapNotNull { it.matchedReceiptId }
+        }
+        require(allMatchedReceiptIds.distinct().size == allMatchedReceiptIds.size) {
+            "A receipt is assigned to more than one reconciliation"
+        }
         source.reconciliations.forEach { reconciliation ->
             require(reconciliation.title.length <= 500) { "Statement title is too long" }
             require(reconciliation.declaredTotalMinor == null || reconciliation.declaredTotalMinor > 0) {

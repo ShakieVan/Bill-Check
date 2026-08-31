@@ -18,7 +18,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         StatementLineEntity::class,
         ReceiptMatchEntity::class,
     ],
-    version = 7,
+    version = 8,
     exportSchema = true,
 )
 abstract class BillCheckDatabase : RoomDatabase() {
@@ -38,6 +38,7 @@ abstract class BillCheckDatabase : RoomDatabase() {
                     MIGRATION_4_5,
                     MIGRATION_5_6,
                     MIGRATION_6_7,
+                    MIGRATION_7_8,
                 )
                 .build()
 
@@ -150,6 +151,51 @@ abstract class BillCheckDatabase : RoomDatabase() {
                 db.execSQL(
                     "CREATE INDEX IF NOT EXISTS index_batch_receipt_imports_batchId " +
                         "ON batch_receipt_imports(batchId)",
+                )
+            }
+        }
+
+        val MIGRATION_7_8 = object : Migration(7, 8) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                // Earlier versions allowed the same receipt in several reconciliations. Keep
+                // the assignment belonging to the oldest reconciliation and release later ones.
+                db.execSQL(
+                    "CREATE TEMP TABLE released_receipt_matches (" +
+                        "statementLineId TEXT NOT NULL PRIMARY KEY)",
+                )
+                db.execSQL(
+                    "INSERT INTO released_receipt_matches SELECT statementLineId " +
+                        "FROM receipt_matches WHERE rowid NOT IN (" +
+                        "SELECT (SELECT candidate.rowid FROM receipt_matches AS candidate " +
+                        "INNER JOIN statement_lines AS candidate_line " +
+                        "ON candidate_line.id = candidate.statementLineId " +
+                        "INNER JOIN reconciliations AS candidate_reconciliation " +
+                        "ON candidate_reconciliation.id = candidate_line.reconciliationId " +
+                        "WHERE candidate.receiptId = grouped.receiptId " +
+                        "ORDER BY candidate_reconciliation.createdAt, " +
+                        "candidate_reconciliation.id, candidate.rowid LIMIT 1) " +
+                        "FROM receipt_matches AS grouped GROUP BY grouped.receiptId)",
+                )
+                db.execSQL(
+                    "DELETE FROM receipt_matches WHERE statementLineId IN " +
+                        "(SELECT statementLineId FROM released_receipt_matches)",
+                )
+                db.execSQL(
+                    "UPDATE reconciliations SET analysisSummary = NULL, analysisUpdatedAt = NULL " +
+                        "WHERE id IN (SELECT statement_lines.reconciliationId FROM statement_lines " +
+                        "INNER JOIN released_receipt_matches " +
+                        "ON released_receipt_matches.statementLineId = statement_lines.id)",
+                )
+                db.execSQL(
+                    "UPDATE statement_lines SET status = 'NOT_FOUND', acceptedWithoutReceipt = 0, " +
+                        "aiSuggestedReceiptId = NULL, aiConfidence = NULL, aiReason = NULL " +
+                        "WHERE id IN (SELECT statementLineId FROM released_receipt_matches)",
+                )
+                db.execSQL("DROP TABLE released_receipt_matches")
+                db.execSQL("DROP INDEX IF EXISTS index_receipt_matches_receiptId")
+                db.execSQL(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS index_receipt_matches_receiptId " +
+                        "ON receipt_matches(receiptId)",
                 )
             }
         }

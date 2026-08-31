@@ -260,7 +260,7 @@ data class StatementLineWithMatches(
     ],
     indices = [
         Index(value = ["statementLineId"], unique = true),
-        Index(value = ["receiptId"]),
+        Index(value = ["receiptId"], unique = true),
     ],
 )
 data class ReceiptMatchEntity(

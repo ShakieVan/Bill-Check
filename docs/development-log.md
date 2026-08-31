@@ -1,5 +1,20 @@
 # Entwicklungsprotokoll
 
+## 31.08.2026 – Stabile Abgleichstitel und reiseweit freie Belege
+
+- Die Übernahme einer KI-ausgewerteten Rechnung ersetzt nur Rechnungszeilen und
+  Kontrollsumme; der vom Nutzer vergebene Abgleichstitel bleibt unverändert.
+- Belege werden für automatische Zuordnung, manuelle Kandidaten, Chronologie,
+  Kurzfazit und KI-Fazit ausgeblendet, sobald sie bereits einem anderen
+  Abgleich derselben Reise zugeordnet sind. Eine spätere Rechnung kann eine
+  bestehende Zuordnung nicht übernehmen oder lösen.
+- Die reiseweite 1:1-Regel zusätzlich mit einem eindeutigen Room-Index und der
+  Importvalidierung abgesichert. Migration 7→8 behält bei historischen
+  Doppelzuordnungen die Zuordnung des ältesten Abgleichs und gibt die späteren
+  frei.
+- Repository-End-to-End-, Transfer- und Migrationstests decken Titelstabilität,
+  Kandidatenfilterung und den Schutz der älteren Zuordnung ab.
+
 ## 31.08.2026 – Heimatwährungsbeträge und kompakte Abgleichsposten
 
 - Die Summe erkannter Rechnungszeilen und die Summe zugeordneter Belege

@@ -163,13 +163,15 @@ Stand: 16.08.2026
 ## Abgleich
 
 - Jede Zwischen- oder Endrechnung erzeugt einen unabhängigen Abgleichslauf.
-- Jeder Lauf berücksichtigt und zeigt alle Belege der Reise, auch wenn ihr
-  Datum auffällig ist oder sie in einem anderen Lauf bereits zugeordnet wurden.
+- Jeder Lauf berücksichtigt alle noch nicht zugeordneten Belege der Reise,
+  auch wenn ihr Datum auffällig ist. Ein bereits in einem anderen Lauf
+  zugeordneter Beleg wird weder angezeigt noch automatisch oder manuell
+  angeboten; die bestehende Zuordnung wird niemals stillschweigend verschoben.
 - Statusfarben: grün korrekt, gelb unsicher, orange Betragsabweichung, rot
   nicht gefunden.
-- Eine Rechnungszeile und ein Beleg werden innerhalb eines Laufs 1:1
-  zugeordnet. Zwischen unabhängigen Zwischen- und Endrechnungen darf derselbe
-  Beleg erneut geprüft werden.
+- Eine Rechnungszeile und ein Beleg werden innerhalb der gesamten Reise 1:1
+  zugeordnet. Zurücksetzen oder Löschen des besitzenden Abgleichs gibt den
+  Beleg für einen anderen Lauf wieder frei.
 - Automatischer und manueller Abgleich verwenden einen gewichteten,
   Levenshtein-basierten Trefferwert aus Checknummer, Betrag, Datum und Ort.
   Führende Nullen und eine vorangestellte Kassen-ID verhindern die Zuordnung
@@ -204,7 +206,8 @@ Stand: 16.08.2026
   kompakten Übersicht optional aufklappbar. Ohne API-Key bleiben das lokale
   Kurzfazit und sämtliche Einträge vollständig nutzbar.
 - Die Bezeichnung einer Rechnung ist in Übersicht und Detailkopf ausdrücklich
-  gekennzeichnet und im Detail bearbeitbar.
+  gekennzeichnet und im Detail bearbeitbar. Eine Bildauswertung verändert
+  diese vom Nutzer vergebene Bezeichnung nicht.
 - Fremde oder absichtlich nicht protokollierte Posten können als
   „bekannt/akzeptiert“ markiert werden.
 - Zuordnungen können zurückgesetzt, der Lauf neu ausgewertet oder der gesamte

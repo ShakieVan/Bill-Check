@@ -94,6 +94,59 @@ class ReconciliationSummaryUiTest {
             .assertIsDisplayed()
     }
 
+    @Test
+    fun receiptMatchedInAnotherReconciliationIsHiddenFromCurrentDetails() {
+        val receipt = receipt()
+        val interimLine = StatementLineEntity(
+            id = "interim-line",
+            reconciliationId = "interim",
+            occurredOn = 0,
+            description = "Sultana Restaurant Food",
+            checkNumber = "0015512",
+            amountMinor = 31_332,
+            currencyCode = "EGP",
+            status = ReconciliationStatus.CORRECT,
+            acceptedWithoutReceipt = false,
+        )
+        val interim = ReconciliationWithLines(
+            ReconciliationEntity("interim", "trip", "Zwischenrechnung", null, 0),
+            listOf(
+                StatementLineWithMatches(
+                    interimLine,
+                    listOf(ReceiptMatchEntity(interimLine.id, receipt.id, false)),
+                ),
+            ),
+        )
+        val final = ReconciliationWithLines(
+            ReconciliationEntity("final", "trip", "Endrechnung", null, 1),
+            emptyList(),
+        )
+
+        compose.setContent {
+            ReconciliationManagerDialog(
+                initialSelectedId = final.reconciliation.id,
+                reconciliations = listOf(interim, final),
+                receipts = listOf(ReceiptWithItems(receipt, emptyList())),
+                defaultCurrencyCode = "EGP",
+                currencyCodes = listOf("EGP"),
+                candidateSelection = CandidateSelectionState(),
+                analysisState = ReconciliationAnalysisState.Idle,
+                onDismiss = {}, onCreate = {}, onUpdateHeader = { _, _, _ -> },
+                onAddLine = { _, _, _, _, _, _ -> true },
+                onUpdateLine = { _, _, _, _, _, _ -> true },
+                onDeleteLine = {}, onAcceptLine = { _, _ -> }, onLoadCandidates = {},
+                onClearCandidates = {}, onAssignReceipt = { _, _ -> }, onClearLineMatch = {},
+                onRun = {}, onReset = {}, onDelete = {}, onOpenImage = {}, onChooseImage = {},
+                onAnalyzeImage = {},
+            )
+        }
+
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        compose.onNodeWithText("Endrechnung").assertIsDisplayed()
+        compose.onNodeWithText(context.getString(R.string.receipt_only)).assertDoesNotExist()
+        compose.onNodeWithText(receipt.location).assertDoesNotExist()
+    }
+
     private fun receipt() = ReceiptEntity(
         id = "receipt",
         tripId = "trip",

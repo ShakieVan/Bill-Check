@@ -439,11 +439,22 @@ class BillCheckRepository(database: BillCheckDatabase) {
             .mapTo(mutableSetOf()) { it.receiptId }
         return ReconciliationMatcher.rank(
             line,
-            dao.getReceipts(tripId).filterNot { it.id in usedReceiptIds },
+            availableReceipts(tripId, line.reconciliationId)
+                .filterNot { it.id in usedReceiptIds },
         )
     }
 
     suspend fun assignReceipt(line: StatementLineEntity, receipt: ReceiptEntity, manually: Boolean) {
+        val reconciliation = checkNotNull(dao.getReconciliation(line.reconciliationId))
+        require(receipt.tripId == reconciliation.reconciliation.tripId) {
+            "Receipt and reconciliation belong to different trips"
+        }
+        require(
+            receipt.id !in dao.getReceiptIdsMatchedInOtherReconciliations(
+                reconciliation.reconciliation.tripId,
+                line.reconciliationId,
+            ),
+        ) { "Receipt is already assigned to another reconciliation" }
         dao.replaceReceiptMatch(
             ReceiptMatchEntity(line.id, receipt.id, manually),
             reconciliationId = line.reconciliationId,
@@ -471,7 +482,7 @@ class BillCheckRepository(database: BillCheckDatabase) {
     ): VerifiedReconciliationReport {
         dao.clearReconciliationAnalysis(reconciliation.reconciliation.id)
         dao.resetMatches(reconciliation.reconciliation.id)
-        val available = dao.getReceipts(tripId).toMutableList()
+        val available = availableReceipts(tripId, reconciliation.reconciliation.id).toMutableList()
         val remainingLines = reconciliation.lines.map { it.line }
             .filterNot { it.acceptedWithoutReceipt }
             .toMutableList()
@@ -564,7 +575,7 @@ class BillCheckRepository(database: BillCheckDatabase) {
         }
         dao.applyExtractedStatement(
             reconciliation = reconciliation.copy(
-                title = validated.title.ifBlank { reconciliation.title },
+                title = reconciliation.title,
                 analysisSummary = null,
                 analysisUpdatedAt = null,
                 declaredTotalMinor = validated.declaredTotalMinor,
@@ -588,7 +599,7 @@ class BillCheckRepository(database: BillCheckDatabase) {
         reconciliationId: String,
     ): VerifiedReconciliationReport {
         val reconciliation = checkNotNull(dao.getReconciliation(reconciliationId))
-        val receipts = dao.getReceipts(tripId)
+        val receipts = availableReceipts(tripId, reconciliationId)
         val receiptById = receipts.associateBy { it.id }
         val audit = de.shakie.billcheck.domain.ReconciliationAuditor.audit(reconciliation, receipts)
         val entries = reconciliation.lines.map { related ->
@@ -654,6 +665,17 @@ class BillCheckRepository(database: BillCheckDatabase) {
                 if (audit.nonPositiveAmountCount > 0) add("NON_POSITIVE_AMOUNTS=${audit.nonPositiveAmountCount}")
             },
         )
+    }
+
+    private suspend fun availableReceipts(
+        tripId: String,
+        reconciliationId: String,
+    ): List<ReceiptEntity> {
+        val unavailableReceiptIds = dao.getReceiptIdsMatchedInOtherReconciliations(
+            tripId,
+            reconciliationId,
+        ).toHashSet()
+        return dao.getReceipts(tripId).filterNot { it.id in unavailableReceiptIds }
     }
 
     private data class AutomaticProposal(

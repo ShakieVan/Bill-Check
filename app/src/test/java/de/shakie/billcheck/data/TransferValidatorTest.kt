@@ -47,14 +47,16 @@ class TransferValidatorTest {
     }
 
     @Test
-    fun `same receipt may be audited in interim and final reconciliation`() {
+    fun `same receipt cannot be assigned in interim and final reconciliation`() {
         val base = trip()
         val second = base.reconciliations.single().copy(
             id = "final",
             lines = listOf(base.reconciliations.single().lines.single().copy(id = "final-line")),
         )
 
-        TransferValidator.validate(base.copy(reconciliations = base.reconciliations + second))
+        assertThrows(IllegalArgumentException::class.java) {
+            TransferValidator.validate(base.copy(reconciliations = base.reconciliations + second))
+        }
     }
 
     @Test

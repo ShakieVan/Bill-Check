@@ -143,6 +143,14 @@ fun ReconciliationManagerDialog(
     var addingLine by remember { mutableStateOf(false) }
     var deleteTarget by remember { mutableStateOf<ReconciliationWithLines?>(null) }
     val selected = reconciliations.firstOrNull { it.reconciliation.id == selectedId }
+    val receiptsForSelected = selected?.let { current ->
+        val matchedElsewhere = reconciliations.asSequence()
+            .filterNot { it.reconciliation.id == current.reconciliation.id }
+            .flatMap { it.lines.asSequence() }
+            .flatMap { it.matches.asSequence() }
+            .mapTo(mutableSetOf()) { it.receiptId }
+        receipts.filterNot { it.receipt.id in matchedElsewhere }
+    }.orEmpty()
 
     Dialog(
         onDismissRequest = onDismiss,
@@ -162,7 +170,7 @@ fun ReconciliationManagerDialog(
             } else {
                 ReconciliationDetails(
                     reconciliation = selected,
-                    receipts = receipts,
+                    receipts = receiptsForSelected,
                     analysisState = analysisState,
                     onBack = { selectedId = null },
                     onEditTitle = { editingTitle = true },

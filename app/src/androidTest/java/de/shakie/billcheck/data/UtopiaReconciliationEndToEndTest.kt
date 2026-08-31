@@ -60,6 +60,7 @@ class UtopiaReconciliationEndToEndTest {
             val refreshed = repository.reconciliations(trip.id).first().single()
             val matched = refreshed.lines.single { it.line.checkNumber == "0015512" }
 
+            assertEquals("Endrechnung", refreshed.reconciliation.title)
             assertEquals(11, refreshed.lines.size)
             assertEquals(740_420L, refreshed.reconciliation.declaredTotalMinor)
             assertEquals(ReconciliationStatus.CORRECT, matched.line.status)
@@ -69,6 +70,52 @@ class UtopiaReconciliationEndToEndTest {
             assertEquals(1, report.receiptOnlyCount)
             assertEquals(StatementTotalCheck.MATCH.name, report.totalCheck)
             assertTrue(report.entries.any { it.description == "Wrong date trap" })
+        } finally {
+            database.close()
+        }
+    }
+
+    @Test
+    fun receiptAssignedToInterimIsUnavailableToFinalReconciliation() = runBlocking {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val database = Room.inMemoryDatabaseBuilder(context, BillCheckDatabase::class.java)
+            .allowMainThreadQueries().build()
+        try {
+            val repository = BillCheckRepository(database)
+            val trip = repository.createTestTrip("Utopia")
+            repository.addReceipt(
+                trip, "Sultana Restaurant", "5512", 31_332, "EGP", "55.5", 0, "EUR", "1",
+                occurredAt = date("2024-12-26"),
+            )
+            val interim = repository.createReconciliation(trip, "Zwischenrechnung")
+            val final = repository.createReconciliation(trip, "Endrechnung")
+            val statement = ExtractedStatement(
+                title = "AI-generated invoice title",
+                declaredTotalAmountText = "313.32",
+                declaredTotalCurrencyCode = "EGP",
+                lines = listOf(extractedLine("2024-12-26", "5512", "313.32")),
+            )
+            repository.applyExtractedStatement(interim, statement, "EGP")
+            repository.applyExtractedStatement(final, statement, "EGP")
+
+            val beforeInterimRun = repository.reconciliations(trip.id).first()
+                .single { it.reconciliation.id == interim.id }
+            repository.runAutomaticReconciliation(trip.id, beforeInterimRun)
+
+            val beforeFinalRun = repository.reconciliations(trip.id).first()
+                .single { it.reconciliation.id == final.id }
+            val finalReport = repository.runAutomaticReconciliation(trip.id, beforeFinalRun)
+            val refreshed = repository.reconciliations(trip.id).first()
+            val refreshedInterim = refreshed.single { it.reconciliation.id == interim.id }
+            val refreshedFinal = refreshed.single { it.reconciliation.id == final.id }
+
+            assertEquals(1, refreshedInterim.lines.single().matches.size)
+            assertTrue(refreshedFinal.lines.single().matches.isEmpty())
+            assertEquals(1, finalReport.statementOnlyCount)
+            assertEquals(0, finalReport.receiptOnlyCount)
+            assertTrue(repository.rankCandidates(trip.id, refreshedFinal.lines.single().line).isEmpty())
+            assertEquals("Zwischenrechnung", refreshedInterim.reconciliation.title)
+            assertEquals("Endrechnung", refreshedFinal.reconciliation.title)
         } finally {
             database.close()
         }

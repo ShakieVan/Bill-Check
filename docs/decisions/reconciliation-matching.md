@@ -5,11 +5,12 @@ Status: verbindlich
 ## Entscheidung
 
 Jede Zwischen- und Endrechnung ist ein eigenständiger Abgleichslauf. Eine
-Rechnungszeile kann höchstens einen Beleg referenzieren und ein Beleg kann
-innerhalb desselben Laufs höchstens einmal zugeordnet sein. Derselbe Beleg darf
-in einer Zwischen- und einer späteren Endrechnung unabhängig geprüft werden.
-Kein Beleg der Reise wird aufgrund seines Datums oder einer Zuordnung in einem
-anderen Lauf ausgeblendet.
+Rechnungszeile kann höchstens einen Beleg referenzieren und ein Beleg kann in
+der gesamten Reise höchstens einem Abgleich zugeordnet sein. Solange ein Beleg
+noch frei ist, steht er jeder Zwischen- oder Endrechnung als Kandidat zur
+Verfügung. Nach einer Zuordnung wird er in allen anderen Abgleichen weder
+angezeigt noch automatisch oder manuell angeboten. Eine spätere Zuordnung darf
+eine bestehende niemals stillschweigend lösen oder übernehmen.
 
 Noch freie Belege werden mit einem gewichteten Ähnlichkeitswert von 0 bis 100
 gerankt: Checknummer 40 Punkte, centgenauer Betrag 30 Punkte, Datum 15 Punkte
@@ -39,7 +40,9 @@ Rechnungsbild. Belegdaten werden bewusst nicht in denselben Aufruf gegeben,
 damit vorhandene Belege die Transkription nicht bestätigen, verändern oder
 verkürzen. Neben allen Einzelzeilen werden die gedruckte Kontrollsumme und ihre
 Währung extrahiert. Eine ungültige Zeile lehnt die gesamte Übernahme atomar ab;
-vorhandene Zeilen bleiben erhalten.
+vorhandene Zeilen bleiben erhalten. Der vom Nutzer vergebene Abgleichstitel
+bleibt bei der Bildauswertung ebenfalls unverändert; der erkannte Dokumenttitel
+ist kein Stammdatum des Abgleichs.
 
 Die App addiert alle erkannten Zeilen lokal und vergleicht sie centgenau mit
 der gedruckten Kontrollsumme. In der kompakten Übersicht heißt die Summe der
@@ -71,9 +74,10 @@ Zuordnungen als veraltet entfernt.
 
 ## Folgen
 
-- Jeder Lauf sieht ausnahmslos alle Belege der Reise. Belege außerhalb des
-  erkannten Rechnungsdatumsbereichs werden als Datenwarnung markiert, aber
-  niemals ausgefiltert.
+- Jeder Lauf sieht alle noch freien Belege der Reise unabhängig vom Datum.
+  Belege außerhalb des erkannten Rechnungsdatumsbereichs werden als
+  Datenwarnung markiert. Bereits in einem anderen Lauf zugeordnete Belege sind
+  dagegen für Anzeige, Kandidatenranking, Kurzfazit und KI-Fazit ausgeschlossen.
 - Zurücksetzen entfernt nur die Zuordnungen des gewählten Laufs und gibt seine
   Belege wieder frei.
 - Das Löschen eines Laufs entfernt durch Room-Kaskaden auch seine Zeilen und
